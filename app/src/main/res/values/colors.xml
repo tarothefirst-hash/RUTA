@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ruta_red">#E53935</color>
+    <color name="ruta_red_dark">#C62828</color>
+    <color name="ruta_pink_light">#FADADD</color>
+    <color name="ruta_pink_gradient_start">#F8C6C9</color>
+    <color name="ruta_pink_gradient_end">#FFFFFF</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="text_dark">#212121</color>
+    <color name="text_gray">#757575</color>
+    <color name="input_bg">#FFFFFF</color>
+    <color name="error_red">#D32F2F</color>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RUTA</string>
+    <string name="tagline">Your ride, your route.</string>
+    <string name="start_now">Start now</string>
+
+    <string name="login_title">Welcome Back</string>
+    <string name="login_subtitle">Log in to continue</string>
+    <string name="email_hint">Email</string>
+    <string name="password_hint">Password</string>
+    <string name="login_button">Log In</string>
+    <string name="no_account">Don\'t have an account?</string>
+    <string name="signup_link">Sign up</string>
+    <string name="login_as">Log in as</string>
+
+    <string name="signup_title">Create Account</string>
+    <string name="signup_subtitle">Join RUTA today</string>
+    <string name="full_name_hint">Full Name</string>
+    <string name="confirm_password_hint">Confirm Password</string>
+    <string name="signup_button">Sign Up</string>
+    <string name="have_account">Already have an account?</string>
+    <string name="login_link">Log in</string>
+    <string name="signup_as">Sign up as</string>
+
+    <string name="role_passenger">Passenger</string>
+    <string name="role_driver">Driver</string>
+    <string name="role_admin">Admin</string>
+</resources>
