@@ -3,6 +3,7 @@ package com.ruta.app.ui
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -22,10 +23,13 @@ import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
 import com.ruta.app.data.AuthRepository
 import org.json.JSONObject
+import androidx.viewpager2.widget.ViewPager2
+import android.widget.ImageView
 
 class PassengerHomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
+    private lateinit var viewPager: ViewPager2
 
     // Default Starting Location (Macabulos, Tarlac City)
     private var currentPickupLoc = LatLng(15.4855, 120.5920)
@@ -45,24 +49,33 @@ class PassengerHomeActivity : AppCompatActivity(), OnMapReadyCallback {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_passenger_home)
 
-        // Initialize Places SDK
-        if (!Places.isInitialized()) {
-            Places.initialize(applicationContext, placesApiKey)
-        }
-
-        // Setup UI Listeners
-        loadUserProfile()
-        loadSavedLocationsFromFirebase()
-        setupSavedLocationButtons()
+        viewPager = findViewById(R.id.viewPager)
+        setupProfileButton()
         setupSearchBar()
-        setupBookNowButton()
 
-        // Initialize Map
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
+        // Connect the Adapter you created in Step 1
+        val adapter = PassengerPagerAdapter(this)
+        viewPager.adapter = adapter
+
+        // Setup bottom navigation icon clicks
+        val navHome = findViewById<ImageView>(R.id.navHome)
+        val navPromos = findViewById<ImageView>(R.id.navPromos)
+        val navSettings = findViewById<ImageView>(R.id.navSettings)
+        val btnProfile = findViewById<ImageView>(R.id.btnProfile)
+
+        navHome.setOnClickListener { viewPager.currentItem = 0 }
+        navPromos.setOnClickListener { viewPager.currentItem = 1 }
+        navSettings.setOnClickListener { viewPager.currentItem = 2 }
+        btnProfile.setOnClickListener { viewPager.currentItem = 3 }
     }
 
+    private fun setupProfileButton() {
+        val btnProfile = findViewById<View>(R.id.btnProfile)
+        btnProfile?.setOnClickListener {
+            // Temporary placeholder so it doesn't crash or complain about missing classes
+            Toast.makeText(this, "Profile clicked!", Toast.LENGTH_SHORT).show()
+        }
+    }
     private fun setupSearchBar() {
         val layoutSearchBar = findViewById<LinearLayout>(R.id.layoutSearchBar)
         layoutSearchBar?.setOnClickListener {
@@ -86,9 +99,9 @@ class PassengerHomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun setupSavedLocationButtons() {
-        val btnHome = findViewById<android.view.View>(R.id.btnHome)
-        val btnWork = findViewById<android.view.View>(R.id.btnWork)
-        val btnFavorite = findViewById<android.view.View>(R.id.btnFavorite)
+        val btnHome = findViewById<View>(R.id.btnHome)
+        val btnWork = findViewById<View>(R.id.btnWork)
+        val btnFavorite = findViewById<View>(R.id.btnFavorite)
 
         btnHome?.setOnClickListener {
             userHomeLoc?.let { dest ->

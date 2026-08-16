@@ -30,11 +30,18 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.libraries.places.api.Places
-import com.google.android.libraries.places.api.model.AutocompletePrediction
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
+import com.ruta.app.model.Booking
 import com.ruta.app.model.LocationItem
 import org.json.JSONObject
 import java.util.Locale
@@ -44,6 +51,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mMap: GoogleMap
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var placesClient: PlacesClient
+    private lateinit var database: DatabaseReference
 
     private lateinit var etSearchLocation: EditText
     private lateinit var rvSuggestions: RecyclerView
@@ -51,17 +59,19 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var txtDropoffDisplay: TextView
     private lateinit var btnConfirmStage: Button
 
-    private enum class SelectionStage { PICKUP, DROPOFF, ROUTE_READY }
+    private enum class SelectionStage { PICKUP, DROPOFF, ROUTE_READY, BOOKING_SUBMITTED }
     private var currentStage = SelectionStage.PICKUP
 
     private var pickupLatLng: LatLng? = null
     private var dropoffLatLng: LatLng? = null
     private var pickupAddress: String = "Detecting location..."
     private var dropoffAddress: String = "Add Location"
+    private var currentCalculatedFare: Double = 0.0
 
     private var activeMarker: Marker? = null
     private var pickupMarker: Marker? = null
 
+    private var currentRequestId: String? = null
     private var isProgrammaticTextUpdate = false
 
     private val placesApiKey = "AIzaSyA_aZwg2zvItoG12d_kmMtPZGB0f8PxChk"
@@ -70,6 +80,8 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_location_selection)
+
+        database = FirebaseDatabase.getInstance().reference
 
         if (!Places.isInitialized()) {
             Places.initialize(applicationContext, placesApiKey)
@@ -113,7 +125,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         })
 
         mMap.setOnMapClickListener { latLng ->
-            if (currentStage != SelectionStage.ROUTE_READY) {
+            if (currentStage == SelectionStage.PICKUP || currentStage == SelectionStage.DROPOFF) {
                 activeMarker?.position = latLng
                 reverseGeocodeLocation(latLng)
             }
@@ -311,10 +323,170 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
 
                 SelectionStage.ROUTE_READY -> {
-                    Toast.makeText(this, "Proceeding to driver match...", Toast.LENGTH_SHORT).show()
+                    showRideOptionsDialog(currentCalculatedFare)
+                }
+
+                SelectionStage.BOOKING_SUBMITTED -> {
+                    Toast.makeText(this, "Searching for drivers nearby...", Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    private fun showRideOptionsDialog(baseCalculatedFare: Double) {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_ride_options, null)
+        dialog.setContentView(view)
+
+        val fareRegular4 = baseCalculatedFare
+        val fareShared4 = baseCalculatedFare * 0.70  // 30% discount for 2-person sharing
+        val fareRegular6 = baseCalculatedFare * 1.40 // 40% premium for 6-seater
+
+        val btnRegular4 = view.findViewById<View>(R.id.btnOptionRegular4)
+        val btnShared4 = view.findViewById<View>(R.id.btnOptionShared4)
+        val btnRegular6 = view.findViewById<View>(R.id.btnOptionRegular6)
+
+        view.findViewById<TextView>(R.id.txtFareRegular4)?.text = "₱${fareRegular4.toInt()}"
+        view.findViewById<TextView>(R.id.txtFareShared4)?.text = "₱${fareShared4.toInt()} (Shared 2-Pax)"
+        view.findViewById<TextView>(R.id.txtFareRegular6)?.text = "₱${fareRegular6.toInt()}"
+
+        btnRegular4?.setOnClickListener {
+            dialog.dismiss()
+            submitRideRequestToFirebase(
+                serviceType = "REGULAR_4",
+                finalFare = fareRegular4,
+                isShared = false,
+                maxPax = 1
+            )
+        }
+
+        btnShared4?.setOnClickListener {
+            dialog.dismiss()
+            submitRideRequestToFirebase(
+                serviceType = "SHARED_4",
+                finalFare = fareShared4,
+                isShared = true,
+                maxPax = 2 // Capped strictly at 2 people
+            )
+        }
+
+        btnRegular6?.setOnClickListener {
+            dialog.dismiss()
+            submitRideRequestToFirebase(
+                serviceType = "REGULAR_6",
+                finalFare = fareRegular6,
+                isShared = false,
+                maxPax = 1
+            )
+        }
+
+        dialog.show()
+    }
+
+    private fun submitRideRequestToFirebase(
+        serviceType: String,
+        finalFare: Double,
+        isShared: Boolean,
+        maxPax: Int
+    ) {
+        val pLat = pickupLatLng?.latitude ?: return
+        val pLng = pickupLatLng?.longitude ?: return
+        val dLat = dropoffLatLng?.latitude ?: return
+        val dLng = dropoffLatLng?.longitude ?: return
+
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in first to request a ride.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val currentUserId = currentUser.uid
+
+        database.child("users").child(currentUserId).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val firstName = snapshot.child("firstName").getValue(String::class.java) ?: ""
+                val lastName = snapshot.child("lastName").getValue(String::class.java) ?: ""
+                val passengerName = "$firstName $lastName".trim().ifEmpty { "Passenger" }
+                val passengerPhone = snapshot.child("phoneNumber").getValue(String::class.java) ?: ""
+
+                val ref = database.child("bookings").push()
+                val key = ref.key ?: return
+                currentRequestId = key
+
+                val bookingData = hashMapOf(
+                    "bookingId" to key,
+                    "passengerId" to currentUserId,
+                    "passengerName" to passengerName,
+                    "passengerPhone" to passengerPhone,
+                    "pickupAddress" to pickupAddress,
+                    "pickupLat" to pLat,
+                    "pickupLng" to pLng,
+                    "dropoffAddress" to dropoffAddress,
+                    "dropoffLat" to dLat,
+                    "dropoffLng" to dLng,
+                    "fare" to finalFare,
+                    "serviceType" to serviceType,
+                    "isShared" to isShared,
+                    "maxPassengersAllowed" to maxPax,
+                    "status" to "REQUESTED",
+                    "createdAt" to System.currentTimeMillis()
+                )
+
+                btnConfirmStage.isEnabled = false
+                btnConfirmStage.text = if (isShared) "Matching co-passenger..." else "Searching for driver..."
+
+                ref.setValue(bookingData).addOnSuccessListener {
+                    currentStage = SelectionStage.BOOKING_SUBMITTED
+                    Toast.makeText(this@LocationSelectionActivity, "Booking submitted!", Toast.LENGTH_SHORT).show()
+                    listenForRideStatusUpdates(key)
+                }.addOnFailureListener { e ->
+                    btnConfirmStage.isEnabled = true
+                    btnConfirmStage.text = "Select Ride Option"
+                    Toast.makeText(this@LocationSelectionActivity, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Toast.makeText(this@LocationSelectionActivity, "Failed to load user profile", Toast.LENGTH_SHORT).show()
+            }
+        })
+    }
+
+    private fun listenForRideStatusUpdates(bookingId: String) {
+        database.child("bookings").child(bookingId)
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val status = snapshot.child("status").getValue(String::class.java) ?: return
+                    val driverId = snapshot.child("driverId").getValue(String::class.java)
+
+                    when (status) {
+                        "MATCHED", "ACCEPTED" -> {
+                            btnConfirmStage.text = "Driver On The Way!"
+                            btnConfirmStage.setBackgroundColor(Color.parseColor("#4CAF50"))
+                            Toast.makeText(
+                                this@LocationSelectionActivity,
+                                "Ride Accepted by Driver ($driverId)!",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        "COMPLETED" -> {
+                            btnConfirmStage.text = "Trip Completed"
+                            Toast.makeText(this@LocationSelectionActivity, "Arrived at destination!", Toast.LENGTH_SHORT).show()
+                        }
+                        "CANCELLED" -> {
+                            btnConfirmStage.isEnabled = true
+                            btnConfirmStage.text = "Ride Cancelled - Retry"
+                            btnConfirmStage.setBackgroundColor(Color.parseColor("#E53935"))
+                            currentStage = SelectionStage.ROUTE_READY
+                        }
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Toast.makeText(this@LocationSelectionActivity, "Database error: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
     }
 
     private fun calculateAndDrawRoute() {
@@ -339,7 +511,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             val jsonData = DirectionsHelper.downloadUrl(url)
             val routePoints = DirectionsHelper.parseDirections(jsonData)
             val distanceMeters = parseDistanceMeters(jsonData)
-            val calculatedFare = calculateFare(distanceMeters)
+            currentCalculatedFare = calculateFare(distanceMeters)
 
             runOnUiThread {
                 if (routePoints.isNotEmpty()) {
@@ -352,7 +524,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     )
                 }
 
-                btnConfirmStage.text = "Book Ride - ₱${calculatedFare.toInt()}"
+                btnConfirmStage.text = "Select Ride Option - From ₱${(currentCalculatedFare * 0.7).toInt()}"
             }
         }.start()
     }
