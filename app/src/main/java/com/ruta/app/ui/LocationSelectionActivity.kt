@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -29,6 +30,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.libraries.places.api.Places
@@ -41,10 +43,13 @@ import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
-import com.ruta.app.model.Booking
 import com.ruta.app.model.LocationItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.Locale
+import androidx.core.graphics.toColorInt
 
 class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
@@ -70,11 +75,13 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private var activeMarker: Marker? = null
     private var pickupMarker: Marker? = null
+    private var currentPolyline: Polyline? = null
 
     private var currentRequestId: String? = null
     private var isProgrammaticTextUpdate = false
 
-    private val placesApiKey = "AIzaSyA_aZwg2zvItoG12d_kmMtPZGB0f8PxChk"
+    // Provided Google Maps API Key
+    private val placesApiKey = "AIzaSyD_CZcqO8veYRbJxyD9EPNBcmGK3IoeDMQ"
     private val locationPermissionRequestCode = 1001
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -366,7 +373,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 serviceType = "SHARED_4",
                 finalFare = fareShared4,
                 isShared = true,
-                maxPax = 2 // Capped strictly at 2 people
+                maxPax = 2
             )
         }
 
@@ -477,8 +484,9 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         "CANCELLED" -> {
                             btnConfirmStage.isEnabled = true
                             btnConfirmStage.text = "Ride Cancelled - Retry"
-                            btnConfirmStage.setBackgroundColor(Color.parseColor("#E53935"))
+                            btnConfirmStage.setBackgroundColor("#E53935".toColorInt())
                             currentStage = SelectionStage.ROUTE_READY
+                            currentPolyline?.remove()
                         }
                     }
                 }
@@ -502,23 +510,32 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             .build()
         mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 180))
 
-        val url = "https://maps.googleapis.com/maps/api/directions/json?" +
-                "origin=${origin.latitude},${origin.longitude}" +
-                "&destination=${destination.latitude},${destination.longitude}" +
-                "&key=$placesApiKey"
+        val url = DirectionsHelper.getDirectionsUrl(origin, destination, placesApiKey)
 
-        Thread {
+        // Execute API call on IO thread and draw polyline safely on Main thread
+        lifecycleScope.launch(Dispatchers.IO) {
             val jsonData = DirectionsHelper.downloadUrl(url)
             val routePoints = DirectionsHelper.parseDirections(jsonData)
             val distanceMeters = parseDistanceMeters(jsonData)
             currentCalculatedFare = calculateFare(distanceMeters)
 
-            runOnUiThread {
+            withContext(Dispatchers.Main) {
+                currentPolyline?.remove()
+
                 if (routePoints.isNotEmpty()) {
-                    mMap.addPolyline(
+                    currentPolyline = mMap.addPolyline(
                         PolylineOptions()
                             .addAll(routePoints)
                             .width(14f)
+                            .color(Color.RED)
+                            .geodesic(true)
+                    )
+                } else {
+                    // Fallback straight line if Directions API returns empty or isn't enabled
+                    currentPolyline = mMap.addPolyline(
+                        PolylineOptions()
+                            .add(origin, destination)
+                            .width(10f)
                             .color(Color.RED)
                             .geodesic(true)
                     )
@@ -526,7 +543,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 btnConfirmStage.text = "Select Ride Option - From ₱${(currentCalculatedFare * 0.7).toInt()}"
             }
-        }.start()
+        }
     }
 
     private fun parseDistanceMeters(jsonData: String): Int {

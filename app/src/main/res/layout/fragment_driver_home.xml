@@ -37,11 +37,11 @@
                 android:textStyle="bold" />
 
             <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchGoOnline"
+                android:id="@+id/switchOnline"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
 
-            <!-- Logout Button (Moved here so it's always visible) -->
+            <!-- Logout Button -->
             <Button
                 android:id="@+id/btnDriverLogout"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
@@ -57,7 +57,7 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Incoming Ride Request Card (Initially Hidden / Visible on Request) -->
+    <!-- Incoming Ride Request Card -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardIncomingRequest"
         android:layout_width="match_parent"
@@ -118,8 +118,16 @@
                 android:textColor="#388E3C"
                 android:textSize="16sp"
                 android:textStyle="bold" />
-
-            <!-- Action Buttons -->
+            <TextView
+                android:id="@+id/txtWalletBalance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Wallet: ₱0.00"
+                android:textColor="@android:color/black"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingEnd="8dp" />
+            <!-- Action Buttons Container -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -143,6 +151,23 @@
                     android:layout_weight="1"
                     android:backgroundTint="#388E3C"
                     android:text="Accept Ride" />
+
+                <Button
+                    android:id="@+id/btnConfirmPickup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:backgroundTint="#1976D2"
+                    android:text="Confirm Passenger Pickup"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/btnCompleteRide"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:backgroundTint="#388E3C"
+                    android:text="Complete Ride"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
         </LinearLayout>

@@ -3,7 +3,7 @@
     <string name="app_name">RUTA</string>
     <string name="tagline">Your ride, your route.</string>
     <string name="start_now">Start now</string>
-
+    <string name="google_maps_key">AIzaSyD_CZcqO8veYRbJxyD9EPNBcmGK3IoeDMQ</string>
     <string name="login_title">Welcome Back</string>
     <string name="login_subtitle">Log in to continue</string>
     <string name="email_hint">Email</string>

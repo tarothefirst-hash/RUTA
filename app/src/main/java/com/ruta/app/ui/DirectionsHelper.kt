@@ -9,6 +9,15 @@ import java.net.URL
 
 object DirectionsHelper {
 
+    // Builds the URL string required for Google Directions API requests
+    fun getDirectionsUrl(origin: LatLng, destination: LatLng, apiKey: String): String {
+        val strOrigin = "origin=${origin.latitude},${origin.longitude}"
+        val strDest = "destination=${destination.latitude},${destination.longitude}"
+        val mode = "mode=driving"
+        val params = "$strOrigin&$strDest&$mode&key=$apiKey"
+        return "https://maps.googleapis.com/maps/api/directions/json?$params"
+    }
+
     // Fetches JSON response from Google Directions API
     fun downloadUrl(urlString: String): String {
         var data = ""

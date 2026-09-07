@@ -21,6 +21,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.ruta.app.R
+import java.util.UUID
 
 class ProfileFragment : Fragment() {
 
@@ -38,11 +39,13 @@ class ProfileFragment : Fragment() {
     private val currentUid = FirebaseAuth.getInstance().currentUser?.uid
     private val database = FirebaseDatabase.getInstance().reference
 
+    private var activeQrToken: String? = null
+
     // Camera Scanner Launcher for QR Pairing
     private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
-            val scannedContactUid = result.contents
-            linkEmergencyContact(scannedContactUid)
+            val scannedPayload = result.contents
+            processScannedQrCode(scannedPayload)
         }
     }
 
@@ -57,7 +60,7 @@ class ProfileFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Bind Views from fragment_profile.xml
+        // Bind Views
         imgMyQrCode = view.findViewById(R.id.imgMyQrCode)
         txtLinkedContactStatus = view.findViewById(R.id.txtLinkedContactStatus)
         btnScanQr = view.findViewById(R.id.btnScanQr)
@@ -68,10 +71,9 @@ class ProfileFragment : Fragment() {
         btnSaveProfile = view.findViewById(R.id.btnSaveProfile)
         btnLogout = view.findViewById(R.id.btnLogout)
 
-        // 1. Generate QR Code and load user details
         if (currentUid != null) {
-            val qrBitmap = generateQRCodeBitmap(currentUid)
-            imgMyQrCode.setImageBitmap(qrBitmap)
+            // 1. Generate Dynamic Single-Use QR
+            generateAndDisplayDynamicQr()
 
             loadUserProfile()
             checkCurrentLinkedContact()
@@ -87,14 +89,85 @@ class ProfileFragment : Fragment() {
             qrScannerLauncher.launch(options)
         }
 
-        // 3. Save Profile Button Listener
-        btnSaveProfile.setOnClickListener {
-            saveUserProfile()
+        // 3. Save Profile Listener
+        btnSaveProfile.setOnClickListener { saveUserProfile() }
+
+        // 4. Logout Listener
+        btnLogout.setOnClickListener { performLogout() }
+    }
+
+    private fun generateAndDisplayDynamicQr() {
+        val uid = currentUid ?: return
+        val newToken = UUID.randomUUID().toString().take(8) // Unique short token
+        activeQrToken = newToken
+
+        // Payload formatted as: RUTA_PAIR:<UID>:<TOKEN>
+        val qrPayload = "RUTA_PAIR:$uid:$newToken"
+
+        // Save active token to Firebase
+        val tokenData = hashMapOf<String, Any>(
+            "token" to newToken,
+            "status" to "ACTIVE",
+            "createdAt" to System.currentTimeMillis()
+        )
+
+        database.child("users").child(uid).child("activeQr").setValue(tokenData)
+            .addOnSuccessListener {
+                val qrBitmap = generateQRCodeBitmap(qrPayload)
+                imgMyQrCode.setImageBitmap(qrBitmap)
+            }
+    }
+
+    private fun processScannedQrCode(payload: String) {
+        // Expected format: RUTA_PAIR:targetUid:token
+        val parts = payload.split(":")
+        if (parts.size != 3 || parts[0] != "RUTA_PAIR") {
+            Toast.makeText(requireContext(), "Invalid RUTA QR Code!", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        // 4. Logout Button Listener
-        btnLogout.setOnClickListener {
-            performLogout()
+        val targetUid = parts[1]
+        val token = parts[2]
+
+        val myUid = currentUid ?: return
+        if (targetUid == myUid) {
+            Toast.makeText(requireContext(), "You cannot link with yourself!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Validate token status in target user's Firebase node
+        database.child("users").child(targetUid).child("activeQr").get()
+            .addOnSuccessListener { snapshot ->
+                val activeToken = snapshot.child("token").getValue(String::class.java)
+                val status = snapshot.child("status").getValue(String::class.java)
+
+                if (activeToken == token && status == "ACTIVE") {
+                    // Valid single-use QR! Perform pairing & invalidate token
+                    linkEmergencyContactAndInvalidate(targetUid)
+                } else {
+                    Toast.makeText(requireContext(), "This QR Code has expired or already been used!", Toast.LENGTH_LONG).show()
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(requireContext(), "Failed to verify QR code.", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun linkEmergencyContactAndInvalidate(contactUid: String) {
+        val myUid = currentUid ?: return
+
+        val updates = hashMapOf<String, Any>(
+            "users/$myUid/emergencyContactId" to contactUid,
+            "users/$contactUid/emergencyContactId" to myUid,
+            "users/$contactUid/activeQr/status" to "EXPIRED" // 🔒 Invalidate single-use QR immediately
+        )
+
+        database.updateChildren(updates).addOnSuccessListener {
+            Toast.makeText(requireContext(), "Emergency contact paired successfully!", Toast.LENGTH_SHORT).show()
+            txtLinkedContactStatus.text = "Linked Contact: Active"
+            txtLinkedContactStatus.setTextColor(Color.parseColor("#388E3C"))
+        }.addOnFailureListener {
+            Toast.makeText(requireContext(), "Failed to link contact.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -143,28 +216,6 @@ class ProfileFragment : Fragment() {
         }
     }
 
-    private fun linkEmergencyContact(contactUid: String) {
-        val myUid = currentUid ?: return
-        if (contactUid == myUid) {
-            Toast.makeText(requireContext(), "You cannot link with yourself!", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Bi-directional emergency contact link in Firebase Realtime Database
-        val updates = hashMapOf<String, Any>(
-            "users/$myUid/emergencyContactId" to contactUid,
-            "users/$contactUid/emergencyContactId" to myUid
-        )
-
-        database.updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(requireContext(), "Emergency contact paired successfully!", Toast.LENGTH_SHORT).show()
-            txtLinkedContactStatus.text = "Linked Contact: Active"
-            txtLinkedContactStatus.setTextColor(Color.parseColor("#388E3C"))
-        }.addOnFailureListener {
-            Toast.makeText(requireContext(), "Failed to link contact.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private fun checkCurrentLinkedContact() {
         val myUid = currentUid ?: return
         database.child("users").child(myUid).child("emergencyContactId")
@@ -181,16 +232,12 @@ class ProfileFragment : Fragment() {
     }
 
     private fun performLogout() {
-        // 1. Sign out from Firebase Auth
         FirebaseAuth.getInstance().signOut()
-
-        // 2. Clear local session cached in SharedPreferences
         val sharedPref = requireContext().getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
         sharedPref.edit().clear().apply()
 
         Toast.makeText(requireContext(), "Logged out successfully", Toast.LENGTH_SHORT).show()
 
-        // 3. Redirect to LoginActivity & CLEAR the Activity Stack
         val intent = Intent(requireContext(), LoginActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }

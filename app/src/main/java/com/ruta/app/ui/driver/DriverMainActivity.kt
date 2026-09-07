@@ -6,6 +6,7 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.ruta.app.R
 
+
 class DriverMainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {

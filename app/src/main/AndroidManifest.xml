@@ -36,7 +36,7 @@
 
         <activity android:name=".ui.LoginActivity" android:exported="false" />
         <activity android:name=".ui.SignupActivity" android:exported="false" />
-
+        <activity android:name=".ui.ChatActivity" />
         <activity android:name=".ui.PassengerHomeActivity" android:exported="false" />
         <activity android:name=".ui.DriverHomeActivity" android:exported="false" />
         <activity android:name=".ui.AdminHomeActivity" android:exported="false" />
