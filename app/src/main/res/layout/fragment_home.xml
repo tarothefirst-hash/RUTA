@@ -1,24 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/scrollContent"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/white"
+    android:background="@color/ruta_bg"
     android:clipToPadding="false"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    tools:ignore="HardcodedText,ContentDescription">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingBottom="24dp">
+        android:paddingBottom="84dp">
 
-        <!-- Header -->
+        <!-- HEADER SECTION -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_header_gradient"
+            android:backgroundTint="@color/ruta_primary"
             android:paddingHorizontal="24dp"
             android:paddingTop="32dp"
             android:paddingBottom="36dp">
@@ -43,7 +46,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:text="Let's find you a ride"
-                    android:textColor="#FFEDEE"
+                    android:textColor="@color/ruta_primary_light"
                     android:textSize="15sp" />
             </LinearLayout>
 
@@ -53,9 +56,11 @@
                 android:layout_height="40dp"
                 android:layout_alignParentEnd="true"
                 android:background="@drawable/ic_search"
+                android:backgroundTint="@color/ruta_primary_dark"
                 android:contentDescription="Notifications"
                 android:padding="8dp"
-                android:src="@drawable/ic_notification" />
+                android:src="@drawable/ic_notification"
+                app:tint="@color/white" />
 
             <!-- Search bar -->
             <LinearLayout
@@ -79,7 +84,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Where to?"
-                    android:textColor="@color/ruta_red"
+                    android:textColor="@color/ruta_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -87,134 +92,115 @@
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:background="@drawable/circle_search"
+                    android:backgroundTint="@color/ruta_primary"
                     android:contentDescription="Search"
                     android:padding="9dp"
-                    android:src="@drawable/ic_search" />
+                    android:src="@drawable/ic_search"
+                    app:tint="@color/white" />
             </LinearLayout>
         </RelativeLayout>
 
-        <!-- Quick actions -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:orientation="horizontal"
-            android:paddingHorizontal="32dp"
-            android:weightSum="3">
-
-            <LinearLayout
-                android:id="@+id/btnHome"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <ImageView
-                    android:layout_width="52dp"
-                    android:layout_height="52dp"
-                    android:background="@drawable/circle_red"
-                    android:contentDescription="Home"
-                    android:padding="14dp"
-                    android:src="@drawable/ic_home_filled" />
-
-                <TextView
-                    android:id="@+id/txtHomeLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center"
-                    android:text="Home"
-                    android:textColor="@color/ruta_red"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/btnWork"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <ImageView
-                    android:layout_width="52dp"
-                    android:layout_height="52dp"
-                    android:background="@drawable/circle_red"
-                    android:contentDescription="Work"
-                    android:padding="14dp"
-                    android:src="@drawable/ic_business" />
-
-                <TextView
-                    android:id="@+id/txtWorkLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center"
-                    android:text="Work"
-                    android:textColor="@color/ruta_red"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/btnFavorite"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <ImageView
-                    android:layout_width="52dp"
-                    android:layout_height="52dp"
-                    android:background="@drawable/circle_red"
-                    android:contentDescription="Favorites"
-                    android:padding="14dp"
-                    android:src="@drawable/ic_star" />
-
-                <TextView
-                    android:id="@+id/txtFavLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center"
-                    android:text="Saved"
-                    android:textColor="@color/ruta_red"
-                    android:textSize="11sp" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- Floating Active Trip ETA Banner -->
+        <!-- RIDESHARE PROMO BANNER -->
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardActiveTripEta"
+            android:id="@+id/cardRidesharePromo"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="24dp"
-            android:layout_marginTop="16dp"
-            android:visibility="gone"
-            app:cardBackgroundColor="#E62222"
+            android:layout_marginTop="20dp"
+            app:cardBackgroundColor="@color/ruta_primary_light"
             app:cardCornerRadius="14dp"
-            app:cardElevation="6dp">
+            app:cardElevation="2dp"
+            app:strokeWidth="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="14dp">
+                android:padding="16dp">
+
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_car"
+                    app:tint="@color/ruta_primary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Save more on Rideshare"
+                        android:textColor="@color/ruta_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Split fares when matched with riders heading your way."
+                        android:textColor="@color/ruta_text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- RECENT BOOKINGS HEADER -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="24dp"
+            android:letterSpacing="0.03"
+            android:text="RECENT BOOKINGS"
+            android:textColor="@color/ruta_primary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <!-- RECENT BOOKINGS RECYCLERVIEW -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerRecentBookings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginTop="12dp"
+            android:nestedScrollingEnabled="false" />
+
+        <!-- PERSISTENT ACTIVE TRIP BANNER (POSITIONS AT BOTTOM ABOVE NAV BAR) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardActiveTripEta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="#6366F1"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="6dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:contentDescription="Active Trip"
-                    android:src="@drawable/ic_car"
-                    app:tint="@color/white" />
+                    android:src="@drawable/ic_directions_car_background"
+                    app:tint="#FFFFFF" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -227,189 +213,33 @@
                         android:id="@+id/txtActiveTripStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Driver En Route"
-                        android:textColor="@color/white"
-                        android:textSize="14sp"
+                        android:text="Driver en route"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
                     <TextView
-                        android:id="@+id/txtActiveTripEta"
+                        android:id="@+id/txtDriverInfoHome"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="Tap to view active route"
-                        android:textColor="#FFDDDD"
-                        android:textSize="12sp" />
+                        android:text="Driver: Loading..."
+                        android:textColor="#E0E7FF"
+                        android:textSize="13sp" />
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/txtActiveTripEta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="VIEW >"
-                    android:textColor="@color/white"
+                    android:background="@drawable/bg_rounded_white_chip"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:text="5 mins • 1.2 km"
+                    android:textColor="#6366F1"
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Recent bookings label -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="24dp"
-            android:layout_marginTop="24dp"
-            android:letterSpacing="0.03"
-            android:text="RECENT BOOKINGS:"
-            android:textColor="@color/ruta_red"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-
-        <!-- From / To cards -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:paddingHorizontal="24dp">
-
-            <LinearLayout
-                android:id="@+id/cardFrom"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/bg_card_outline"
-                android:orientation="vertical"
-                android:padding="14dp"
-                app:layout_constraintEnd_toStartOf="@id/btnSwap"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="From"
-                    android:textColor="@color/text_gray"
-                    android:textSize="11sp" />
-
-                <TextView
-                    android:id="@+id/txtFromLocation"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Select Pickup..."
-                    android:textColor="@color/ruta_red"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <ImageView
-                android:id="@+id/btnSwap"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:background="@drawable/circle_red"
-                android:contentDescription="Swap"
-                android:padding="8dp"
-                android:src="@drawable/ic_swap_horiz"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <LinearLayout
-                android:id="@+id/cardTo"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_card_outline"
-                android:orientation="vertical"
-                android:padding="14dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toEndOf="@id/btnSwap"
-                app:layout_constraintTop_toTopOf="parent">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="To"
-                    android:textColor="@color/text_gray"
-                    android:textSize="11sp" />
-
-                <TextView
-                    android:id="@+id/txtToLocation"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Select Drop-off..."
-                    android:textColor="@color/ruta_red"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <!-- Fare / Vehicle estimation card -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="24dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_vehicle_card"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="14dp">
-
-            <ImageView
-                android:layout_width="64dp"
-                android:layout_height="40dp"
-                android:contentDescription="Vehicle"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_car" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/txtFareEstimate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Fare: --"
-                    android:textColor="@color/ruta_red"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/txtVehicleType"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="Standard Option"
-                    android:textColor="@color/text_gray"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/btnBookNow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_button_red"
-                android:paddingHorizontal="20dp"
-                android:paddingVertical="9dp"
-                android:text="Book now"
-                android:textColor="@color/white"
-                android:textSize="12sp"
-                android:textStyle="bold" />
         </LinearLayout>
-
-        <!-- Recent Bookings RecyclerView -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerRecentBookings"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="24dp"
-            android:layout_marginTop="16dp"
-            android:nestedScrollingEnabled="false" />
-
+    </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </ScrollView>

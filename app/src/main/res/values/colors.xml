@@ -1,14 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ruta_red">#E53935</color>
-    <color name="ruta_red_dark">#C62828</color>
-    <color name="ruta_pink_light">#FADADD</color>
-    <color name="ruta_pink_gradient_start">#F8C6C9</color>
-    <color name="ruta_pink_gradient_end">#FFFFFF</color>
+    <!-- RUTA Primary Palette -->
+    <color name="ruta_primary">#6D5EFC</color>
+    <color name="ruta_primary_dark">#4B38E0</color>
+    <color name="ruta_primary_light">#EEECFF</color>
     <color name="white">#FFFFFF</color>
-    <color name="black">#000000</color>
-    <color name="text_dark">#212121</color>
-    <color name="text_gray">#757575</color>
+
+    <!-- Backgrounds & Surfaces -->
+    <color name="ruta_bg">#F8F9FE</color>
+    <color name="ruta_card_bg">#FFFFFF</color>
+    <color name="ruta_black">#000000</color>
+
+
+    <!-- Typography -->
+    <color name="ruta_text_primary">#1A1B25</color>
+    <color name="ruta_text_secondary">#5A5C6E</color>
+    <color name="ruta_text_muted">#9EA1B0</color>
+
+    <!-- Functional Accent Colors -->
+    <color name="ruta_status_warning">#E65100</color>
+    <color name="ruta_status_success">#2E7D32</color>
+    <color name="ruta_cancel">#D32F2F</color>
+    <!-- Legacy Color Aliases -->
+    <color name="ruta_pink_light">#FFD1DC</color>
+    <color name="ruta_red">@color/ruta_primary</color>
+    <color name="ruta_red_dark">@color/ruta_primary_dark</color>
+    <color name="ruta_pink_gradient_start">@color/ruta_primary</color>
+    <color name="ruta_pink_gradient_end">@color/ruta_primary_light</color>
     <color name="input_bg">#FFFFFF</color>
-    <color name="error_red">#D32F2F</color>
+    <color name="text_dark">@color/ruta_text_primary</color>
+    <color name="text_gray">@color/ruta_text_secondary</color>
 </resources>

@@ -5,7 +5,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_gradient_pink"
+    android:background="@color/ruta_bg"
     android:fillViewport="true">
 
     <LinearLayout
@@ -29,7 +29,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="20dp"
             android:text="@string/login_title"
-            android:textColor="@color/text_dark"
+            android:textColor="@color/ruta_text_primary"
             android:textSize="26sp"
             android:textStyle="bold" />
 
@@ -39,7 +39,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="4dp"
             android:text="@string/login_subtitle"
-            android:textColor="@color/text_gray"
+            android:textColor="@color/ruta_text_secondary"
             android:textSize="14sp" />
 
         <!-- Role picker -->
@@ -48,7 +48,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="28dp"
             android:text="@string/login_as"
-            android:textColor="@color/text_gray"
+            android:textColor="@color/ruta_text_secondary"
             android:textSize="13sp" />
 
         <RadioGroup
@@ -89,7 +89,11 @@
                 android:textSize="12sp" />
 
         </RadioGroup>
-
+        <Button
+            android:id="@+id/btnGoogle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sign in with Google" />
         <EditText
             android:id="@+id/edtEmail"
             style="@style/RutaEditText"
@@ -115,7 +119,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:textColor="@color/error_red"
+            android:textColor="@color/ruta_cancel"
             android:textSize="12sp"
             android:visibility="gone"
             tools:visibility="visible"
@@ -127,6 +131,7 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="24dp"
+            android:backgroundTint="@color/ruta_primary"
             android:text="@string/login_button"
             android:textAllCaps="false" />
 
@@ -141,7 +146,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/no_account"
-                android:textColor="@color/text_gray"
+                android:textColor="@color/ruta_text_secondary"
                 android:textSize="13sp" />
 
             <TextView
@@ -150,7 +155,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
                 android:text="@string/signup_link"
-                android:textColor="@color/ruta_red"
+                android:textColor="@color/ruta_primary"
                 android:textStyle="bold"
                 android:textSize="13sp" />
 

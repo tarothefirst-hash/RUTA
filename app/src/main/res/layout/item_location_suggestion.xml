@@ -13,7 +13,7 @@
         android:layout_width="28dp"
         android:layout_height="28dp"
         android:src="@android:drawable/ic_menu_mapmode"
-        app:tint="@color/ruta_red" />
+        app:tint="@color/ruta_primary" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -27,7 +27,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Location Name"
-            android:textColor="@color/ruta_red"
+            android:textColor="@color/ruta_text_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -36,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Address details"
-            android:textColor="#888888"
+            android:textColor="@color/ruta_text_secondary"
             android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>

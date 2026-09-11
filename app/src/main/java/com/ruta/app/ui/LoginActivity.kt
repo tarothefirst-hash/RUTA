@@ -4,8 +4,15 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
 import com.ruta.app.databinding.ActivityLoginBinding
@@ -17,26 +24,72 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var binding: ActivityLoginBinding
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
     private val database: FirebaseDatabase by lazy { FirebaseDatabase.getInstance() }
+    private lateinit var googleSignInClient: GoogleSignInClient
+
+    private val googleLoginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)!!
+            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+
+            setLoading(true)
+            auth.signInWithCredential(credential)
+                .addOnSuccessListener { authResult ->
+                    val uid = authResult.user?.uid
+                    if (uid != null) {
+                        fetchRoleAndNavigate(uid)
+                    } else {
+                        setLoading(false)
+                        showError("User ID not found.")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    setLoading(false)
+                    showError("Google login failed: ${e.message}")
+                }
+        } catch (e: Exception) {
+            setLoading(false)
+            Toast.makeText(this, "Google Sign-In canceled or failed.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Setup Google Auth Client
+        setupGoogleSignIn()
+
         // Auto-check session immediately
         checkAutoLogin()
 
         binding.btnLogin.setOnClickListener { attemptLogin() }
+
+        // Trigger Google Sign-In on button click
+        binding.btnGoogle.setOnClickListener {
+            setLoading(true)
+            val signInIntent = googleSignInClient.signInIntent
+            googleLoginLauncher.launch(signInIntent)
+        }
 
         binding.txtGoSignup.setOnClickListener {
             startActivity(Intent(this, SignupActivity::class.java))
         }
     }
 
+    private fun setupGoogleSignIn() {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(getString(R.string.default_web_client_id))
+            .requestEmail()
+            .build()
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
+    }
+
     private fun checkAutoLogin() {
         val currentUser = auth.currentUser ?: return
 
-        // 🚀 FAST-PATH: Use locally cached role first for instantaneous navigation
+        // FAST-PATH: Use locally cached role first for instantaneous navigation
         val prefs = getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
         val cachedRole = prefs.getString("USER_ROLE", null)
 
@@ -85,7 +138,7 @@ class LoginActivity : AppCompatActivity() {
             .addOnSuccessListener { snapshot ->
                 setLoading(false)
                 val roleStr = snapshot.child("role").getValue(String::class.java) ?: "PASSENGER"
-                val userName = snapshot.child("name").getValue(String::class.java) ?: "Passenger"
+                val userName = snapshot.child("name").getValue(String::class.java) ?: "User"
 
                 // Cache user details locally to skip network calls on subsequent launches
                 val prefs = getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
@@ -127,6 +180,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun setLoading(loading: Boolean) {
         binding.btnLogin.isEnabled = !loading
+        binding.btnGoogle.isEnabled = !loading
         binding.btnLogin.text = if (loading) "Logging in..." else getString(R.string.login_button)
     }
 

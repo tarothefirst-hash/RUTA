@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -15,109 +14,185 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.Query
 import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
 
 class HomeFragment : Fragment() {
 
-    private lateinit var txtFromLocation: TextView
-    private lateinit var txtToLocation: TextView
-    private lateinit var btnBookNow: TextView
+    private lateinit var txtGreeting: TextView
     private lateinit var cardActiveTripEta: View
     private lateinit var txtActiveTripStatus: TextView
+    private lateinit var txtActiveTripEta: TextView
+    private var txtDriverInfoHome: TextView? = null
 
     private lateinit var database: DatabaseReference
     private var activeTripListener: ValueEventListener? = null
-    private var activeTripQueryRef: com.google.firebase.database.Query? = null
+    private var activeTripQueryRef: Query? = null
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.fragment_home, container, false)
     }
-//comment sa driver
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         database = FirebaseDatabase.getInstance().reference
 
         // 1. Bind Layout Views
-        val txtGreeting = view.findViewById<TextView>(R.id.txtGreeting)
-        val layoutSearchBar = view.findViewById<LinearLayout>(R.id.layoutSearchBar)
-        val btnSwap = view.findViewById<View>(R.id.btnSwap)
-
-        txtFromLocation = view.findViewById(R.id.txtFromLocation)
-        txtToLocation = view.findViewById(R.id.txtToLocation)
-        btnBookNow = view.findViewById(R.id.btnBookNow)
+        txtGreeting = view.findViewById(R.id.txtGreeting)
         cardActiveTripEta = view.findViewById(R.id.cardActiveTripEta)
         txtActiveTripStatus = view.findViewById(R.id.txtActiveTripStatus)
+        txtActiveTripEta = view.findViewById(R.id.txtActiveTripEta)
+        txtDriverInfoHome = view.findViewById(R.id.txtDriverInfoHome)
 
-        // 2. Set Greeting Name (Instantly pulled from local cache)
-        val firebaseUser = FirebaseAuth.getInstance().currentUser
-        val sharedPref = requireContext().getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
+        // 2. Fetch User Name
+        loadUserName()
 
-        val userName = sharedPref.getString("USER_NAME", null)
-            ?: firebaseUser?.displayName
-            ?: "Passenger"
-
-        txtGreeting.text = "Hi $userName!"
-
-        // 3. Listeners Setup
-        layoutSearchBar.setOnClickListener {
+        // 3. Setup Search Bar Click
+        val layoutSearchBar = view.findViewById<View>(R.id.layoutSearchBar)
+        layoutSearchBar?.setOnClickListener {
             startActivity(Intent(requireContext(), LocationSelectionActivity::class.java))
         }
+    }
 
-        btnSwap.setOnClickListener {
-            val temp = txtFromLocation.text
-            txtFromLocation.text = txtToLocation.text
-            txtToLocation.text = temp
-        }
-
-        btnBookNow.setOnClickListener {
-            submitBooking()
-        }
-
-        // 4. Start optimized query for active trip
+    override fun onResume() {
+        super.onResume()
+        // Start listening when user returns to HomeFragment
         listenForActiveTrip()
     }
 
-    private fun submitBooking() {
-        val pickup = txtFromLocation.text.toString()
-        val dropoff = txtToLocation.text.toString()
+    override fun onPause() {
+        super.onPause()
+        // Detach listener to avoid leaks or duplicate callbacks
+        detachActiveTripListener()
+    }
 
-        if (pickup == "Select Pickup..." || dropoff == "Select Drop-off...") {
-            Toast.makeText(requireContext(), "Please select pickup and drop-off points first", Toast.LENGTH_SHORT).show()
-            return
+    private fun listenForActiveTrip() {
+        val passengerId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+
+        detachActiveTripListener()
+
+        activeTripQueryRef = database.child("bookings")
+            .orderByChild("passengerId")
+            .equalTo(passengerId)
+            .limitToLast(1)
+
+        activeTripListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                var activeBookingId: String? = null
+                var currentStatus = ""
+                var driverId = ""
+                var distanceText = ""
+                var durationText = ""
+
+                for (child in snapshot.children) {
+                    val status = child.child("status").getValue(String::class.java) ?: ""
+                    if (status in listOf("REQUESTED", "SEARCHING", "ACCEPTED", "ARRIVED", "IN_PROGRESS")) {
+                        activeBookingId = child.key
+                        currentStatus = status
+                        driverId = child.child("driverId").getValue(String::class.java) ?: ""
+
+                        val distMeters = child.child("distanceMeters").getValue(Int::class.java) ?: 0
+                        val durSeconds = child.child("durationSeconds").getValue(Int::class.java) ?: 0
+                        distanceText = String.format("%.1f km", distMeters / 1000.0)
+                        durationText = "${durSeconds / 60} mins"
+                    }
+                }
+
+                if (activeBookingId != null) {
+                    cardActiveTripEta.visibility = View.VISIBLE
+                    txtActiveTripEta.text = "$durationText • $distanceText"
+
+                    when (currentStatus) {
+                        "REQUESTED", "SEARCHING" -> {
+                            txtActiveTripStatus.text = "Searching for driver..."
+                            txtDriverInfoHome?.text = "Connecting to nearest driver..."
+                        }
+                        "ACCEPTED", "ARRIVED", "IN_PROGRESS" -> {
+                            txtActiveTripStatus.text = if (currentStatus == "IN_PROGRESS") "Trip in progress" else "Driver en route"
+                            fetchDriverDetails(driverId) { driverName ->
+                                txtDriverInfoHome?.text = "Driver: $driverName"
+                            }
+                        }
+                        else -> {
+                            txtActiveTripStatus.text = "Active Ride"
+                            txtDriverInfoHome?.text = "Tap to view details"
+                        }
+                    }
+
+                    val finalBookingId = activeBookingId
+                    cardActiveTripEta.setOnClickListener {
+                        val intent = Intent(requireContext(), LocationSelectionActivity::class.java).apply {
+                            putExtra("BOOKING_ID", finalBookingId)
+                            putExtra("TRIP_ID", finalBookingId)
+                            putExtra("IS_ACTIVE_BOOKING", true)
+                        }
+                        startActivity(intent)
+                    }
+                } else {
+                    cardActiveTripEta.visibility = View.GONE
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
         }
 
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val bookingRef = database.child("bookings").push()
-        val bookingId = bookingRef.key ?: return
-
-        // Replace hardcoded test lat/lng with your actual selected location variables
-        val bookingData = hashMapOf<String, Any>(
-            "bookingId" to bookingId,
-            "passengerId" to userId,
-            "driverId" to "",
-            "status" to "REQUESTED",
-            "pickupAddress" to pickup,
-            "dropoffAddress" to dropoff,
-            "pickupLat" to 15.1450,    // 📍 Pass actual double coordinates
-            "pickupLng" to 120.5887,
-            "dropoffLat" to 15.1500,
-            "dropoffLng" to 120.5900,
-            "timestamp" to System.currentTimeMillis()
-        )
-
-        bookingRef.setValue(bookingData)
-            .addOnSuccessListener {
-                Toast.makeText(requireContext(), "Booking Submitted!", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(requireContext(), "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+        activeTripQueryRef?.addValueEventListener(activeTripListener!!)
     }
-    private fun cancelBooking(bookingId: String) {
+
+    private fun fetchDriverDetails(driverId: String, callback: (String) -> Unit) {
+        if (driverId.isEmpty()) {
+            callback("Assigned Driver")
+            return
+        }
+        database.child("users").child(driverId).child("name")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    callback(snapshot.getValue(String::class.java) ?: "Assigned Driver")
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    callback("Assigned Driver")
+                }
+            })
+    }
+
+    private fun detachActiveTripListener() {
+        activeTripListener?.let { listener ->
+            activeTripQueryRef?.removeEventListener(listener)
+        }
+        activeTripListener = null
+        activeTripQueryRef = null
+    }
+
+    private fun loadUserName() {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val sharedPref = requireContext().getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
+
+        val cachedName = sharedPref.getString("USER_NAME", null)
+        if (!cachedName.isNullOrEmpty()) {
+            txtGreeting.text = "Hi $cachedName!"
+        }
+
+        database.child("users").child(firebaseUser.uid)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val firstName = snapshot.child("firstName").getValue(String::class.java)
+                        ?: snapshot.child("name").getValue(String::class.java)
+
+                    if (!firstName.isNullOrEmpty()) {
+                        txtGreeting.text = "Hi $firstName!"
+                        sharedPref.edit().putString("USER_NAME", firstName).apply()
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
+
+    fun cancelBooking(bookingId: String) {
         val updates = hashMapOf<String, Any>(
             "status" to "CANCELLED",
             "cancelledAt" to System.currentTimeMillis()
@@ -131,58 +206,5 @@ class HomeFragment : Fragment() {
             .addOnFailureListener { e ->
                 Toast.makeText(requireContext(), "Failed to cancel: ${e.message}", Toast.LENGTH_SHORT).show()
             }
-    }
-
-    private fun listenForActiveTrip() {
-        val passengerId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-
-        // 🚀 OPTIMIZATION: Query only the single latest booking for this passenger
-        activeTripQueryRef = database.child("bookings")
-            .orderByChild("passengerId")
-            .equalTo(passengerId)
-            .limitToLast(1)
-
-        activeTripListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                var activeBookingId: String? = null
-                var currentStatus = ""
-
-                for (child in snapshot.children) {
-                    val status = child.child("status").getValue(String::class.java) ?: ""
-                    if (status == "REQUESTED" || status == "ACCEPTED" || status == "IN_PROGRESS") {
-                        activeBookingId = child.key
-                        currentStatus = status
-                    }
-                }
-
-                if (activeBookingId != null) {
-                    cardActiveTripEta.visibility = View.VISIBLE
-                    txtActiveTripStatus.text = when (currentStatus) {
-                        "REQUESTED" -> "Searching for Driver..."
-                        "ACCEPTED" -> "Driver En Route"
-                        "IN_PROGRESS" -> "Trip in Progress"
-                        else -> "Active Ride"
-                    }
-
-                    cardActiveTripEta.setOnClickListener {
-                        cancelBooking(activeBookingId)
-                    }
-                } else {
-                    cardActiveTripEta.visibility = View.GONE
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {}
-        }
-
-        activeTripQueryRef?.addValueEventListener(activeTripListener!!)
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        // Cleanup listener to prevent memory leaks and background CPU usage
-        activeTripListener?.let { listener ->
-            activeTripQueryRef?.removeEventListener(listener)
-        }
     }
 }

@@ -2,7 +2,8 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/ruta_bg">
 
     <!-- Map View -->
     <fragment
@@ -16,6 +17,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
+        app:cardBackgroundColor="@color/ruta_card_bg"
         app:cardCornerRadius="16dp"
         app:cardElevation="6dp">
 
@@ -32,7 +34,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Status: Offline"
-                android:textColor="#000000"
+                android:textColor="@color/ruta_text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -51,7 +53,7 @@
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:text="Logout"
-                android:textColor="#D32F2F"
+                android:textColor="@color/ruta_cancel"
                 android:textSize="12sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -65,6 +67,7 @@
         android:layout_alignParentBottom="true"
         android:layout_margin="16dp"
         android:visibility="gone"
+        app:cardBackgroundColor="@color/ruta_card_bg"
         app:cardCornerRadius="16dp"
         app:cardElevation="10dp">
 
@@ -79,7 +82,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="New Ride Request! (SHARED 2-PAX)"
-                android:textColor="#1976D2"
+                android:textColor="@color/ruta_primary"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -89,7 +92,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="Passenger Name"
-                android:textColor="#000000"
+                android:textColor="@color/ruta_text_primary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -99,7 +102,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Pickup: Macabulos, Tarlac City"
-                android:textColor="#666666" />
+                android:textColor="@color/ruta_text_secondary" />
 
             <TextView
                 android:id="@+id/txtDropoffLocation"
@@ -107,7 +110,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="Dropoff: SM City Tarlac"
-                android:textColor="#666666" />
+                android:textColor="@color/ruta_text_secondary" />
 
             <TextView
                 android:id="@+id/txtEstimatedFare"
@@ -115,18 +118,20 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Estimated Fare: ₱120.00"
-                android:textColor="#388E3C"
+                android:textColor="@color/ruta_status_success"
                 android:textSize="16sp"
                 android:textStyle="bold" />
+
             <TextView
                 android:id="@+id/txtWalletBalance"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:paddingEnd="8dp"
                 android:text="Wallet: ₱0.00"
-                android:textColor="@android:color/black"
+                android:textColor="@color/ruta_text_primary"
                 android:textSize="14sp"
-                android:textStyle="bold"
-                android:paddingEnd="8dp" />
+                android:textStyle="bold" />
+
             <!-- Action Buttons Container -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -142,21 +147,21 @@
                     android:layout_marginEnd="8dp"
                     android:layout_weight="1"
                     android:text="Decline"
-                    android:textColor="#D32F2F" />
+                    android:textColor="@color/ruta_cancel" />
 
                 <Button
                     android:id="@+id/btnAcceptRide"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:backgroundTint="#388E3C"
+                    android:backgroundTint="@color/ruta_status_success"
                     android:text="Accept Ride" />
 
                 <Button
                     android:id="@+id/btnConfirmPickup"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:backgroundTint="#1976D2"
+                    android:backgroundTint="@color/ruta_primary"
                     android:text="Confirm Passenger Pickup"
                     android:visibility="gone" />
 
@@ -164,7 +169,7 @@
                     android:id="@+id/btnCompleteRide"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:backgroundTint="#388E3C"
+                    android:backgroundTint="@color/ruta_status_success"
                     android:text="Complete Ride"
                     android:visibility="gone" />
 

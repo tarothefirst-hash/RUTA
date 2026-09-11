@@ -5,7 +5,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_gradient_pink"
+    android:background="@color/ruta_bg"
     android:fillViewport="true">
 
     <LinearLayout
@@ -29,7 +29,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="16dp"
             android:text="@string/signup_title"
-            android:textColor="@color/text_dark"
+            android:textColor="@color/ruta_text_primary"
             android:textSize="26sp"
             android:textStyle="bold" />
 
@@ -39,16 +39,16 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="4dp"
             android:text="@string/signup_subtitle"
-            android:textColor="@color/text_gray"
+            android:textColor="@color/ruta_text_secondary"
             android:textSize="14sp" />
 
-        <!-- Role picker (ADMIN REMOVED, Weight Sum = 2) -->
+        <!-- Role picker -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:text="@string/signup_as"
-            android:textColor="@color/text_gray"
+            android:textColor="@color/ruta_text_secondary"
             android:textSize="13sp" />
 
         <RadioGroup
@@ -90,7 +90,7 @@
 
         </RadioGroup>
 
-        <!-- First Name & Last Name Side-by-Side -->
+        <!-- First Name & Last Name -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -131,6 +131,16 @@
             android:inputType="textEmailAddress"
             android:autofillHints="emailAddress" />
 
+        <!-- Birth Date Field -->
+        <EditText
+            android:id="@+id/edtBirthDate"
+            style="@style/RutaEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:hint="Birth Date (YYYY-MM-DD)"
+            android:inputType="date" />
+
         <EditText
             android:id="@+id/edtPassword"
             style="@style/RutaEditText"
@@ -151,16 +161,72 @@
             android:inputType="textPassword"
             android:autofillHints="newPassword" />
 
+        <!-- Driver Specific Fields -->
+        <LinearLayout
+            android:id="@+id/layoutDriverFields"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Vehicle Information"
+                android:textColor="@color/ruta_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/edtVehicleModel"
+                style="@style/RutaEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="Vehicle Model (e.g., Toyota Vios)"
+                android:inputType="textCapWords" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/edtPlateNumber"
+                    style="@style/RutaEditText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:hint="Plate Number"
+                    android:inputType="textCapCharacters" />
+
+                <EditText
+                    android:id="@+id/edtVehicleColor"
+                    style="@style/RutaEditText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:hint="Color (e.g., Black)"
+                    android:inputType="textCapWords" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
         <TextView
             android:id="@+id/txtError"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:textColor="@color/error_red"
+            android:textColor="@color/ruta_cancel"
             android:textSize="12sp"
             android:visibility="gone"
             tools:visibility="visible"
-            tools:text="Passwords do not match" />
+            tools:text="Error message" />
 
         <Button
             android:id="@+id/btnSignup"
@@ -168,10 +234,10 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="22dp"
+            android:backgroundTint="@color/ruta_primary"
             android:text="@string/signup_button"
             android:textAllCaps="false" />
 
-        <!-- Social Divider -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -183,52 +249,35 @@
                 android:layout_width="0dp"
                 android:layout_height="1dp"
                 android:layout_weight="1"
-                android:background="@color/text_gray" />
+                android:background="@color/ruta_text_muted" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingHorizontal="12dp"
                 android:text="OR"
-                android:textColor="@color/text_gray"
+                android:textColor="@color/ruta_text_muted"
                 android:textSize="12sp" />
 
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
                 android:layout_weight="1"
-                android:background="@color/text_gray" />
+                android:background="@color/ruta_text_muted" />
 
         </LinearLayout>
 
-        <!-- Social Buttons -->
-        <LinearLayout
+        <!-- Full Width Google Button -->
+        <Button
+            android:id="@+id/btnGoogle"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btnGoogle"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:text="Google"
-                android:textAllCaps="false" />
-
-            <Button
-                android:id="@+id/btnFacebook"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:layout_marginStart="6dp"
-                android:text="Facebook"
-                android:textAllCaps="false" />
-
-        </LinearLayout>
+            android:text="Sign up with Google"
+            android:textColor="@color/ruta_primary"
+            android:textAllCaps="false"
+            app:strokeColor="@color/ruta_primary" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -241,7 +290,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/have_account"
-                android:textColor="@color/text_gray"
+                android:textColor="@color/ruta_text_secondary"
                 android:textSize="13sp" />
 
             <TextView
@@ -250,7 +299,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
                 android:text="@string/login_link"
-                android:textColor="@color/ruta_red"
+                android:textColor="@color/ruta_primary"
                 android:textStyle="bold"
                 android:textSize="13sp" />
 
