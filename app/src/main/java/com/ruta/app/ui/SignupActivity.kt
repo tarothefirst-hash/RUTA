@@ -53,7 +53,23 @@ class SignupActivity : AppCompatActivity() {
         }
 
         binding.btnSignup.setOnClickListener { attemptSignup() }
+
         binding.btnGoogle.setOnClickListener {
+            val selectedRole = if (binding.roleDriver.isChecked) UserRole.DRIVER else UserRole.PASSENGER
+
+            // Ensure drivers enter vehicle details before proceeding with Google Sign-In
+            if (selectedRole == UserRole.DRIVER) {
+                val vehicleModel = binding.edtVehicleModel.text.toString().trim()
+                val plateNumber = binding.edtPlateNumber.text.toString().trim()
+                val vehicleColor = binding.edtVehicleColor.text.toString().trim()
+
+                if (vehicleModel.isEmpty() || plateNumber.isEmpty() || vehicleColor.isEmpty()) {
+                    showError("Please enter your vehicle information before signing up with Google.")
+                    return@setOnClickListener
+                }
+            }
+
+            hideError()
             setLoading(true)
             val intent = googleSignInClient.signInIntent
             googleSignInLauncher.launch(intent)
@@ -107,6 +123,7 @@ class SignupActivity : AppCompatActivity() {
         }
 
         setLoading(true)
+        hideError()
 
         auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener { authResult ->
@@ -207,5 +224,9 @@ class SignupActivity : AppCompatActivity() {
     private fun showError(message: String) {
         binding.txtError.text = message
         binding.txtError.visibility = View.VISIBLE
+    }
+
+    private fun hideError() {
+        binding.txtError.visibility = View.GONE
     }
 }
