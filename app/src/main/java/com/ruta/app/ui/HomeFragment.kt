@@ -30,6 +30,9 @@ class HomeFragment : Fragment() {
     private var activeTripListener: ValueEventListener? = null
     private var activeTripQueryRef: Query? = null
 
+    // Tracks current active booking ID to lock search behavior
+    private var currentActiveBookingId: String? = null
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View? {
@@ -51,22 +54,27 @@ class HomeFragment : Fragment() {
         // 2. Fetch User Name
         loadUserName()
 
-        // 3. Setup Search Bar Click
+        // 3. Smart Search Bar Click Logic
         val layoutSearchBar = view.findViewById<View>(R.id.layoutSearchBar)
         layoutSearchBar?.setOnClickListener {
-            startActivity(Intent(requireContext(), LocationSelectionActivity::class.java))
+            if (currentActiveBookingId != null) {
+                // Active ride exists -> Direct to tracking view instead of ride setup
+                navigateToActiveBooking(currentActiveBookingId!!)
+            } else {
+                // No active ride -> Open location selection for a new ride
+                startActivity(Intent(requireContext(), LocationSelectionActivity::class.java))
+            }
         }
     }
 
     override fun onResume() {
         super.onResume()
-        // Start listening when user returns to HomeFragment
+        // Automatically checks Firebase state when returning to HomeFragment
         listenForActiveTrip()
     }
 
     override fun onPause() {
         super.onPause()
-        // Detach listener to avoid leaks or duplicate callbacks
         detachActiveTripListener()
     }
 
@@ -90,7 +98,8 @@ class HomeFragment : Fragment() {
 
                 for (child in snapshot.children) {
                     val status = child.child("status").getValue(String::class.java) ?: ""
-                    if (status in listOf("REQUESTED", "SEARCHING", "ACCEPTED", "ARRIVED", "IN_PROGRESS")) {
+
+                    if (status in listOf("MATCHING", "MATCHED", "REQUESTED", "SEARCHING", "ACCEPTED", "ARRIVED", "IN_PROGRESS")) {
                         activeBookingId = child.key
                         currentStatus = status
                         driverId = child.child("driverId").getValue(String::class.java) ?: ""
@@ -102,11 +111,21 @@ class HomeFragment : Fragment() {
                     }
                 }
 
+                currentActiveBookingId = activeBookingId
+
                 if (activeBookingId != null) {
                     cardActiveTripEta.visibility = View.VISIBLE
                     txtActiveTripEta.text = "$durationText • $distanceText"
 
                     when (currentStatus) {
+                        "MATCHING" -> {
+                            txtActiveTripStatus.text = "Matching co-passenger..."
+                            txtDriverInfoHome?.text = "Finding another passenger along your route..."
+                        }
+                        "MATCHED" -> {
+                            txtActiveTripStatus.text = "Co-passenger Matched"
+                            txtDriverInfoHome?.text = "Connecting to driver..."
+                        }
                         "REQUESTED", "SEARCHING" -> {
                             txtActiveTripStatus.text = "Searching for driver..."
                             txtDriverInfoHome?.text = "Connecting to nearest driver..."
@@ -125,14 +144,10 @@ class HomeFragment : Fragment() {
 
                     val finalBookingId = activeBookingId
                     cardActiveTripEta.setOnClickListener {
-                        val intent = Intent(requireContext(), LocationSelectionActivity::class.java).apply {
-                            putExtra("BOOKING_ID", finalBookingId)
-                            putExtra("TRIP_ID", finalBookingId)
-                            putExtra("IS_ACTIVE_BOOKING", true)
-                        }
-                        startActivity(intent)
+                        navigateToActiveBooking(finalBookingId)
                     }
                 } else {
+                    // Clears UI immediately on COMPLETED or CANCELLED
                     cardActiveTripEta.visibility = View.GONE
                 }
             }
@@ -141,6 +156,15 @@ class HomeFragment : Fragment() {
         }
 
         activeTripQueryRef?.addValueEventListener(activeTripListener!!)
+    }
+
+    private fun navigateToActiveBooking(bookingId: String) {
+        val intent = Intent(requireContext(), LocationSelectionActivity::class.java).apply {
+            putExtra("BOOKING_ID", bookingId)
+            putExtra("TRIP_ID", bookingId)
+            putExtra("IS_ACTIVE_BOOKING", true)
+        }
+        startActivity(intent)
     }
 
     private fun fetchDriverDetails(driverId: String, callback: (String) -> Unit) {
@@ -202,6 +226,7 @@ class HomeFragment : Fragment() {
             .addOnSuccessListener {
                 Toast.makeText(requireContext(), "Ride cancelled.", Toast.LENGTH_SHORT).show()
                 cardActiveTripEta.visibility = View.GONE
+                currentActiveBookingId = null
             }
             .addOnFailureListener { e ->
                 Toast.makeText(requireContext(), "Failed to cancel: ${e.message}", Toast.LENGTH_SHORT).show()

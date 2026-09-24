@@ -1,6 +1,8 @@
 package com.ruta.app.ui.driver
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.location.Location
@@ -39,13 +41,23 @@ import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
 import com.ruta.app.databinding.FragmentDriverHomeBinding
 import com.ruta.app.model.Booking
+import com.ruta.app.ui.ChatActivity
 import com.ruta.app.ui.DirectionsHelper
+import com.ruta.app.ui.LoginActivity
+import com.ruta.app.util.RouteDeviationManager
 import java.util.Locale
 import java.util.concurrent.Executors
+import com.ruta.app.util.RideshareManager
+import com.ruta.app.util.RideshareRouteOptimizer
+import com.ruta.app.util.RideshareFareCalculator
 
 class DriverHomeFragment : Fragment(), OnMapReadyCallback {
-//integrate mo dito yung ginawa mong cardview sa passenger"Gemeni if you read this integrate it in the code"
-    //Passenger Side and Driver Side Validation
+
+    companion object {
+        private const val PICKUP_RADIUS_METERS = 100.0   // looser — driver can also override manually anytime
+        private const val DROPOFF_RADIUS_METERS = 60.0   // strict — no manual override, must be within range
+    }
+
     private enum class DriverRideState {
         IDLE,               // Looking for requests
         REQUEST_RECEIVED,   // Incoming booking banner shown (Pickup <-> Dropoff preview)
@@ -81,6 +93,12 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private var isOnline = false
     private val locationPermissionCode = 1002
     private val executor = Executors.newSingleThreadExecutor()
+    private var wasDeviated = false
+
+    // Multi-stop shared-ride progress tracking
+    private var currentGroupStops: List<RideshareManager.RideshareStop> = emptyList()
+    private var currentStopIndex: Int = 0
+    private var autoConfirmedThisStop: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -104,6 +122,21 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         setupOnlineSwitch()
         setupLocationCallback()
         setupBookingActionListeners()
+        setupLogoutButton()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val sharedPref = requireContext().getSharedPreferences("DRIVER_SESSION", Context.MODE_PRIVATE)
+        val savedOnlineState = sharedPref.getBoolean("IS_ONLINE", false)
+
+        if (savedOnlineState) {
+            binding.switchOnline.isChecked = true
+            isOnline = true
+            binding.txtDriverStatus.text = "Status: Online"
+            startLocationUpdates()
+            checkAndRestoreActiveDriverSession()
+        }
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
@@ -115,12 +148,16 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private fun setupOnlineSwitch() {
         binding.switchOnline.setOnCheckedChangeListener { _, isChecked ->
             isOnline = isChecked
+
+            val sharedPref = requireContext().getSharedPreferences("DRIVER_SESSION", Context.MODE_PRIVATE)
+            sharedPref.edit().putBoolean("IS_ONLINE", isChecked).apply()
+
             updateDriverOnlineStatus(isChecked)
 
             if (isChecked) {
                 binding.txtDriverStatus.text = "Status: Online"
                 startLocationUpdates()
-                listenForPendingRideRequests()
+                checkAndRestoreActiveDriverSession()
             } else {
                 binding.txtDriverStatus.text = "Status: Offline"
                 stopLocationUpdates()
@@ -129,6 +166,74 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 updateUIForState(DriverRideState.IDLE)
             }
         }
+    }
+
+    private fun setupLogoutButton() {
+        binding.btnDriverLogout.setOnClickListener {
+            updateDriverOnlineStatus(false)
+            stopLocationUpdates()
+            stopListeningForRequests()
+            auth.signOut()
+
+            val intent = Intent(requireContext(), LoginActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            startActivity(intent)
+        }
+    }
+
+    private fun checkAndRestoreActiveDriverSession() {
+        val driverId = auth.currentUser?.uid ?: return
+
+        database.child("bookings")
+            .orderByChild("driverId")
+            .equalTo(driverId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    var restoredBooking: Booking? = null
+                    var restoredStatus = ""
+
+                    for (child in snapshot.children) {
+                        val status = child.child("status").getValue(String::class.java) ?: ""
+                        if (status == "ACCEPTED" || status == "IN_PROGRESS") {
+                            restoredBooking = child.getValue(Booking::class.java)
+                            restoredStatus = status
+                            break
+                        }
+                    }
+
+                    if (restoredBooking != null) {
+                        activeBookingId = restoredBooking.bookingId
+                        currentBooking = restoredBooking
+
+                        // NOTE: known gap — this does not yet restore currentGroupStops /
+                        // currentStopIndex for a shared trip resumed after app restart.
+                        // Solo restore below is unaffected.
+                        binding.txtPassengerName.text = restoredBooking.passengerName.ifEmpty { "Passenger" }
+                        binding.txtPickupLocation.text = "Pickup: ${restoredBooking.pickupAddress.ifEmpty { "N/A" }}"
+                        binding.txtDropoffLocation.text = "Dropoff: ${restoredBooking.dropoffAddress.ifEmpty { "N/A" }}"
+                        binding.txtEstimatedFare.text = String.format(Locale.getDefault(), "Estimated Fare: ₱%.2f", restoredBooking.fare)
+
+                        if (restoredStatus == "ACCEPTED") {
+                            updateUIForState(DriverRideState.ACCEPTED)
+                            if (currentLatLng != null) {
+                                drawDriverToPickupRoute(restoredBooking)
+                            }
+                        } else if (restoredStatus == "IN_PROGRESS") {
+                            updateUIForState(DriverRideState.IN_PROGRESS)
+                            if (currentLatLng != null) {
+                                drawDriverToDropoffRoute(restoredBooking)
+                            }
+                        }
+
+                        monitorSingleBookingForCancellation(restoredBooking.bookingId)
+                    } else {
+                        listenForPendingRideRequests()
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
     private fun setupLocationCallback() {
@@ -157,6 +262,16 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             driverMarker?.position = latLng
         }
 
+        // Draw destination route on initial location fix if route hasn't been rendered yet
+        if (activePolyline == null && currentBooking != null) {
+            val booking = currentBooking!!
+            if (currentRideState == DriverRideState.ACCEPTED) {
+                drawDriverToPickupRoute(booking)
+            } else if (currentRideState == DriverRideState.IN_PROGRESS) {
+                drawDriverToDropoffRoute(booking)
+            }
+        }
+
         // 1. Dynamic Polyline Trimming
         if (rawRoutePoints.isNotEmpty()) {
             trimPassedRoutePoints(latLng)
@@ -164,14 +279,22 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         // 2. Route Deviation Check (Only while driving passenger to destination)
         if (currentRideState == DriverRideState.IN_PROGRESS && rawRoutePoints.isNotEmpty()) {
-            val deviationDistance = getDistanceToRoute(latLng, rawRoutePoints)
-
-            if (deviationDistance > 100.0) {
+            val isDeviated = RouteDeviationManager.isDriverDeviated(location, rawRoutePoints)
+            if (isDeviated && !wasDeviated) {
+                wasDeviated = true
                 flagTripAsDeviated()
+            } else if (!isDeviated && wasDeviated) {
+                wasDeviated = false
+                activeBookingId?.let { id ->
+                    database.child("bookings").child(id).child("routeStatus").setValue("NORMAL")
+                }
             }
         }
 
-        // 3. Batch driver location to Firebase under driver node and active booking
+        // 3. Auto-confirm pickup when close enough (shared: current stop; solo: the one pickup)
+        checkAutoConfirmPickup(latLng)
+
+        // 4. Update driver location in Firebase for passenger real-time tracking
         val currentUserId = auth.currentUser?.uid ?: return
         val locationMap = hashMapOf<String, Any>(
             "lat" to location.latitude,
@@ -179,7 +302,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         )
         database.child("drivers").child(currentUserId).updateChildren(locationMap)
 
-        // Mirror location directly into active booking for direct passenger tracking
         activeBookingId?.let { bookingId ->
             if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) {
                 val driverLocMap = hashMapOf<String, Any>(
@@ -187,6 +309,30 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     "driverLng" to location.longitude
                 )
                 database.child("bookings").child(bookingId).updateChildren(driverLocMap)
+            }
+        }
+    }
+
+    private fun checkAutoConfirmPickup(driverLoc: LatLng) {
+        if (autoConfirmedThisStop) return
+        val booking = currentBooking ?: return
+        val tripGroupId = booking.tripGroupId
+
+        if (!tripGroupId.isNullOrEmpty()) {
+            val stops = currentGroupStops
+            if (currentStopIndex !in stops.indices) return
+            val stop = stops[currentStopIndex]
+            if (stop.type != RideshareManager.StopType.PICKUP) return
+            if (distanceMeters(driverLoc, stop.location) <= PICKUP_RADIUS_METERS) {
+                autoConfirmedThisStop = true
+                confirmSharedStop(isAuto = true)
+            }
+        } else {
+            if (currentRideState != DriverRideState.ACCEPTED) return
+            val pickupLoc = LatLng(booking.pickupLat, booking.pickupLng)
+            if (distanceMeters(driverLoc, pickupLoc) <= PICKUP_RADIUS_METERS) {
+                autoConfirmedThisStop = true
+                confirmPassengerPickup()
             }
         }
     }
@@ -257,10 +403,107 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun setupBookingActionListeners() {
-        binding.btnAcceptRide.setOnClickListener { acceptCurrentRide() }
+        binding.btnAcceptRide.setOnClickListener {
+            val driverId = auth.currentUser?.uid ?: return@setOnClickListener
+            val tripGroupId = currentBooking?.tripGroupId
+            if (!tripGroupId.isNullOrEmpty()) acceptRideGroup(driverId) else acceptCurrentRide()
+        }
         binding.btnDeclineRide.setOnClickListener { declineCurrentRide() }
-        binding.btnConfirmPickup.setOnClickListener { confirmPassengerPickup() }
-        binding.btnCompleteRide.setOnClickListener { completeCurrentRide() }
+        binding.btnConfirmPickup.setOnClickListener { onConfirmStopTapped() }
+        binding.btnCompleteRide.setOnClickListener { attemptCompleteRide() }
+    }
+
+    private fun onConfirmStopTapped() {
+        val booking = currentBooking ?: return
+        if (booking.tripGroupId.isNullOrEmpty()) {
+            confirmPassengerPickup()   // solo: unchanged, always allowed manually
+        } else {
+            confirmSharedStop(isAuto = false)
+        }
+    }
+
+    private fun openChatWithPassenger() {
+        val booking = currentBooking ?: return
+        val intent = Intent(requireContext(), ChatActivity::class.java).apply {
+            putExtra("BOOKING_ID", booking.bookingId)
+            putExtra("RECEIVER_ID", booking.passengerId)
+            putExtra("RECEIVER_NAME", booking.passengerName)
+        }
+        startActivity(intent)
+    }
+
+    private fun showGroupRequestPreview(booking: Booking) {
+        val tripGroupId = booking.tripGroupId ?: return
+
+        database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val group = snapshot.children.mapNotNull { it.getValue(Booking::class.java) }
+
+                    if (group.size < 2) {
+                        // Co-passenger's own booking node hasn't synced to this client yet —
+                        // fall back to single-leg preview rather than show nothing.
+                        binding.txtPassengerName.text = "${booking.passengerName.ifEmpty { "Passenger" }} (Shared Ride)"
+                        binding.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
+                        binding.txtDropoffLocation.text = "Dropoff: ${booking.dropoffAddress.ifEmpty { "N/A" }}"
+                        binding.txtEstimatedFare.text = "Estimated Fare: ${String.format(Locale.getDefault(), "₱%.2f", booking.fare)}"
+                        previewBookingRoute(booking)
+                        return
+                    }
+
+                    val names = group.joinToString(" & ") { it.passengerName.ifEmpty { "Passenger" } }
+                    binding.txtPassengerName.text = "$names (Shared Ride)"
+                    binding.txtPickupLocation.text = "Pickups: ${group.joinToString(" + ") { it.pickupAddress.ifEmpty { "N/A" } }}"
+                    binding.txtDropoffLocation.text = "Dropoffs: ${group.joinToString(" + ") { it.dropoffAddress.ifEmpty { "N/A" } }}"
+                    binding.txtEstimatedFare.text = String.format(
+                        Locale.getDefault(), "Estimated Fare: ₱%.2f (combined)", group.sumOf { it.fare }
+                    )
+
+                    previewGroupRoute(tripGroupId, group)
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
+
+    private fun previewGroupRoute(tripGroupId: String, group: List<Booking>) {
+        clearRouteAndMarkers()
+
+        database.child("tripGroups").child(tripGroupId).get().addOnSuccessListener { snap ->
+            val stops = snap.child("stopOrder").children.mapNotNull { s ->
+                RideshareManager.RideshareStop(
+                    bookingId = s.child("bookingId").getValue(String::class.java) ?: return@mapNotNull null,
+                    type = RideshareManager.StopType.valueOf(s.child("type").getValue(String::class.java) ?: return@mapNotNull null),
+                    location = LatLng(
+                        s.child("lat").getValue(Double::class.java) ?: return@mapNotNull null,
+                        s.child("lng").getValue(Double::class.java) ?: return@mapNotNull null
+                    )
+                )
+            }
+
+            if (stops.isEmpty()) {
+                // tripGroups/{id} is written asynchronously right after matching —
+                // if this preview loads before that write lands, fall back gracefully.
+                previewBookingRoute(group.first())
+                return@addOnSuccessListener
+            }
+
+            stops.forEachIndexed { i, stop ->
+                val isPickup = stop.type == RideshareManager.StopType.PICKUP
+                mMap.addMarker(
+                    MarkerOptions()
+                        .position(stop.location)
+                        .title("${i + 1}. ${if (isPickup) "Pickup" else "Dropoff"}")
+                        .icon(BitmapDescriptorFactory.defaultMarker(
+                            if (isPickup) BitmapDescriptorFactory.HUE_GREEN else BitmapDescriptorFactory.HUE_ORANGE
+                        ))
+                )
+            }
+
+            val bounds = LatLngBounds.Builder()
+            stops.forEach { bounds.include(it.location) }
+            currentLatLng?.let { bounds.include(it) }
+            try { mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), 120)) } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
     private fun updateUIForState(state: DriverRideState) {
@@ -301,7 +544,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val bookingId = activeBookingId ?: return
         val driverId = auth.currentUser?.uid ?: return
 
-        // Instantly transition local state to ACCEPTED to lock DB listeners
         updateUIForState(DriverRideState.ACCEPTED)
 
         val updates = hashMapOf<String, Any>(
@@ -313,6 +555,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             .addOnSuccessListener {
                 Toast.makeText(context, "Ride accepted!", Toast.LENGTH_SHORT).show()
                 clearRouteAndMarkers()
+                autoConfirmedThisStop = false
 
                 val booking = currentBooking ?: return@addOnSuccessListener
 
@@ -339,6 +582,104 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
     }
 
+    // Call this function when the Driver clicks the "ACCEPT RIDE" button on a matched group
+    private fun acceptRideGroup(driverId: String) {
+        val booking = currentBooking ?: return
+        val tripGroupId = booking.tripGroupId
+
+        if (!tripGroupId.isNullOrEmpty()) {
+            database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        for (child in snapshot.children) {
+                            child.ref.child("driverId").setValue(driverId)
+                            child.ref.child("status").setValue("ACCEPTED")
+                        }
+                        currentStopIndex = 0
+                        autoConfirmedThisStop = false
+                        updateUIForState(DriverRideState.ACCEPTED)
+                        buildGroupRoute(tripGroupId)
+                    }
+                    override fun onCancelled(error: DatabaseError) {
+                        Toast.makeText(context, "Failed to accept trip group: ${error.message}", Toast.LENGTH_SHORT).show()
+                    }
+                })
+        } else {
+            database.child("bookings").child(booking.bookingId).child("driverId").setValue(driverId)
+            database.child("bookings").child(booking.bookingId).child("status").setValue("ACCEPTED")
+                .addOnSuccessListener {
+                    autoConfirmedThisStop = false
+                    updateUIForState(DriverRideState.ACCEPTED)
+                }
+        }
+    }
+
+    /**
+     * Fetches the persisted stop order from `tripGroups`, prepends the driver's current position,
+     * draws the active multi-stop polyline, and populates `rawRoutePoints` for deviation tracking.
+     */
+    private fun buildGroupRoute(tripGroupId: String, retryCount: Int = 0) {
+        val driverLoc = currentLatLng ?: return
+        val apiKey = getString(R.string.google_maps_key)
+
+        database.child("tripGroups").child(tripGroupId).get().addOnSuccessListener { snap ->
+            val stops = snap.child("stopOrder").children.mapNotNull { s ->
+                RideshareManager.RideshareStop(
+                    bookingId = s.child("bookingId").getValue(String::class.java) ?: return@mapNotNull null,
+                    type = RideshareManager.StopType.valueOf(s.child("type").getValue(String::class.java) ?: return@mapNotNull null),
+                    location = LatLng(
+                        s.child("lat").getValue(Double::class.java) ?: return@mapNotNull null,
+                        s.child("lng").getValue(Double::class.java) ?: return@mapNotNull null
+                    )
+                )
+            }
+
+            if (stops.isEmpty()) {
+                if (retryCount < 3) {
+                    android.os.Handler(Looper.getMainLooper()).postDelayed(
+                        { buildGroupRoute(tripGroupId, retryCount + 1) }, 1500
+                    )
+                } else {
+                    Toast.makeText(context, "Couldn't load the shared route — check your connection.", Toast.LENGTH_LONG).show()
+                }
+                return@addOnSuccessListener
+            }
+
+            executor.execute {
+                val finalRoute = RideshareRouteOptimizer.buildFinalDriverRoute(driverLoc, stops, apiKey)
+                    ?: return@execute
+
+                activity?.runOnUiThread {
+                    rawRoutePoints = finalRoute.polyline
+
+                    activePolyline?.remove()
+                    activePolyline = mMap.addPolyline(
+                        PolylineOptions()
+                            .addAll(finalRoute.polyline)
+                            .width(12f)
+                            .color(ContextCompat.getColor(requireContext(), R.color.ruta_primary))
+                    )
+
+                    stops.forEachIndexed { i, stop ->
+                        val isPickup = stop.type == RideshareManager.StopType.PICKUP
+                        val markerColor = if (isPickup) BitmapDescriptorFactory.HUE_GREEN else BitmapDescriptorFactory.HUE_ORANGE
+                        val titleText = "${i + 1}. ${if (isPickup) "Pickup" else "Dropoff"}"
+
+                        mMap.addMarker(
+                            MarkerOptions()
+                                .position(stop.location)
+                                .title(titleText)
+                                .icon(BitmapDescriptorFactory.defaultMarker(markerColor))
+                        )
+                    }
+
+                    currentGroupStops = stops
+                    updateCardForCurrentStop()
+                }
+            }
+        }
+    }
+
     private fun drawDriverToPickupRoute(booking: Booking) {
         val driverLoc = currentLatLng ?: return
         val pickupLatLng = LatLng(booking.pickupLat, booking.pickupLng)
@@ -360,10 +701,32 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    private fun drawDriverToDropoffRoute(booking: Booking) {
+        val driverLoc = currentLatLng ?: return
+        val dropoffLatLng = LatLng(booking.dropoffLat, booking.dropoffLng)
+
+        dropoffMarker = mMap.addMarker(
+            MarkerOptions().position(dropoffLatLng).title("Dropoff Point")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))
+        )
+
+        drawRoute(driverLoc, dropoffLatLng)
+
+        try {
+            val bounds = LatLngBounds.Builder()
+                .include(driverLoc)
+                .include(dropoffLatLng)
+                .build()
+            mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 120))
+        } catch (e: Exception) {
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(driverLoc, 15f))
+        }
+    }
+
+    // ---- SOLO ride pickup (unchanged path, either auto-triggered or manual tap) ----
     private fun confirmPassengerPickup() {
         val bookingId = activeBookingId ?: return
 
-        // Instantly transition local state to IN_PROGRESS to prevent DB resets
         updateUIForState(DriverRideState.IN_PROGRESS)
 
         database.child("bookings").child(bookingId).child("status").setValue("IN_PROGRESS")
@@ -372,17 +735,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 clearRouteAndMarkers()
 
                 val booking = currentBooking
-                val driverLoc = currentLatLng
-                if (driverLoc != null && booking != null) {
-                    val dropoffLatLng = LatLng(booking.dropoffLat, booking.dropoffLng)
-
-                    dropoffMarker = mMap.addMarker(
-                        MarkerOptions().position(dropoffLatLng).title("Dropoff Point")
-                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))
-                    )
-
-                    drawRoute(driverLoc, dropoffLatLng)
-                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(driverLoc, 15f))
+                if (booking != null) {
+                    drawDriverToDropoffRoute(booking)
                 }
             }
             .addOnFailureListener { e ->
@@ -391,18 +745,166 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
     }
 
+    // ---- SHARED ride: confirm whichever stop is currently active ----
+    private fun confirmSharedStop(isAuto: Boolean = false) {
+        val stops = currentGroupStops
+        if (currentStopIndex !in stops.indices) return
+        val stop = stops[currentStopIndex]
+
+        if (stop.type == RideshareManager.StopType.DROPOFF) {
+            val driverLoc = currentLatLng
+            if (driverLoc == null) {
+                Toast.makeText(context, "Waiting for GPS fix — try again shortly.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val dist = distanceMeters(driverLoc, stop.location)
+            if (dist > DROPOFF_RADIUS_METERS) {
+                Toast.makeText(context, "You're ${dist.toInt()}m from this drop-off — move closer to confirm.", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+        // PICKUP: no distance gate on a manual tap — driver can override anytime.
+        // An auto-triggered call already passed the PICKUP_RADIUS_METERS check.
+
+        val newStatus = if (stop.type == RideshareManager.StopType.PICKUP) "IN_PROGRESS" else "COMPLETED"
+        database.child("bookings").child(stop.bookingId).child("status").setValue(newStatus)
+            .addOnSuccessListener { advanceToNextStop() }
+    }
+
+    private fun advanceToNextStop() {
+        autoConfirmedThisStop = false
+        currentStopIndex++
+
+        val tripGroupId = currentBooking?.tripGroupId ?: return
+        database.child("tripGroups").child(tripGroupId).child("currentStopIndex").setValue(currentStopIndex)
+
+        if (currentStopIndex >= currentGroupStops.size) {
+            finishSharedTrip(tripGroupId)
+        } else {
+            updateCardForCurrentStop()
+        }
+    }
+
+    private fun updateCardForCurrentStop() {
+        val stops = currentGroupStops
+        if (currentStopIndex !in stops.indices) return
+        val stop = stops[currentStopIndex]
+        val isPickup = stop.type == RideshareManager.StopType.PICKUP
+        val label = if (isPickup) "Pickup" else "Dropoff"
+
+        database.child("bookings").child(stop.bookingId).get().addOnSuccessListener { snap ->
+            val name = snap.child("passengerName").getValue(String::class.java)?.ifEmpty { null } ?: "Passenger"
+            val address = if (isPickup)
+                snap.child("pickupAddress").getValue(String::class.java) ?: "N/A"
+            else
+                snap.child("dropoffAddress").getValue(String::class.java) ?: "N/A"
+
+            binding.txtPassengerName.text = "$name — Stop ${currentStopIndex + 1} of ${stops.size}"
+            binding.txtPickupLocation.text = if (isPickup) "Pickup: $address" else ""
+            binding.txtDropoffLocation.text = if (!isPickup) "Dropoff: $address" else ""
+        }
+
+        binding.btnAcceptRide.visibility = View.GONE
+        binding.btnDeclineRide.visibility = View.GONE
+        binding.btnCompleteRide.visibility = View.GONE   // shared trips finish through the last stop's confirm, not this
+        binding.btnConfirmPickup.visibility = View.VISIBLE
+        binding.btnConfirmPickup.text = "Confirm $label"
+    }
+
+    private fun finishSharedTrip(tripGroupId: String) {
+        calculateAndSaveSharedFares(tripGroupId)
+        Toast.makeText(context, "Ride Completed!", Toast.LENGTH_SHORT).show()
+
+        clearRouteAndMarkers()
+        activeBookingId = null
+        currentBooking = null
+        currentGroupStops = emptyList()
+        currentStopIndex = 0
+        updateUIForState(DriverRideState.IDLE)
+        listenForPendingRideRequests()
+    }
+
+    // ---- SOLO ride completion (shared trips never show this button — see updateCardForCurrentStop) ----
+    private fun attemptCompleteRide() {
+        val booking = currentBooking ?: return
+        val driverLoc = currentLatLng
+        if (driverLoc == null) {
+            Toast.makeText(context, "Waiting for GPS fix — try again in a moment.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val destination = LatLng(booking.dropoffLat, booking.dropoffLng)
+        val distance = distanceMeters(driverLoc, destination)
+
+        if (distance > DROPOFF_RADIUS_METERS) {
+            Toast.makeText(context, "You're ${distance.toInt()}m from the drop-off — move closer to complete the ride.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        completeCurrentRide()
+    }
+
     private fun completeCurrentRide() {
         val bookingId = activeBookingId ?: return
 
         database.child("bookings").child(bookingId).child("status").setValue("COMPLETED")
             .addOnSuccessListener {
                 Toast.makeText(context, "Ride Completed!", Toast.LENGTH_SHORT).show()
-
                 clearRouteAndMarkers()
                 activeBookingId = null
                 currentBooking = null
                 updateUIForState(DriverRideState.IDLE)
+                listenForPendingRideRequests()
             }
+    }
+
+    private fun calculateAndSaveSharedFares(tripGroupId: String) {
+        val apiKey = getString(R.string.google_maps_key)
+
+        database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val group = snapshot.children.mapNotNull { it.getValue(Booking::class.java) }
+                    if (group.size != 2) return   // solo or malformed — nothing to split
+
+                    val a = group[0]
+                    val b = group[1]
+
+                    val candA = RideshareManager.RideshareCandidate(a.bookingId, a.passengerId,
+                        LatLng(a.pickupLat, a.pickupLng), LatLng(a.dropoffLat, a.dropoffLng))
+                    val candB = RideshareManager.RideshareCandidate(b.bookingId, b.passengerId,
+                        LatLng(b.pickupLat, b.pickupLng), LatLng(b.dropoffLat, b.dropoffLng))
+
+                    executor.execute {
+                        val route = RideshareRouteOptimizer.findOptimalSequence(candA, candB, apiKey) ?: return@execute
+
+                        val breakdown = RideshareFareCalculator.calculate(
+                            route = route,
+                            bookingIdA = a.bookingId,
+                            bookingIdB = b.bookingId,
+                            directDistanceA = a.distanceMeters,
+                            directDurationA = a.durationSeconds,
+                            directDistanceB = b.distanceMeters,
+                            directDurationB = b.durationSeconds,
+                            surgeMultiplier = a.surgeMultiplier
+                        )
+
+                        listOf(breakdown.passengerA, breakdown.passengerB).forEach { f ->
+                            database.child("bookings").child(f.bookingId).updateChildren(
+                                mapOf(
+                                    "finalFare" to f.total,
+                                    "fareSoloCharge" to f.soloCharge,
+                                    "fareSharedCharge" to f.sharedCharge,
+                                    "fareDetourSurcharge" to f.detourSurcharge,
+                                    "fareInconvenienceCredit" to f.inconvenienceCredit
+                                )
+                            )
+                        }
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
     private fun declineCurrentRide() {
@@ -410,16 +912,36 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         activeBookingId = null
         currentBooking = null
         updateUIForState(DriverRideState.IDLE)
+        listenForPendingRideRequests()
     }
 
     private fun clearRouteAndMarkers() {
         activePolyline?.remove()
         activePolyline = null
         rawRoutePoints = emptyList()
+        wasDeviated = false
+        autoConfirmedThisStop = false
+
         pickupMarker?.remove()
         pickupMarker = null
+
         dropoffMarker?.remove()
         dropoffMarker = null
+
+        // Wipe any lingering/ghost markers left on the map instance
+        if (::mMap.isInitialized) {
+            mMap.clear()
+
+            // Re-add your driver marker after wiping
+            currentLatLng?.let { latLng ->
+                driverMarker = mMap.addMarker(
+                    MarkerOptions()
+                        .position(latLng)
+                        .title("Your Location")
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+                )
+            }
+        }
     }
 
     private fun listenForPendingRideRequests() {
@@ -428,39 +950,44 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         pendingRequestsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (!isOnline) return
+                if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) return
 
-                // Do not clear state or parse incoming requests if driver is currently handling a trip
-                if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) {
-                    return
-                }
+                val driverLoc = currentLatLng ?: return  // can't rank without knowing where we are
 
-                var latestBooking: Booking? = null
-
+                val eligible = mutableListOf<Booking>()
                 for (child in snapshot.children) {
                     val status = child.child("status").getValue(String::class.java)
-                    if (status == "REQUESTED") {
-                        latestBooking = child.getValue(Booking::class.java)
+                    if (status == "REQUESTED" || status == "MATCHED") {
+                        child.getValue(Booking::class.java)?.let { eligible.add(it) }
                     }
                 }
 
-                if (latestBooking != null) {
-                    if (activeBookingId != latestBooking.bookingId) {
-                        activeBookingId = latestBooking.bookingId
-                        currentBooking = latestBooking
+                // Nearest Neighbor: rank by straight-line distance from the driver's
+                // current position to each booking's pickup point.
+                val nearestBooking = eligible.minByOrNull { b ->
+                    distanceMeters(driverLoc, LatLng(b.pickupLat, b.pickupLng))
+                }
 
-                        binding.txtPassengerName.text = latestBooking.passengerName.ifEmpty { "Passenger" }
-                        binding.txtPickupLocation.text = "Pickup: ${latestBooking.pickupAddress.ifEmpty { "N/A" }}"
-                        binding.txtDropoffLocation.text = "Dropoff: ${latestBooking.dropoffAddress.ifEmpty { "N/A" }}"
+                if (nearestBooking != null) {
+                    if (activeBookingId != nearestBooking.bookingId) {
+                        activeBookingId = nearestBooking.bookingId
+                        currentBooking = nearestBooking
 
-                        val formattedFare = String.format(Locale.getDefault(), "₱%.2f", latestBooking.fare)
-                        binding.txtEstimatedFare.text = "Estimated Fare: $formattedFare"
+                        val isGroup = !nearestBooking.tripGroupId.isNullOrEmpty()
+                        if (isGroup) {
+                            showGroupRequestPreview(nearestBooking)
+                        } else {
+                            binding.txtPassengerName.text = nearestBooking.passengerName.ifEmpty { "Passenger" }
+                            binding.txtPickupLocation.text = "Pickup: ${nearestBooking.pickupAddress.ifEmpty { "N/A" }}"
+                            binding.txtDropoffLocation.text = "Dropoff: ${nearestBooking.dropoffAddress.ifEmpty { "N/A" }}"
+                            binding.txtEstimatedFare.text = "Estimated Fare: ${String.format(Locale.getDefault(), "₱%.2f", nearestBooking.fare)}"
+                            previewBookingRoute(nearestBooking)
+                        }
 
                         updateUIForState(DriverRideState.REQUEST_RECEIVED)
-                        previewBookingRoute(latestBooking)
-                        monitorSingleBookingForCancellation(latestBooking.bookingId)
+                        monitorSingleBookingForCancellation(nearestBooking.bookingId)
                     }
                 } else {
-                    // Only clear if we were in REQUEST_RECEIVED state and the request was withdrawn/taken
                     if (currentRideState == DriverRideState.REQUEST_RECEIVED) {
                         updateUIForState(DriverRideState.IDLE)
                         clearRouteAndMarkers()
@@ -476,6 +1003,12 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
 
         bookingsRef.addValueEventListener(pendingRequestsListener!!)
+    }
+
+    private fun distanceMeters(a: LatLng, b: LatLng): Double {
+        val results = FloatArray(1)
+        Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, results)
+        return results[0].toDouble()
     }
 
     private fun previewBookingRoute(booking: Booking) {
@@ -511,58 +1044,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             e.printStackTrace()
         }
     }
-
-    // --- Distance & Polyline Perpendicular Logic ---
-
-    private fun getDistanceToRoute(driverPos: LatLng, routePoints: List<LatLng>): Double {
-        if (routePoints.size < 2) return 0.0
-
-        var minDistance = Double.MAX_VALUE
-
-        for (i in 0 until routePoints.size - 1) {
-            val p1 = routePoints[i]
-            val p2 = routePoints[i + 1]
-
-            val dist = distanceToSegment(driverPos, p1, p2)
-            if (dist < minDistance) {
-                minDistance = dist
-            }
-        }
-        return minDistance
-    }
-
-    private fun distanceToSegment(p: LatLng, v: LatLng, w: LatLng): Double {
-        val l2 = distanceSquared(v, w)
-        if (l2 == 0.0) return distanceBetweenMeters(p, v)
-
-        var t = ((p.latitude - v.latitude) * (w.latitude - v.latitude) +
-                (p.longitude - v.longitude) * (w.longitude - v.longitude)) / l2
-        t = t.coerceIn(0.0, 1.0)
-
-        val projection = LatLng(
-            v.latitude + t * (w.latitude - v.latitude),
-            v.longitude + t * (w.longitude - v.longitude)
-        )
-        return distanceBetweenMeters(p, projection)
-    }
-
-    private fun distanceSquared(p1: LatLng, p2: LatLng): Double {
-        val dLat = p1.latitude - p2.latitude
-        val dLng = p1.longitude - p2.longitude
-        return dLat * dLat + dLng * dLng
-    }
-
-    private fun distanceBetweenMeters(p1: LatLng, p2: LatLng): Double {
-        val results = FloatArray(1)
-        Location.distanceBetween(
-            p1.latitude, p1.longitude,
-            p2.latitude, p2.longitude,
-            results
-        )
-        return results[0].toDouble()
-    }
-
-    // --- Location Setup & Event Listeners ---
 
     private fun startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(
@@ -638,6 +1119,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     activeBookingId = null
                     currentBooking = null
                     updateUIForState(DriverRideState.IDLE)
+                    listenForPendingRideRequests()
                 }
             }
 

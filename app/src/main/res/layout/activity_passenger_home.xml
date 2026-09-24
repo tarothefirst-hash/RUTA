@@ -13,6 +13,8 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         app:layout_constraintBottom_toTopOf="@id/bottomNav"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- FLOATING BOTTOM NAVIGATION -->
@@ -76,5 +78,98 @@
             android:src="@drawable/ic_person"
             app:tint="@color/ruta_text_muted" />
     </LinearLayout>
+
+    <!-- FULL SCREEN DIMMED OVERLAY + CENTERED DIALOG (Placed last to layer on top) -->
+    <FrameLayout
+        android:id="@+id/cardRouteDeviationWarning"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#66000000"
+        android:clickable="true"
+        android:elevation="24dp"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginHorizontal="28dp"
+            app:cardBackgroundColor="#FFF0F5"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="16dp"
+            app:strokeColor="#E9D5FF"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="24dp">
+
+                <!-- Shield / Warning Icon in Lavender -->
+                <ImageView
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@android:drawable/ic_dialog_alert"
+                    app:tint="#7C3AED" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Route Deviation Detected"
+                    android:textColor="#4C1D95"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtDeviationMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="Your driver has moved off the designated path. Please check your location and verify your safety."
+                    android:textColor="#6B21A8"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="vertical">
+
+                    <!-- Primary 'I'm Safe' Button in Lavender -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDismissWarning"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:text="I'M SAFE"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="#7C3AED"
+                        app:cornerRadius="16dp" />
+
+                    <!-- Secondary Emergency Button in Deep Rose/Pink -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSosEmergency"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="EMERGENCY / CALL SOS"
+                        android:textColor="#BE185D"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

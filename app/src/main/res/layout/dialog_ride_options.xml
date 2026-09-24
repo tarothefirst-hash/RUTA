@@ -6,26 +6,28 @@
     android:background="@color/ruta_card_bg"
     android:orientation="vertical"
     android:padding="20dp">
-    <TextView
-        android:id="@+id/txtTripSummaryDetails"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="0.0 km • ~0 mins"
-        android:textSize="14sp"
-        android:textColor="@color/ruta_black"
-        android:padding="8dp" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
         android:text="Select Ride Option"
         android:textColor="@color/ruta_text_primary"
         android:textSize="20sp"
         android:textStyle="bold" />
 
-    <!-- 1. Car 4-Seater Regular -->
+    <TextView
+        android:id="@+id/txtTripSummaryDetails"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="16dp"
+        android:text="0.0 km • ~0 mins"
+        android:textColor="@color/ruta_text_secondary"
+        android:textSize="14sp" />
+
+    <!-- 1. Regular Private Ride -->
     <androidx.cardview.widget.CardView
-        android:id="@+id/btnOptionRegular4"
+        android:id="@+id/btnOptionRegular"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="12dp"
@@ -54,7 +56,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Car (4-Seater Regular)"
+                    android:text="Car (Regular Solo)"
                     android:textColor="@color/ruta_text_primary"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -62,28 +64,28 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Private ride • Up to 4 pax"
+                    android:layout_marginTop="2dp"
+                    android:text="Private ride • Direct to destination"
                     android:textColor="@color/ruta_text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>
 
             <TextView
-                android:id="@+id/txtFareRegular4"
+                android:id="@+id/txtFareRegular"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="₱0"
                 android:textColor="@color/ruta_primary_dark"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 2. Car 4-Seater Sharing (Featured Accent Card) -->
+    <!-- 2. Shared Rideshare Ride (Featured Accent Card) -->
     <androidx.cardview.widget.CardView
-        android:id="@+id/btnOptionShared4"
+        android:id="@+id/btnOptionShared"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
         android:clickable="true"
         android:focusable="true"
         android:foreground="?attr/selectableItemBackground"
@@ -109,7 +111,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Car (4-Seater Sharing) ⚡"
+                    android:text="Car (Rideshare Pool) ⚡"
                     android:textColor="@color/ruta_primary_dark"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -117,73 +119,33 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Cheaper • Max 2 passengers matched"
+                    android:layout_marginTop="2dp"
+                    android:text="Max 2 passengers • Match co-passenger first"
                     android:textColor="@color/ruta_primary_dark"
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/txtFareShared4"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="₱0"
-                android:textColor="@color/ruta_primary_dark"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-    </androidx.cardview.widget.CardView>
-
-    <!-- 3. Car 6-Seater Regular -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/btnOptionRegular6"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:clickable="true"
-        android:focusable="true"
-        android:foreground="?attr/selectableItemBackground"
-        app:cardBackgroundColor="@color/ruta_bg"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="2dp"
-        app:strokeColor="@color/ruta_primary_light"
-        app:strokeWidth="1dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="16dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:gravity="end"
                 android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Car (6-Seater Large)"
-                    android:textColor="@color/ruta_text_primary"
-                    android:textSize="16sp"
+                    android:text="Save 30%+"
+                    android:textColor="@color/ruta_primary_dark"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Extra space • Up to 6 pax"
-                    android:textColor="@color/ruta_text_secondary"
-                    android:textSize="12sp" />
+                    android:text="Split 50/50"
+                    android:textColor="@color/ruta_primary_dark"
+                    android:textSize="11sp" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/txtFareRegular6"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="₱0"
-                android:textColor="@color/ruta_primary_dark"
-                android:textSize="18sp"
-                android:textStyle="bold" />
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
