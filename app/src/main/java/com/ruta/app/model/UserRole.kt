@@ -20,5 +20,6 @@ data class User(
     val role: String = "PASSENGER",
     val homeLocation: SavedPlace? = null,
     val workLocation: SavedPlace? = null,
-    val favoriteLocation: SavedPlace? = null
+    val favoriteLocation: SavedPlace? = null,
+    val createdAt: Long = System.currentTimeMillis()
 )

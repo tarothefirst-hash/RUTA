@@ -10,7 +10,10 @@
         android:id="@+id/navigation_driver_rides"
         android:icon="@android:drawable/ic_menu_agenda"
         android:title="My Trips" />
-
+    <item
+        android:id="@+id/navigation_driver_wallet"
+        android:icon="@android:drawable/ic_menu_send"
+        android:title="Wallet" />
     <item
         android:id="@+id/navigation_driver_profile"
         android:icon="@android:drawable/ic_menu_myplaces"

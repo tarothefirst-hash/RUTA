@@ -24,7 +24,7 @@ class DriverMainActivity : AppCompatActivity() {
 
         val bottomNav = findViewById<BottomNavigationView>(R.id.driverBottomNav)
 
-        // Load Home Fragment by default
+
         if (savedInstanceState == null) {
             loadFragment(DriverHomeFragment())
         }
@@ -40,9 +40,12 @@ class DriverMainActivity : AppCompatActivity() {
                     loadFragment(DriverRidesFragment())
                     true
                 }
+                R.id.navigation_driver_wallet -> {
+                    loadFragment(DriverWalletFragment())
+                    true
+                }
                 R.id.navigation_driver_profile -> {
-                    // Perform driver logout and return to LoginActivity
-                    performLogout()
+                    loadFragment(DriverProfileFragment())
                     true
                 }
                 else -> false

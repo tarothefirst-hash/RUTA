@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.location.Location
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -44,12 +45,13 @@ import com.ruta.app.model.Booking
 import com.ruta.app.ui.ChatActivity
 import com.ruta.app.ui.DirectionsHelper
 import com.ruta.app.ui.LoginActivity
-import com.ruta.app.util.RouteDeviationManager
-import java.util.Locale
-import java.util.concurrent.Executors
+import com.ruta.app.util.RideshareFareCalculator
 import com.ruta.app.util.RideshareManager
 import com.ruta.app.util.RideshareRouteOptimizer
-import com.ruta.app.util.RideshareFareCalculator
+import com.ruta.app.util.RouteDeviationManager
+import com.ruta.app.util.WalletManager
+import java.util.Locale
+import java.util.concurrent.Executors
 
 class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
@@ -206,9 +208,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         activeBookingId = restoredBooking.bookingId
                         currentBooking = restoredBooking
 
-                        // NOTE: known gap — this does not yet restore currentGroupStops /
-                        // currentStopIndex for a shared trip resumed after app restart.
-                        // Solo restore below is unaffected.
                         binding.txtPassengerName.text = restoredBooking.passengerName.ifEmpty { "Passenger" }
                         binding.txtPickupLocation.text = "Pickup: ${restoredBooking.pickupAddress.ifEmpty { "N/A" }}"
                         binding.txtDropoffLocation.text = "Dropoff: ${restoredBooking.dropoffAddress.ifEmpty { "N/A" }}"
@@ -262,7 +261,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             driverMarker?.position = latLng
         }
 
-        // Draw destination route on initial location fix if route hasn't been rendered yet
         if (activePolyline == null && currentBooking != null) {
             val booking = currentBooking!!
             if (currentRideState == DriverRideState.ACCEPTED) {
@@ -272,12 +270,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // 1. Dynamic Polyline Trimming
         if (rawRoutePoints.isNotEmpty()) {
             trimPassedRoutePoints(latLng)
         }
 
-        // 2. Route Deviation Check (Only while driving passenger to destination)
         if (currentRideState == DriverRideState.IN_PROGRESS && rawRoutePoints.isNotEmpty()) {
             val isDeviated = RouteDeviationManager.isDriverDeviated(location, rawRoutePoints)
             if (isDeviated && !wasDeviated) {
@@ -291,10 +287,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // 3. Auto-confirm pickup when close enough (shared: current stop; solo: the one pickup)
         checkAutoConfirmPickup(latLng)
 
-        // 4. Update driver location in Firebase for passenger real-time tracking
         val currentUserId = auth.currentUser?.uid ?: return
         val locationMap = hashMapOf<String, Any>(
             "lat" to location.latitude,
@@ -315,22 +309,28 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     private fun checkAutoConfirmPickup(driverLoc: LatLng) {
         if (autoConfirmedThisStop) return
+
         val booking = currentBooking ?: return
         val tripGroupId = booking.tripGroupId
 
         if (!tripGroupId.isNullOrEmpty()) {
             val stops = currentGroupStops
-            if (currentStopIndex !in stops.indices) return
+            if (stops.isEmpty() || currentStopIndex !in stops.indices) return
+
             val stop = stops[currentStopIndex]
             if (stop.type != RideshareManager.StopType.PICKUP) return
-            if (distanceMeters(driverLoc, stop.location) <= PICKUP_RADIUS_METERS) {
+
+            val dist = distanceMeters(driverLoc, stop.location)
+            if (dist <= PICKUP_RADIUS_METERS) {
                 autoConfirmedThisStop = true
                 confirmSharedStop(isAuto = true)
             }
         } else {
             if (currentRideState != DriverRideState.ACCEPTED) return
             val pickupLoc = LatLng(booking.pickupLat, booking.pickupLng)
-            if (distanceMeters(driverLoc, pickupLoc) <= PICKUP_RADIUS_METERS) {
+            val dist = distanceMeters(driverLoc, pickupLoc)
+
+            if (dist <= PICKUP_RADIUS_METERS) {
                 autoConfirmedThisStop = true
                 confirmPassengerPickup()
             }
@@ -393,7 +393,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     val polylineOptions = PolylineOptions()
                         .addAll(pathPoints)
                         .width(12f)
-                        .color(Color.parseColor("#1976D2"))
+                        .color(Color.parseColor("#6D5EFC"))
                         .geodesic(true)
 
                     activePolyline = mMap.addPolyline(polylineOptions)
@@ -411,12 +411,13 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         binding.btnDeclineRide.setOnClickListener { declineCurrentRide() }
         binding.btnConfirmPickup.setOnClickListener { onConfirmStopTapped() }
         binding.btnCompleteRide.setOnClickListener { attemptCompleteRide() }
+        binding.btnChatWithPassenger.setOnClickListener { openChatWithPassenger() }
     }
 
     private fun onConfirmStopTapped() {
         val booking = currentBooking ?: return
         if (booking.tripGroupId.isNullOrEmpty()) {
-            confirmPassengerPickup()   // solo: unchanged, always allowed manually
+            confirmPassengerPickup()
         } else {
             confirmSharedStop(isAuto = false)
         }
@@ -441,8 +442,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     val group = snapshot.children.mapNotNull { it.getValue(Booking::class.java) }
 
                     if (group.size < 2) {
-                        // Co-passenger's own booking node hasn't synced to this client yet —
-                        // fall back to single-leg preview rather than show nothing.
                         binding.txtPassengerName.text = "${booking.passengerName.ifEmpty { "Passenger" }} (Shared Ride)"
                         binding.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
                         binding.txtDropoffLocation.text = "Dropoff: ${booking.dropoffAddress.ifEmpty { "N/A" }}"
@@ -481,8 +480,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
 
             if (stops.isEmpty()) {
-                // tripGroups/{id} is written asynchronously right after matching —
-                // if this preview loads before that write lands, fall back gracefully.
                 previewBookingRoute(group.first())
                 return@addOnSuccessListener
             }
@@ -515,6 +512,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 binding.btnDeclineRide.visibility = View.VISIBLE
                 binding.btnConfirmPickup.visibility = View.GONE
                 binding.btnCompleteRide.visibility = View.GONE
+                binding.btnChatWithPassenger.visibility = View.GONE
             }
             DriverRideState.REQUEST_RECEIVED -> {
                 binding.cardIncomingRequest.visibility = View.VISIBLE
@@ -522,6 +520,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 binding.btnDeclineRide.visibility = View.VISIBLE
                 binding.btnConfirmPickup.visibility = View.GONE
                 binding.btnCompleteRide.visibility = View.GONE
+                binding.btnChatWithPassenger.visibility = View.GONE
             }
             DriverRideState.ACCEPTED -> {
                 binding.cardIncomingRequest.visibility = View.VISIBLE
@@ -529,6 +528,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 binding.btnDeclineRide.visibility = View.GONE
                 binding.btnConfirmPickup.visibility = View.VISIBLE
                 binding.btnCompleteRide.visibility = View.GONE
+                binding.btnChatWithPassenger.visibility = View.VISIBLE
             }
             DriverRideState.IN_PROGRESS -> {
                 binding.cardIncomingRequest.visibility = View.VISIBLE
@@ -536,6 +536,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 binding.btnDeclineRide.visibility = View.GONE
                 binding.btnConfirmPickup.visibility = View.GONE
                 binding.btnCompleteRide.visibility = View.VISIBLE
+                binding.btnChatWithPassenger.visibility = View.VISIBLE
             }
         }
     }
@@ -582,44 +583,113 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
     }
 
-    // Call this function when the Driver clicks the "ACCEPT RIDE" button on a matched group
     private fun acceptRideGroup(driverId: String) {
         val booking = currentBooking ?: return
         val tripGroupId = booking.tripGroupId
 
-        if (!tripGroupId.isNullOrEmpty()) {
-            database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        for (child in snapshot.children) {
-                            child.ref.child("driverId").setValue(driverId)
-                            child.ref.child("status").setValue("ACCEPTED")
-                        }
-                        currentStopIndex = 0
-                        autoConfirmedThisStop = false
-                        updateUIForState(DriverRideState.ACCEPTED)
-                        buildGroupRoute(tripGroupId)
-                    }
-                    override fun onCancelled(error: DatabaseError) {
-                        Toast.makeText(context, "Failed to accept trip group: ${error.message}", Toast.LENGTH_SHORT).show()
-                    }
-                })
-        } else {
+        if (tripGroupId.isNullOrEmpty()) {
             database.child("bookings").child(booking.bookingId).child("driverId").setValue(driverId)
             database.child("bookings").child(booking.bookingId).child("status").setValue("ACCEPTED")
                 .addOnSuccessListener {
                     autoConfirmedThisStop = false
                     updateUIForState(DriverRideState.ACCEPTED)
                 }
+            return
         }
+
+        database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    for (child in snapshot.children) {
+                        child.ref.child("driverId").setValue(driverId)
+                        child.ref.child("status").setValue("ACCEPTED")
+                    }
+
+                    currentStopIndex = 0
+                    autoConfirmedThisStop = false
+                    updateUIForState(DriverRideState.ACCEPTED)
+
+                    // Works instantly, offline-safe — no Directions API, no tripGroups
+                    // node, nothing that can silently fail and brick the button.
+                    loadGroupStopsLocally(tripGroupId) { stops ->
+                        currentGroupStops = stops
+                        updateCardForCurrentStop()
+                        drawGroupRoutePreviewOnly(stops)  // cosmetic only, can fail freely
+                    }
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    Toast.makeText(context, "Failed to accept trip group: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
+    }
+    private fun loadGroupStopsLocally(
+        tripGroupId: String,
+        onReady: (List<RideshareManager.RideshareStop>) -> Unit
+    ) {
+        database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val group = snapshot.children.mapNotNull { it.getValue(Booking::class.java) }
+                    if (group.size < 2) {
+                        Toast.makeText(context, "Co-passenger's booking hasn't synced yet — try again in a moment.", Toast.LENGTH_LONG).show()
+                        return
+                    }
+                    val candidates = group.map {
+                        RideshareManager.RideshareCandidate(
+                            it.bookingId, it.passengerId,
+                            LatLng(it.pickupLat, it.pickupLng), LatLng(it.dropoffLat, it.dropoffLng)
+                        )
+                    }
+                    val anchor = currentLatLng ?: candidates.first().pickup
+                    onReady(RideshareManager.Sequencer.sequenceStops(anchor, candidates))
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
-    /**
-     * Fetches the persisted stop order from `tripGroups`, prepends the driver's current position,
-     * draws the active multi-stop polyline, and populates `rawRoutePoints` for deviation tracking.
-     */
-    private fun buildGroupRoute(tripGroupId: String, retryCount: Int = 0) {
+    private fun drawGroupRoutePreviewOnly(stops: List<RideshareManager.RideshareStop>) {
         val driverLoc = currentLatLng ?: return
+        val apiKey = getString(R.string.google_maps_key)
+
+        executor.execute {
+            val finalRoute = RideshareRouteOptimizer.buildFinalDriverRoute(driverLoc, stops, apiKey)
+            activity?.runOnUiThread {
+                if (finalRoute != null) {
+                    rawRoutePoints = finalRoute.polyline
+                    activePolyline?.remove()
+                    activePolyline = mMap.addPolyline(
+                        PolylineOptions().addAll(finalRoute.polyline).width(12f)
+                            .color(ContextCompat.getColor(requireContext(), R.color.ruta_primary))
+                    )
+                }
+                // Markers go up regardless of whether the polyline call succeeded.
+                stops.forEachIndexed { i, stop ->
+                    val isPickup = stop.type == RideshareManager.StopType.PICKUP
+                    mMap.addMarker(
+                        MarkerOptions().position(stop.location)
+                            .title("${i + 1}. ${if (isPickup) "Pickup" else "Dropoff"}")
+                            .icon(BitmapDescriptorFactory.defaultMarker(
+                                if (isPickup) BitmapDescriptorFactory.HUE_GREEN else BitmapDescriptorFactory.HUE_ORANGE
+                            ))
+                    )
+                }
+            }
+        }
+    }
+    private fun buildGroupRoute(tripGroupId: String, retryCount: Int = 0) {
+        // 1. GPS Safety Net (Retries up to 5 times if GPS location isn't ready)
+        val driverLoc = currentLatLng
+        if (driverLoc == null) {
+            if (retryCount < 5) {
+                android.os.Handler(Looper.getMainLooper()).postDelayed(
+                    { buildGroupRoute(tripGroupId, retryCount + 1) }, 1000
+                )
+            } else {
+                Toast.makeText(context, "Couldn't get your GPS location — try toggling online/offline.", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+
         val apiKey = getString(R.string.google_maps_key)
 
         database.child("tripGroups").child(tripGroupId).get().addOnSuccessListener { snap ->
@@ -634,6 +704,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 )
             }
 
+            // 2. Firebase Stops Safety Net (Retries up to 3 times if stops payload is empty)
             if (stops.isEmpty()) {
                 if (retryCount < 3) {
                     android.os.Handler(Looper.getMainLooper()).postDelayed(
@@ -645,10 +716,24 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 return@addOnSuccessListener
             }
 
+            // 3. Optimize Route in Background Thread
             executor.execute {
                 val finalRoute = RideshareRouteOptimizer.buildFinalDriverRoute(driverLoc, stops, apiKey)
-                    ?: return@execute
+                if (finalRoute == null) {
+                    activity?.runOnUiThread {
+                        if (retryCount < 3) {
+                            Toast.makeText(context, "Route fetch failed — retrying...", Toast.LENGTH_SHORT).show()
+                            android.os.Handler(Looper.getMainLooper()).postDelayed(
+                                { buildGroupRoute(tripGroupId, retryCount + 1) }, 1500
+                            )
+                        } else {
+                            Toast.makeText(context, "Couldn't load the route — check your connection and try re-accepting.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    return@execute
+                }
 
+                // 4. Draw Route & Markers on Main UI Thread
                 activity?.runOnUiThread {
                     rawRoutePoints = finalRoute.polyline
 
@@ -723,7 +808,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    // ---- SOLO ride pickup (unchanged path, either auto-triggered or manual tap) ----
     private fun confirmPassengerPickup() {
         val bookingId = activeBookingId ?: return
 
@@ -745,30 +829,48 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
     }
 
-    // ---- SHARED ride: confirm whichever stop is currently active ----
     private fun confirmSharedStop(isAuto: Boolean = false) {
         val stops = currentGroupStops
+        if (stops.isEmpty()) {
+            val tripGroupId = currentBooking?.tripGroupId
+            if (!tripGroupId.isNullOrEmpty()) {
+                loadGroupStopsLocally(tripGroupId) { rebuilt ->
+                    currentGroupStops = rebuilt
+                    currentStopIndex = 0
+                    updateCardForCurrentStop()
+                }
+            } else {
+                Toast.makeText(context, "No shared route loaded — try re-accepting the ride.", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         if (currentStopIndex !in stops.indices) return
         val stop = stops[currentStopIndex]
 
+        // 3. Drop-off Geo-fence & GPS Validation
         if (stop.type == RideshareManager.StopType.DROPOFF) {
             val driverLoc = currentLatLng
             if (driverLoc == null) {
                 Toast.makeText(context, "Waiting for GPS fix — try again shortly.", Toast.LENGTH_SHORT).show()
                 return
             }
+
             val dist = distanceMeters(driverLoc, stop.location)
             if (dist > DROPOFF_RADIUS_METERS) {
                 Toast.makeText(context, "You're ${dist.toInt()}m from this drop-off — move closer to confirm.", Toast.LENGTH_LONG).show()
                 return
             }
         }
-        // PICKUP: no distance gate on a manual tap — driver can override anytime.
-        // An auto-triggered call already passed the PICKUP_RADIUS_METERS check.
 
+        // 4. Update Booking Status & Advance
         val newStatus = if (stop.type == RideshareManager.StopType.PICKUP) "IN_PROGRESS" else "COMPLETED"
         database.child("bookings").child(stop.bookingId).child("status").setValue(newStatus)
-            .addOnSuccessListener { advanceToNextStop() }
+            .addOnSuccessListener {
+                advanceToNextStop()
+            }
+            .addOnFailureListener { err ->
+                Toast.makeText(context, "Failed to update status: ${err.message}", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun advanceToNextStop() {
@@ -806,9 +908,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         binding.btnAcceptRide.visibility = View.GONE
         binding.btnDeclineRide.visibility = View.GONE
-        binding.btnCompleteRide.visibility = View.GONE   // shared trips finish through the last stop's confirm, not this
+        binding.btnCompleteRide.visibility = View.GONE
         binding.btnConfirmPickup.visibility = View.VISIBLE
         binding.btnConfirmPickup.text = "Confirm $label"
+        binding.btnChatWithPassenger.visibility = View.VISIBLE
     }
 
     private fun finishSharedTrip(tripGroupId: String) {
@@ -824,7 +927,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         listenForPendingRideRequests()
     }
 
-    // ---- SOLO ride completion (shared trips never show this button — see updateCardForCurrentStop) ----
     private fun attemptCompleteRide() {
         val booking = currentBooking ?: return
         val driverLoc = currentLatLng
@@ -846,9 +948,14 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     private fun completeCurrentRide() {
         val bookingId = activeBookingId ?: return
+        val booking = currentBooking
+        val driverId = auth.currentUser?.uid
 
         database.child("bookings").child(bookingId).child("status").setValue("COMPLETED")
             .addOnSuccessListener {
+                if (booking != null && driverId != null) {
+                    WalletManager.deductCommission(database, driverId, booking.fare, booking.hasDiscount)
+                }
                 Toast.makeText(context, "Ride Completed!", Toast.LENGTH_SHORT).show()
                 clearRouteAndMarkers()
                 activeBookingId = null
@@ -865,7 +972,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val group = snapshot.children.mapNotNull { it.getValue(Booking::class.java) }
-                    if (group.size != 2) return   // solo or malformed — nothing to split
+                    if (group.size != 2) return
 
                     val a = group[0]
                     val b = group[1]
@@ -889,7 +996,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                             surgeMultiplier = a.surgeMultiplier
                         )
 
-                        listOf(breakdown.passengerA, breakdown.passengerB).forEach { f ->
+                        val driverId = auth.currentUser?.uid
+
+                        listOf(a to breakdown.passengerA, b to breakdown.passengerB).forEach { (bookingObj, f) ->
                             database.child("bookings").child(f.bookingId).updateChildren(
                                 mapOf(
                                     "finalFare" to f.total,
@@ -899,6 +1008,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                                     "fareInconvenienceCredit" to f.inconvenienceCredit
                                 )
                             )
+                            if (driverId != null) {
+                                WalletManager.deductCommission(database, driverId, f.total, bookingObj.hasDiscount)
+                            }
                         }
                     }
                 }
@@ -928,11 +1040,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         dropoffMarker?.remove()
         dropoffMarker = null
 
-        // Wipe any lingering/ghost markers left on the map instance
         if (::mMap.isInitialized) {
             mMap.clear()
 
-            // Re-add your driver marker after wiping
             currentLatLng?.let { latLng ->
                 driverMarker = mMap.addMarker(
                     MarkerOptions()
@@ -952,7 +1062,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 if (!isOnline) return
                 if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) return
 
-                val driverLoc = currentLatLng ?: return  // can't rank without knowing where we are
+                val driverLoc = currentLatLng ?: return
 
                 val eligible = mutableListOf<Booking>()
                 for (child in snapshot.children) {
@@ -962,8 +1072,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     }
                 }
 
-                // Nearest Neighbor: rank by straight-line distance from the driver's
-                // current position to each booking's pickup point.
                 val nearestBooking = eligible.minByOrNull { b ->
                     distanceMeters(driverLoc, LatLng(b.pickupLat, b.pickupLng))
                 }

@@ -11,13 +11,7 @@ import com.google.firebase.database.Transaction
 import com.google.firebase.database.ValueEventListener
 import java.util.concurrent.Executors
 
-/**
- * RideshareFlowManager
- * --------------------
- * Owns the ENTIRE rideshare booking path, start to finish, so the regular booking
- * path in LocationSelectionActivity stays dumb and simple (write booking -> status
- * REQUESTED -> done, no matching at all).
- */
+
 class RideshareFlowManager(
     private val myBookingId: String,
     private val myPassengerId: String,
@@ -160,32 +154,29 @@ class RideshareFlowManager(
     }
 
     private fun solveAndPersistRoute(otherBookingId: String, groupId: String) {
-        // Run the ENTIRE read and optimization off the UI thread
-        Executors.newSingleThreadExecutor().execute {
-            database.child("bookings").child(otherBookingId).get()
-                .addOnSuccessListener { snap ->
-                    val otherLatP = snap.child("pickupLat").getValue(Double::class.java) ?: return@addOnSuccessListener
-                    val otherLngP = snap.child("pickupLng").getValue(Double::class.java) ?: return@addOnSuccessListener
-                    val otherLatD = snap.child("dropoffLat").getValue(Double::class.java) ?: return@addOnSuccessListener
-                    val otherLngD = snap.child("dropoffLng").getValue(Double::class.java) ?: return@addOnSuccessListener
-                    val otherPassengerId = snap.child("passengerId").getValue(String::class.java) ?: ""
+        database.child("bookings").child(otherBookingId).get()
+            .addOnSuccessListener { snap ->
+                val otherLatP = snap.child("pickupLat").getValue(Double::class.java) ?: return@addOnSuccessListener
+                val otherLngP = snap.child("pickupLng").getValue(Double::class.java) ?: return@addOnSuccessListener
+                val otherLatD = snap.child("dropoffLat").getValue(Double::class.java) ?: return@addOnSuccessListener
+                val otherLngD = snap.child("dropoffLng").getValue(Double::class.java) ?: return@addOnSuccessListener
+                val otherPassengerId = snap.child("passengerId").getValue(String::class.java) ?: ""
 
-                    val me = RideshareManager.RideshareCandidate(
-                        myBookingId,
-                        myPassengerId,
-                        myPickup,
-                        myDropoff
-                    )
+                val me = RideshareManager.RideshareCandidate(myBookingId, myPassengerId, myPickup, myDropoff)
+                val other = RideshareManager.RideshareCandidate(
+                    otherBookingId, otherPassengerId, LatLng(otherLatP, otherLngP), LatLng(otherLatD, otherLngD)
+                )
 
-                    val other = RideshareManager.RideshareCandidate(
-                        bookingId = otherBookingId,
-                        passengerId = otherPassengerId,
-                        pickup = LatLng(otherLatP, otherLngP),
-                        dropoff = LatLng(otherLatD, otherLngD)
-                    )
-
+                // THIS is where the network calls actually happen (findOptimalSequence hits
+                // Directions up to 4x) — it MUST be the executor.execute that wraps the call
+                // itself, not something further out. addOnSuccessListener callbacks default
+                // to the main thread regardless of which thread called .get().
+                Executors.newSingleThreadExecutor().execute {
                     val winner = RideshareRouteOptimizer.findOptimalSequence(me, other, apiKey)
-                        ?: return@addOnSuccessListener
+                    if (winner == null) {
+                        android.util.Log.e("RUTA_MATCH", "findOptimalSequence returned null — route solving genuinely failed")
+                        return@execute
+                    }
 
                     val tripGroupData = mapOf(
                         "bookingIds" to listOf(myBookingId, otherBookingId),
@@ -203,8 +194,10 @@ class RideshareFlowManager(
                     )
 
                     database.child("tripGroups").child(groupId).setValue(tripGroupData)
+                        .addOnFailureListener { e -> android.util.Log.e("RUTA_MATCH", "Failed to write tripGroups: ${e.message}") }
                 }
-        }
+            }
+            .addOnFailureListener { e -> android.util.Log.e("RUTA_MATCH", "Failed to fetch other booking: ${e.message}") }
     }
 
     private fun promoteToSoloIfStillMatching() {

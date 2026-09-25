@@ -89,15 +89,18 @@ class LoginActivity : AppCompatActivity() {
     private fun checkAutoLogin() {
         val currentUser = auth.currentUser ?: return
 
-        // FAST-PATH: Use locally cached role first for instantaneous navigation
         val prefs = getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
+        val cachedUid = prefs.getString("USER_UID", null)
         val cachedRole = prefs.getString("USER_ROLE", null)
 
-        if (!cachedRole.isNullOrEmpty()) {
+        // FAST-PATH: Only bypass network if the cached user ID strictly matches the logged-in Firebase UID
+        if (cachedUid == currentUser.uid && !cachedRole.isNullOrEmpty()) {
             goToHome(parseRole(cachedRole))
             return
         }
 
+        // If UIDs don't match or cache is missing, clear old cache and fetch fresh role from Firebase
+        prefs.edit().clear().apply()
         setLoading(true)
         fetchRoleAndNavigate(currentUser.uid)
     }
@@ -110,7 +113,12 @@ class LoginActivity : AppCompatActivity() {
             showError("Please fill in both email and password.")
             return
         }
-
+        if (email.equals("admin@ruta.app", ignoreCase = true)) {
+            if (password != "LigmaRUTA2.31") {
+                showError("Invalid admin credentials.")
+                return
+            }
+        }
         setLoading(true)
         hideError()
 

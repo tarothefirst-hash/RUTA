@@ -30,11 +30,37 @@
             android:textColor="@color/text_gray"
             android:textSize="13sp" />
 
-        <!-- Senior Citizen / PWD Discount Card -->
+        <!-- Discount Type Selection -->
+        <RadioGroup
+            android:id="@+id/radioGroupDiscount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/radioStudent"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checked="true"
+                android:text="Student (20%)"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/radioSenior"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Senior / PWD (20%)"
+                android:textSize="14sp" />
+        </RadioGroup>
+
+        <!-- ID Document Upload Section -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
+            android:layout_marginBottom="16dp"
             app:cardCornerRadius="14dp"
             app:cardElevation="2dp">
 
@@ -45,134 +71,100 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="@drawable/circle_red"
-                        android:padding="8dp"
-                        android:src="@drawable/ic_gift" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="20% Senior Citizen / PWD"
-                            android:textColor="@color/ruta_red"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Mandated fare discount"
-                            android:textColor="@color/text_gray"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-                </LinearLayout>
+                    android:text="Upload Identification Card"
+                    android:textColor="@color/ruta_red"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="Requires a valid Senior Citizen or PWD ID verification in your account settings."
-                    android:textColor="#555555"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="16dp"
+                    android:text="Please capture or select clear images of the front and back of your ID for verification."
+                    android:textColor="@color/text_gray"
                     android:textSize="12sp" />
 
+                <!-- Front ID Preview & Upload Button -->
                 <TextView
-                    android:id="@+id/btnApplySeniorDiscount"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_button_red"
-                    android:paddingHorizontal="16dp"
-                    android:paddingVertical="8dp"
-                    android:text="Apply Discount"
-                    android:textColor="@color/white"
-                    android:textSize="12sp"
+                    android:text="ID Front Image"
+                    android:textSize="13sp"
                     android:textStyle="bold" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
 
-        <!-- Student Discount Card -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
-            app:cardCornerRadius="14dp"
-            app:cardElevation="2dp">
+                <ImageView
+                    android:id="@+id/imgFrontPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp"
+                    android:layout_marginTop="8dp"
+                    android:background="#F3F4F6"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_business" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_card_outline"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <LinearLayout
+                <Button
+                    android:id="@+id/btnUploadFront"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp"
+                    android:backgroundTint="@color/ruta_red"
+                    android:text="Upload Front of ID"
+                    android:textColor="@color/white"
+                    android:textSize="12sp" />
 
-                    <ImageView
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="@drawable/circle_red"
-                        android:padding="8dp"
-                        android:src="@drawable/ic_business" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="20% Student Special"
-                            android:textColor="@color/ruta_red"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Valid with active School ID"
-                            android:textColor="@color/text_gray"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
+                <!-- Back ID Preview & Upload Button -->
                 <TextView
-                    android:id="@+id/btnApplyStudentDiscount"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_button_red"
-                    android:paddingHorizontal="16dp"
-                    android:paddingVertical="8dp"
-                    android:text="Apply Discount"
-                    android:textColor="@color/white"
-                    android:textSize="12sp"
+                    android:text="ID Back Image"
+                    android:textSize="13sp"
                     android:textStyle="bold" />
+
+                <ImageView
+                    android:id="@+id/imgBackPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp"
+                    android:layout_marginTop="8dp"
+                    android:background="#F3F4F6"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_business" />
+
+                <Button
+                    android:id="@+id/btnUploadBack"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="@color/ruta_red"
+                    android:text="Upload Back of ID"
+                    android:textColor="@color/white"
+                    android:textSize="12sp" />
+
             </LinearLayout>
         </androidx.cardview.widget.CardView>
+
+        <!-- Loading Progress Bar -->
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone" />
+
+        <!-- Submit Button -->
+        <Button
+            android:id="@+id/btnSubmitDiscount"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:backgroundTint="@color/ruta_red"
+            android:text="Submit Verification Request"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 </ScrollView>

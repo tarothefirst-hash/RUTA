@@ -5,6 +5,9 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
@@ -17,6 +20,10 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var bookingId: String
     private lateinit var currentUserId: String
 
+    private lateinit var recyclerChat: RecyclerView
+    private lateinit var chatAdapter: ChatAdapter
+    private val messageList = mutableListOf<ChatMessage>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
@@ -28,15 +35,32 @@ class ChatActivity : AppCompatActivity() {
         }
         currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
-        val etChatMessage = findViewById<EditText>(R.id.etChatMessage)
+        // Matching your XML IDs: rvChatMessage, btnSendChat, chatToolbar, recyclerChat
+        val etChatMessage = findViewById<EditText>(R.id.rvChatMessage)
         val btnSendChat = findViewById<Button>(R.id.btnSendChat)
-        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.chatToolbar)
+        val toolbar = findViewById<MaterialToolbar>(R.id.chatToolbar)
         setSupportActionBar(toolbar)
-
-// Handle Back Button Click
+        FirebaseDatabase.getInstance().reference.child("users").child(currentUserId).child("role")
+            .get().addOnSuccessListener { snapshot ->
+                val role = snapshot.getValue(String::class.java)
+                if (role == "DRIVER") {
+                    toolbar.title = "Chat with Passenger"
+                } else {
+                    toolbar.title = "Chat with Driver"
+                }
+            }
         toolbar.setNavigationOnClickListener {
-            finish() // Closes ChatActivity and returns to PassengerHomeActivity
+            finish()
         }
+
+        // Initialize RecyclerView with your layout's ID: recyclerChat
+        recyclerChat = findViewById(R.id.recyclerChat)
+        val layoutManager = LinearLayoutManager(this)
+        layoutManager.stackFromEnd = true // Keeps chat pushed to bottom
+        recyclerChat.layoutManager = layoutManager
+
+        chatAdapter = ChatAdapter(messageList, currentUserId)
+        recyclerChat.adapter = chatAdapter
 
         btnSendChat.setOnClickListener {
             val text = etChatMessage.text.toString().trim()
@@ -64,9 +88,14 @@ class ChatActivity : AppCompatActivity() {
             .child("chats").child(bookingId)
             .addChildEventListener(object : ChildEventListener {
                 override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                    val msg = snapshot.child("message").getValue(String::class.java)
-                    // Messages update in realtime here
+                    val chatMessage = snapshot.getValue(ChatMessage::class.java)
+                    if (chatMessage != null) {
+                        messageList.add(chatMessage)
+                        chatAdapter.notifyItemInserted(messageList.size - 1)
+                        recyclerChat.scrollToPosition(messageList.size - 1)
+                    }
                 }
+
                 override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
                 override fun onChildRemoved(snapshot: DataSnapshot) {}
                 override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}

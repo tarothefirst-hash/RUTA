@@ -1,9 +1,7 @@
 package com.ruta.app.util
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import androidx.appcompat.app.AlertDialog
+import android.widget.Toast
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
@@ -11,22 +9,19 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 
 /**
- * Watches a single booking's routeStatus in real time and surfaces a
- * deviation warning dialog + tray notification exactly once per
- * DEVIATED transition. Shared by PassengerHomeActivity and
- * LocationSelectionActivity so the two screens can't drift out of sync.
+ * Watches a single booking's routeStatus in real time and fires a tray
+ * notification exactly once per DEVIATED transition.
  */
 class RouteDeviationWatcher(
     private val context: Context,
     private val bookingId: String,
     private val onDeviationChanged: (isDeviated: Boolean) -> Unit = {}
 ) {
-    private val bookingRef: DatabaseReference =
-        FirebaseDatabase.getInstance().reference.child("bookings").child(bookingId)
+    private val database: DatabaseReference = FirebaseDatabase.getInstance().reference
+    private val bookingRef: DatabaseReference = database.child("bookings").child(bookingId)
 
     private var listener: ValueEventListener? = null
-    private var hasShownDialog = false
-    private var activeDialog: AlertDialog? = null
+    private var hasFiredNotification = false
 
     fun start() {
         if (listener != null) return
@@ -38,16 +33,15 @@ class RouteDeviationWatcher(
                 if (routeStatus == "DEVIATED") {
                     onDeviationChanged(true)
 
-                    if (!hasShownDialog) {
-                        hasShownDialog = true
+                    // Fire ONLY the status bar notification banner on deviation.
+                    // No automatic full-screen dialog popup!
+                    if (!hasFiredNotification) {
+                        hasFiredNotification = true
                         RouteDeviationManager.sendDeviationNotification(context, bookingId)
-                        activeDialog = buildDialog().also { it.show() }
                     }
                 } else {
                     onDeviationChanged(false)
-                    hasShownDialog = false
-                    activeDialog?.dismiss()
-                    activeDialog = null
+                    hasFiredNotification = false
                 }
             }
 
@@ -60,28 +54,23 @@ class RouteDeviationWatcher(
     fun stop() {
         listener?.let { bookingRef.removeEventListener(it) }
         listener = null
-        activeDialog?.dismiss()
-        activeDialog = null
     }
 
     fun markSafe() {
         bookingRef.child("routeStatus").setValue("NORMAL")
     }
 
-    private fun buildDialog(): AlertDialog {
-        return AlertDialog.Builder(context)
-            .setTitle("⚠️ Route Deviation Warning")
-            .setMessage("Your driver has moved off the designated path. If you feel unsafe, click below to notify emergency contacts or verify with your driver.")
-            .setCancelable(false)
-            .setPositiveButton("I'm Safe") { dialog, _ ->
-                markSafe()
-                dialog.dismiss()
+    /**
+     * Optional helper in case you want to trigger the emergency alert programmatically.
+     */
+    fun triggerEmergencyAlert() {
+        EmergencyContactManager.sendEmergencyAlertForBooking(database, bookingId) { notified ->
+            val message = if (notified > 0) {
+                "Alert sent to $notified trusted contact${if (notified == 1) "" else "s"}."
+            } else {
+                "No trusted contacts set up yet — add one from your Profile."
             }
-            .setNegativeButton("Emergency / SOS") { dialog, _ ->
-                dialog.dismiss()
-                val intent = Intent(Intent.ACTION_DIAL).apply { data = Uri.parse("tel:911") }
-                context.startActivity(intent)
-            }
-            .create()
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
     }
 }

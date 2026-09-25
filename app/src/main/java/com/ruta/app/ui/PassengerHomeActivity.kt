@@ -6,8 +6,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -16,9 +16,11 @@ import com.google.android.material.button.MaterialButton
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
+import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.RouteDeviationManager
 
 class PassengerHomeActivity : AppCompatActivity() {
@@ -33,9 +35,17 @@ class PassengerHomeActivity : AppCompatActivity() {
     private lateinit var btnDismissWarning: MaterialButton
     private lateinit var btnSosEmergency: MaterialButton
 
+    private val database: DatabaseReference = FirebaseDatabase.getInstance().reference
+
     private var activeBookingListener: ValueEventListener? = null
     private var activeBookingId: String? = null
     private var hasFiredNotification = false
+
+    // Incoming pairing / emergency listeners — live only while this app is open,
+    // same scope limitation as everything else in RUTA's notification system.
+    private var pairRequestListener: ValueEventListener? = null
+    private var alertListener: ValueEventListener? = null
+    private val shownPairRequestUids = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,9 +56,10 @@ class PassengerHomeActivity : AppCompatActivity() {
         setupViewPager()
         setupClickListeners()
         listenForActivePassengerTrip()
+        startIncomingPairRequestListener()
+        startIncomingEmergencyAlertListener()
 
-        // Handle activity launch via notification click
-        intent?.getStringExtra("BOOKING_ID")?.let { bookingId ->
+        intent?.getStringExtra("BOOKING_ID")?.let {
             cardRouteDeviationWarning.visibility = View.VISIBLE
         }
     }
@@ -57,11 +68,8 @@ class PassengerHomeActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
-
                 ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                    101
+                    this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101
                 )
             }
         }
@@ -74,7 +82,6 @@ class PassengerHomeActivity : AppCompatActivity() {
         navSettings = findViewById(R.id.navSettings)
         btnProfile = findViewById(R.id.btnProfile)
 
-        // Binds directly to the FrameLayout overlay container in the XML layout
         cardRouteDeviationWarning = findViewById(R.id.cardRouteDeviationWarning)
         btnDismissWarning = findViewById(R.id.btnDismissWarning)
         btnSosEmergency = findViewById(R.id.btnSosEmergency)
@@ -103,44 +110,47 @@ class PassengerHomeActivity : AppCompatActivity() {
         navSettings.setOnClickListener { viewPager.setCurrentItem(2, true) }
         btnProfile.setOnClickListener { viewPager.setCurrentItem(3, true) }
 
-        // "I'm Safe" Dismiss Button
         btnDismissWarning.setOnClickListener {
             activeBookingId?.let { id ->
-                FirebaseDatabase.getInstance().reference
-                    .child("bookings")
-                    .child(id)
-                    .child("routeStatus")
-                    .setValue("NORMAL")
+                database.child("bookings").child(id).child("routeStatus").setValue("NORMAL")
             }
             cardRouteDeviationWarning.visibility = View.GONE
             hasFiredNotification = false
         }
 
-        // Emergency SOS Button
+        // Emergency SOS: no more dialing 911 — RUTA notifies the rider's own
+        // trusted contacts with the driver's info and current location instead.
         btnSosEmergency.setOnClickListener {
-            val intent = Intent(Intent.ACTION_DIAL).apply {
-                data = Uri.parse("tel:911")
+            val bookingId = activeBookingId
+            if (bookingId == null) {
+                android.widget.Toast.makeText(this, "No active trip to report.", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
-            startActivity(intent)
+
+            EmergencyContactManager.sendEmergencyAlertForBooking(database, bookingId) { notified ->
+                val message = if (notified > 0) {
+                    "Alert sent to $notified trusted contact${if (notified == 1) "" else "s"}."
+                } else {
+                    "No trusted contacts set up yet — add one from your Profile."
+                }
+                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+            }
         }
     }
 
     private fun updateActiveTab(selectedTab: ImageView) {
         val navTabs = listOf(navHome, navPromos, navSettings, btnProfile)
         for (tab in navTabs) {
-            if (tab == selectedTab) {
-                tab.setColorFilter(ContextCompat.getColor(this, R.color.ruta_primary))
-            } else {
-                tab.setColorFilter(ContextCompat.getColor(this, R.color.ruta_text_muted))
-            }
+            tab.setColorFilter(
+                ContextCompat.getColor(this, if (tab == selectedTab) R.color.ruta_primary else R.color.ruta_text_muted)
+            )
         }
     }
 
     private fun listenForActivePassengerTrip() {
         val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val bookingsRef = FirebaseDatabase.getInstance().reference.child("bookings")
 
-        bookingsRef.addValueEventListener(object : ValueEventListener {
+        database.child("bookings").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 for (child in snapshot.children) {
                     val passengerId = child.child("passengerId").getValue(String::class.java)
@@ -156,13 +166,12 @@ class PassengerHomeActivity : AppCompatActivity() {
                     }
                 }
             }
-
             override fun onCancelled(error: DatabaseError) {}
         })
     }
 
     private fun monitorRouteDeviationForBooking(bookingId: String) {
-        val bookingRef = FirebaseDatabase.getInstance().reference.child("bookings").child(bookingId)
+        val bookingRef = database.child("bookings").child(bookingId)
 
         activeBookingListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -170,7 +179,6 @@ class PassengerHomeActivity : AppCompatActivity() {
 
                 if (routeStatus == "DEVIATED") {
                     cardRouteDeviationWarning.visibility = View.VISIBLE
-
                     if (!hasFiredNotification) {
                         hasFiredNotification = true
                         RouteDeviationManager.sendDeviationNotification(this@PassengerHomeActivity, bookingId)
@@ -180,19 +188,85 @@ class PassengerHomeActivity : AppCompatActivity() {
                     hasFiredNotification = false
                 }
             }
-
             override fun onCancelled(error: DatabaseError) {}
         }
 
         bookingRef.addValueEventListener(activeBookingListener!!)
     }
 
+    /**
+     * Shows an Accept/Decline dialog the moment someone scans your QR and sends a
+     * pairing request. shownPairRequestUids stops the same pending request from
+     * re-triggering a dialog every time this node fires again for an unrelated
+     * reason (e.g. a second, different request arriving).
+     */
+    private fun startIncomingPairRequestListener() {
+        val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+
+        pairRequestListener = EmergencyContactManager.listenForIncomingPairRequests(database, myUid) { requesterUid, requesterName ->
+            if (shownPairRequestUids.contains(requesterUid)) return@listenForIncomingPairRequests
+            shownPairRequestUids.add(requesterUid)
+
+            AlertDialog.Builder(this)
+                .setTitle("Trusted Contact Request")
+                .setMessage("$requesterName wants to add you as a trusted emergency contact. If your ride shows a route deviation, they'll be notified with your driver's info.")
+                .setCancelable(false)
+                .setPositiveButton("Accept") { dialog, _ ->
+                    EmergencyContactManager.acceptPairRequest(database, myUid, requesterUid) { _, message ->
+                        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    shownPairRequestUids.remove(requesterUid)
+                    dialog.dismiss()
+                }
+                .setNegativeButton("Decline") { dialog, _ ->
+                    EmergencyContactManager.declinePairRequest(database, myUid, requesterUid)
+                    shownPairRequestUids.remove(requesterUid)
+                    dialog.dismiss()
+                }
+                .show()
+        }
+    }
+
+    /**
+     * Shows a popup with the sender's name, their driver's info, and a "View on
+     * Map" shortcut whenever a trusted contact you're watching over sends an
+     * emergency alert.
+     */
+    private fun startIncomingEmergencyAlertListener() {
+        val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+
+        alertListener = EmergencyContactManager.listenForIncomingAlerts(database, myUid) { senderName, driverName, vehicleInfo, pickupAddress, dropoffAddress, lat, lng ->
+            AlertDialog.Builder(this)
+                .setTitle("\u26A0\uFE0F Emergency Alert")
+                .setMessage(
+                    "$senderName's ride showed a route deviation.\n\n" +
+                            "Driver: $driverName\n" +
+                            "Vehicle: $vehicleInfo\n" +
+                            "Pickup: $pickupAddress\n" +
+                            "Dropoff: $dropoffAddress"
+                )
+                .setCancelable(false)
+                .setPositiveButton("View on Map") { dialog, _ ->
+                    dialog.dismiss()
+                    if (lat != 0.0 || lng != 0.0) {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng")))
+                    }
+                }
+                .setNegativeButton("Dismiss") { dialog, _ -> dialog.dismiss() }
+                .show()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         activeBookingId?.let { id ->
             activeBookingListener?.let { listener ->
-                FirebaseDatabase.getInstance().reference.child("bookings").child(id).removeEventListener(listener)
+                database.child("bookings").child(id).removeEventListener(listener)
             }
+        }
+        FirebaseAuth.getInstance().currentUser?.uid?.let { myUid ->
+            pairRequestListener?.let { database.child("pairRequests").child(myUid).removeEventListener(it) }
+            alertListener?.let { database.child("emergencyAlerts").child(myUid).removeEventListener(it) }
         }
     }
 }

@@ -15,7 +15,7 @@ data class Booking(
     val durationSeconds: Int = 0,
     val surgeMultiplier: Double = 1.0,
     val fare: Double = 0.0,
-
+    val hasDiscount: Boolean = false,
     // Written by the driver app once a shared trip completes and the group fare
     // has been split. Stays 0.0 for solo rides (fare is already final there).
     val finalFare: Double = 0.0,

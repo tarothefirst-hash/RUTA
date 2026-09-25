@@ -22,21 +22,25 @@
             android:textSize="22sp"
             android:textStyle="bold" />
 
-        <!-- Profile Photo with Camera Overlay -->
+        <!-- Profile Photo Container with Circular Layout & Edit Badge -->
         <RelativeLayout
             android:layout_width="110dp"
             android:layout_height="110dp"
             android:layout_marginTop="20dp">
 
-            <ImageView
+            <!-- Circular Image View Overlay using ShapeableImageView -->
+            <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/imgProfile"
                 android:layout_width="100dp"
                 android:layout_height="100dp"
                 android:layout_centerInParent="true"
                 android:background="@drawable/circle_red"
-                android:padding="20dp"
-                android:src="@drawable/ic_person" />
+                android:padding="4dp"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_person"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full" />
 
+            <!-- Camera / Photo Change Action Button -->
             <ImageView
                 android:id="@+id/btnChangePhoto"
                 android:layout_width="32dp"
@@ -44,6 +48,8 @@
                 android:layout_alignParentEnd="true"
                 android:layout_alignParentBottom="true"
                 android:background="@drawable/circle_search"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="6dp"
                 android:src="@drawable/ic_settings" />
         </RelativeLayout>
@@ -107,6 +113,18 @@
                     android:text="Scan Contact's QR"
                     android:textColor="@color/white"
                     android:textSize="13sp" />
+
+                <!-- ADDED: Button referenced in ProfileFragment.kt line 102 -->
+                <Button
+                    android:id="@+id/btnViewTrustedList"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:text="View Trusted Contacts"
+                    android:textColor="@color/ruta_red"
+                    android:textSize="13sp"
+                    app:strokeColor="@color/ruta_red" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

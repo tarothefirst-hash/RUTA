@@ -1,31 +1,47 @@
 package com.ruta.app.ui
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+import com.google.firebase.storage.FirebaseStorage
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.ruta.app.R
+import com.ruta.app.util.EmergencyContactManager
 import java.util.UUID
 
 class ProfileFragment : Fragment() {
 
     // Views
+    private lateinit var imgProfile: ImageView
+    private lateinit var btnChangePhoto: ImageView
     private lateinit var imgMyQrCode: ImageView
     private lateinit var txtLinkedContactStatus: TextView
     private lateinit var btnScanQr: Button
@@ -35,17 +51,43 @@ class ProfileFragment : Fragment() {
     private lateinit var etEmergencyContact: EditText
     private lateinit var btnSaveProfile: Button
     private lateinit var btnLogout: Button
+    private lateinit var btnViewTrustedList: Button
 
     private val currentUid = FirebaseAuth.getInstance().currentUser?.uid
-    private val database = FirebaseDatabase.getInstance().reference
+    private val database: DatabaseReference = FirebaseDatabase.getInstance().reference
+    private val storage = FirebaseStorage.getInstance().reference
 
+    private var selectedImageUri: Uri? = null
     private var activeQrToken: String? = null
+    private var trustedContactsListener: ValueEventListener? = null
 
-    // Camera Scanner Launcher for QR Pairing
+    // Photo Picker Contract
+    private val profilePhotoLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            if (uri != null) {
+                selectedImageUri = uri
+                imgProfile.setImageURI(uri)
+            }
+        }
+    }
+
+    // Storage Permission Launcher (For Android 12 & below)
+    private val requestStoragePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            launchImagePickerIntent()
+        } else {
+            Toast.makeText(requireContext(), "Storage permission is required to select a photo.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
-            val scannedPayload = result.contents
-            processScannedQrCode(scannedPayload)
+            processScannedQrCode(result.contents)
         }
     }
 
@@ -60,7 +102,8 @@ class ProfileFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Bind Views
+        imgProfile = view.findViewById(R.id.imgProfile)
+        btnChangePhoto = view.findViewById(R.id.btnChangePhoto)
         imgMyQrCode = view.findViewById(R.id.imgMyQrCode)
         txtLinkedContactStatus = view.findViewById(R.id.txtLinkedContactStatus)
         btnScanQr = view.findViewById(R.id.btnScanQr)
@@ -70,16 +113,16 @@ class ProfileFragment : Fragment() {
         etEmergencyContact = view.findViewById(R.id.etEmergencyContact)
         btnSaveProfile = view.findViewById(R.id.btnSaveProfile)
         btnLogout = view.findViewById(R.id.btnLogout)
+        btnViewTrustedList = view.findViewById(R.id.btnViewTrustedList)
 
         if (currentUid != null) {
-            // 1. Generate Dynamic Single-Use QR
             generateAndDisplayDynamicQr()
-
             loadUserProfile()
-            checkCurrentLinkedContact()
+            listenForTrustedContactCount()
         }
 
-        // 2. Scan QR Button Listener
+        btnChangePhoto.setOnClickListener { openImagePickerWithPermissionCheck() }
+
         btnScanQr.setOnClickListener {
             val options = ScanOptions().apply {
                 setPrompt("Scan a contact's RUTA Safety QR Code")
@@ -89,22 +132,39 @@ class ProfileFragment : Fragment() {
             qrScannerLauncher.launch(options)
         }
 
-        // 3. Save Profile Listener
-        btnSaveProfile.setOnClickListener { saveUserProfile() }
+        btnViewTrustedList.setOnClickListener { showTrustedListSheet() }
 
-        // 4. Logout Listener
+        btnSaveProfile.setOnClickListener { saveUserProfile() }
         btnLogout.setOnClickListener { performLogout() }
+    }
+
+    private fun openImagePickerWithPermissionCheck() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ (API 33+) does not require READ_EXTERNAL_STORAGE for standard image selection
+            launchImagePickerIntent()
+        } else {
+            // Android 12 and lower require runtime READ_EXTERNAL_STORAGE check
+            val permission = Manifest.permission.READ_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED) {
+                launchImagePickerIntent()
+            } else {
+                requestStoragePermissionLauncher.launch(permission)
+            }
+        }
+    }
+
+    private fun launchImagePickerIntent() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        profilePhotoLauncher.launch(intent)
     }
 
     private fun generateAndDisplayDynamicQr() {
         val uid = currentUid ?: return
-        val newToken = UUID.randomUUID().toString().take(8) // Unique short token
+        val newToken = UUID.randomUUID().toString().take(8)
         activeQrToken = newToken
 
-        // Payload formatted as: RUTA_PAIR:<UID>:<TOKEN>
         val qrPayload = "RUTA_PAIR:$uid:$newToken"
 
-        // Save active token to Firebase
         val tokenData = hashMapOf<String, Any>(
             "token" to newToken,
             "status" to "ACTIVE",
@@ -113,13 +173,11 @@ class ProfileFragment : Fragment() {
 
         database.child("users").child(uid).child("activeQr").setValue(tokenData)
             .addOnSuccessListener {
-                val qrBitmap = generateQRCodeBitmap(qrPayload)
-                imgMyQrCode.setImageBitmap(qrBitmap)
+                imgMyQrCode.setImageBitmap(generateQRCodeBitmap(qrPayload))
             }
     }
 
     private fun processScannedQrCode(payload: String) {
-        // Expected format: RUTA_PAIR:targetUid:token
         val parts = payload.split(":")
         if (parts.size != 3 || parts[0] != "RUTA_PAIR") {
             Toast.makeText(requireContext(), "Invalid RUTA QR Code!", Toast.LENGTH_SHORT).show()
@@ -128,47 +186,35 @@ class ProfileFragment : Fragment() {
 
         val targetUid = parts[1]
         val token = parts[2]
-
         val myUid = currentUid ?: return
+
         if (targetUid == myUid) {
             Toast.makeText(requireContext(), "You cannot link with yourself!", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // Validate token status in target user's Firebase node
         database.child("users").child(targetUid).child("activeQr").get()
             .addOnSuccessListener { snapshot ->
                 val activeToken = snapshot.child("token").getValue(String::class.java)
                 val status = snapshot.child("status").getValue(String::class.java)
 
-                if (activeToken == token && status == "ACTIVE") {
-                    // Valid single-use QR! Perform pairing & invalidate token
-                    linkEmergencyContactAndInvalidate(targetUid)
-                } else {
+                if (activeToken != token || status != "ACTIVE") {
                     Toast.makeText(requireContext(), "This QR Code has expired or already been used!", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+
+                val myName = etFullName.text.toString().trim().ifEmpty { "A RUTA user" }
+
+                EmergencyContactManager.sendPairRequest(database, myUid, myName, targetUid) { success, message ->
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                    if (success) {
+                        database.child("users").child(targetUid).child("activeQr").child("status").setValue("EXPIRED")
+                    }
                 }
             }
             .addOnFailureListener {
                 Toast.makeText(requireContext(), "Failed to verify QR code.", Toast.LENGTH_SHORT).show()
             }
-    }
-
-    private fun linkEmergencyContactAndInvalidate(contactUid: String) {
-        val myUid = currentUid ?: return
-
-        val updates = hashMapOf<String, Any>(
-            "users/$myUid/emergencyContactId" to contactUid,
-            "users/$contactUid/emergencyContactId" to myUid,
-            "users/$contactUid/activeQr/status" to "EXPIRED" // 🔒 Invalidate single-use QR immediately
-        )
-
-        database.updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(requireContext(), "Emergency contact paired successfully!", Toast.LENGTH_SHORT).show()
-            txtLinkedContactStatus.text = "Linked Contact: Active"
-            txtLinkedContactStatus.setTextColor(Color.parseColor("#388E3C"))
-        }.addOnFailureListener {
-            Toast.makeText(requireContext(), "Failed to link contact.", Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun generateQRCodeBitmap(text: String): Bitmap {
@@ -202,32 +248,92 @@ class ProfileFragment : Fragment() {
         val email = etEmail.text.toString().trim()
         val emergencyPhone = etEmergencyContact.text.toString().trim()
 
+        btnSaveProfile.isEnabled = false
+
+        if (selectedImageUri != null) {
+            val photoRef = storage.child("profile_pictures/${uid}.jpg")
+            photoRef.putFile(selectedImageUri!!).addOnSuccessListener {
+                photoRef.downloadUrl.addOnSuccessListener { photoUrl ->
+                    updateDatabaseProfile(uid, name, phone, email, emergencyPhone, photoUrl.toString())
+                }
+            }.addOnFailureListener { err ->
+                btnSaveProfile.isEnabled = true
+                Toast.makeText(requireContext(), "Failed to upload photo: ${err.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            updateDatabaseProfile(uid, name, phone, email, emergencyPhone, null)
+        }
+    }
+
+    private fun updateDatabaseProfile(
+        uid: String, name: String, phone: String, email: String, emergencyPhone: String, photoUrl: String?
+    ) {
         val updates = hashMapOf<String, Any>(
             "name" to name,
             "phone" to phone,
             "email" to email,
             "emergencyPhone" to emergencyPhone
         )
+        if (photoUrl != null) updates["profilePictureUrl"] = photoUrl
 
         database.child("users").child(uid).updateChildren(updates).addOnSuccessListener {
+            btnSaveProfile.isEnabled = true
             Toast.makeText(requireContext(), "Profile updated successfully!", Toast.LENGTH_SHORT).show()
         }.addOnFailureListener {
+            btnSaveProfile.isEnabled = true
             Toast.makeText(requireContext(), "Failed to update profile.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun checkCurrentLinkedContact() {
+    private fun listenForTrustedContactCount() {
         val myUid = currentUid ?: return
-        database.child("users").child(myUid).child("emergencyContactId")
-            .get().addOnSuccessListener { snapshot ->
-                val contactUid = snapshot.getValue(String::class.java)
-                if (!contactUid.isNullOrEmpty()) {
-                    txtLinkedContactStatus.text = "Linked Contact: Active"
-                    txtLinkedContactStatus.setTextColor(Color.parseColor("#388E3C"))
-                } else {
-                    txtLinkedContactStatus.text = "Linked Contact: None"
-                    txtLinkedContactStatus.setTextColor(Color.parseColor("#D32F2F"))
+        trustedContactsListener = EmergencyContactManager.listenForTrustedContacts(database, myUid) { contactUids ->
+            txtLinkedContactStatus.text = "Trusted Contacts: ${contactUids.size}/${EmergencyContactManager.MAX_TRUSTED_CONTACTS}"
+            txtLinkedContactStatus.setTextColor(
+                if (contactUids.isNotEmpty()) Color.parseColor("#388E3C") else Color.parseColor("#D32F2F")
+            )
+        }
+    }
+
+    private fun showTrustedListSheet() {
+        val myUid = currentUid ?: return
+        val dialog = BottomSheetDialog(requireContext())
+        val sheetView = layoutInflater.inflate(R.layout.dialog_trusted_list, null)
+        dialog.setContentView(sheetView)
+
+        val container = sheetView.findViewById<LinearLayout>(R.id.llTrustedContactsContainer)
+        val txtEmpty = sheetView.findViewById<TextView>(R.id.txtNoTrustedContacts)
+
+        database.child("users").child(myUid).child("trustedContacts").get()
+            .addOnSuccessListener { snapshot ->
+                container.removeAllViews()
+                val contactUids = snapshot.children.mapNotNull { it.key }
+
+                if (contactUids.isEmpty()) {
+                    txtEmpty.visibility = View.VISIBLE
+                    dialog.show()
+                    return@addOnSuccessListener
                 }
+                txtEmpty.visibility = View.GONE
+
+                contactUids.forEach { contactUid ->
+                    database.child("users").child(contactUid).child("name").get()
+                        .addOnSuccessListener { nameSnap ->
+                            val name = nameSnap.getValue(String::class.java)?.ifEmpty { null } ?: "RUTA User"
+                            val row = layoutInflater.inflate(R.layout.item_trusted_contact, container, false)
+                            row.findViewById<TextView>(R.id.txtContactName).text = name
+                            row.findViewById<Button>(R.id.btnRemoveContact).setOnClickListener {
+                                EmergencyContactManager.removeTrustedContact(database, myUid, contactUid)
+                                container.removeView(row)
+                                if (container.childCount == 0) txtEmpty.visibility = View.VISIBLE
+                            }
+                            container.addView(row)
+                        }
+                }
+                dialog.show()
+            }
+            .addOnFailureListener {
+                Toast.makeText(requireContext(), "Failed to load trusted contacts.", Toast.LENGTH_SHORT).show()
             }
     }
 
@@ -242,5 +348,12 @@ class ProfileFragment : Fragment() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         startActivity(intent)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        trustedContactsListener?.let {
+            currentUid?.let { uid -> database.child("users").child(uid).child("trustedContacts").removeEventListener(it) }
+        }
     }
 }

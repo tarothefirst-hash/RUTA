@@ -17,9 +17,9 @@
         android:paddingBottom="32dp">
 
         <ImageView
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:src="@drawable/ruta_logo"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:src="@drawable/ruta_transparent"
             android:contentDescription="@string/app_name"
             android:layout_gravity="center_horizontal" />
 

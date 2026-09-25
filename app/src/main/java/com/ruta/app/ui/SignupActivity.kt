@@ -178,6 +178,7 @@ class SignupActivity : AppCompatActivity() {
             "email" to email,
             "birthDate" to birthDate,
             "role" to role.name,
+            "isActive" to (role == UserRole.PASSENGER), // Passengers active by default, Drivers need admin approval
             "createdAt" to System.currentTimeMillis()
         )
 

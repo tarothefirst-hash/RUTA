@@ -57,7 +57,27 @@
                 android:textSize="12sp"
                 android:textStyle="bold" />
         </LinearLayout>
+
     </com.google.android.material.card.MaterialCardView>
+
+    <!-- Compact Chat Button Positioned Right Above the Card -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnChatWithPassenger"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:layout_above="@id/cardIncomingRequest"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="2dp"
+        android:backgroundTint="@color/ruta_primary"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:padding="0dp"
+        android:text="Chat with Passenger"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:cornerRadius="10dp" />
 
     <!-- Incoming Ride Request Card -->
     <com.google.android.material.card.MaterialCardView
@@ -157,23 +177,26 @@
                     android:backgroundTint="@color/ruta_status_success"
                     android:text="Accept Ride" />
 
-                <Button
-                    android:id="@+id/btnConfirmPickup"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:backgroundTint="@color/ruta_primary"
-                    android:text="Confirm Passenger Pickup"
-                    android:visibility="gone" />
-
-                <Button
-                    android:id="@+id/btnCompleteRide"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:backgroundTint="@color/ruta_status_success"
-                    android:text="Complete Ride"
-                    android:visibility="gone" />
-
             </LinearLayout>
+
+            <!-- Single Full-Width Action Buttons -->
+            <Button
+                android:id="@+id/btnConfirmPickup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/ruta_primary"
+                android:text="Confirm Passenger Pickup"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnCompleteRide"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/ruta_status_success"
+                android:text="Complete Ride"
+                android:visibility="gone" />
 
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
