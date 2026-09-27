@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView
+<androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/scrollView"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/ruta_bg"
@@ -12,13 +13,12 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="32dp"
-        android:paddingTop="72dp"
-        android:paddingBottom="32dp">
+        android:paddingHorizontal="32dp">
 
         <ImageView
             android:layout_width="120dp"
             android:layout_height="120dp"
+            android:layout_marginTop="72dp"
             android:src="@drawable/ruta_transparent"
             android:contentDescription="@string/app_name"
             android:layout_gravity="center_horizontal" />
@@ -89,11 +89,13 @@
                 android:textSize="12sp" />
 
         </RadioGroup>
+
         <Button
             android:id="@+id/btnGoogle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Sign in with Google" />
+
         <EditText
             android:id="@+id/edtEmail"
             style="@style/RutaEditText"
@@ -139,6 +141,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
+            android:layout_marginBottom="32dp"
             android:gravity="center"
             android:orientation="horizontal">
 
@@ -163,4 +166,4 @@
 
     </LinearLayout>
 
-</ScrollView>
+</androidx.core.widget.NestedScrollView>

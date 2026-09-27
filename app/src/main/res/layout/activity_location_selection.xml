@@ -99,27 +99,127 @@
             android:orientation="vertical"
             android:padding="18dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Pick Up"
-                android:textColor="@color/ruta_primary_dark"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/txtPickupDisplay"
+            <!-- 1. SEARCHING DRIVER STATE (Hidden by default) -->
+            <LinearLayout
+                android:id="@+id/layoutSearching"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
-                android:maxLines="2"
-                android:text="Detecting location..."
-                android:textColor="@color/ruta_text_primary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:gravity="center"
+                android:orientation="vertical"
+                android:visibility="gone">
 
-            <!-- Driver Info Card Overlay -->
+                <ProgressBar
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:indeterminateTint="@color/ruta_primary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Finding nearby drivers..."
+                    android:textColor="@color/ruta_text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCancelSearch"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Cancel Ride Request"
+                    android:textColor="#E53935"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- 2. ADDRESS SELECTION BLOCK (Pickup / Dropoff) -->
+            <LinearLayout
+                android:id="@+id/layoutAddressDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Pick Up"
+                    android:textColor="@color/ruta_primary_dark"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtPickupDisplay"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:text="Detecting location..."
+                    android:textColor="@color/ruta_text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="To"
+                    android:textColor="@color/ruta_text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/txtDropoffDisplay"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_input_field"
+                    android:backgroundTint="@color/ruta_bg"
+                    android:padding="10dp"
+                    android:text="Add Location"
+                    android:textColor="@color/ruta_text_muted"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- FARE BANNER CARD (LAVENDER / RUTA_PRIMARY) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardFareDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="visible"
+                app:cardBackgroundColor="@color/ruta_primary"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/txtUserFare"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Your Fare: ₱0.00"
+                        android:textColor="@color/white"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/txtTripCalculation"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="Trip Total: ₱0.00"
+                        android:textColor="#F0E6FF"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 3. DRIVER MATCHED CARD -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardDriverInfo"
                 android:layout_width="match_parent"
@@ -173,36 +273,18 @@
                         android:layout_marginTop="12dp"
                         android:text="Chat with Driver"
                         android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
                         app:backgroundTint="@color/ruta_primary"
                         app:cornerRadius="12dp" />
-
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="To"
-                android:textColor="@color/ruta_text_secondary"
-                android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/txtDropoffDisplay"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/bg_input_field"
-                android:backgroundTint="@color/ruta_bg"
-                android:padding="10dp"
-                android:text="Add Location"
-                android:textColor="@color/ruta_text_muted"
-                android:textSize="13sp" />
-
+            <!-- 4. CONFIRM BUTTON -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnConfirmStage"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="54dp"
                 android:layout_marginTop="16dp"
                 android:text="Confirm Pickup"
                 android:textColor="@color/white"
@@ -211,6 +293,16 @@
                 app:backgroundTint="@color/ruta_primary"
                 app:cornerRadius="16dp" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelTrip"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:text="Cancel Ride"
+                android:textColor="@color/ruta_cancel"
+                android:textSize="14sp"
+                android:textStyle="bold" />
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 

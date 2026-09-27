@@ -36,7 +36,8 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.ruta.app.R
 import com.ruta.app.util.EmergencyContactManager
 import java.util.UUID
-
+import androidx.core.view.WindowCompat
+import com.ruta.app.util.keepClearOfKeyboard
 class ProfileFragment : Fragment() {
 
     // Views
@@ -48,7 +49,6 @@ class ProfileFragment : Fragment() {
     private lateinit var etFullName: EditText
     private lateinit var etPhone: EditText
     private lateinit var etEmail: EditText
-    private lateinit var etEmergencyContact: EditText
     private lateinit var btnSaveProfile: Button
     private lateinit var btnLogout: Button
     private lateinit var btnViewTrustedList: Button
@@ -92,11 +92,13 @@ class ProfileFragment : Fragment() {
     }
 
     override fun onCreateView(
+
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.fragment_profile, container, false)
+
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -110,11 +112,10 @@ class ProfileFragment : Fragment() {
         etFullName = view.findViewById(R.id.etFullName)
         etPhone = view.findViewById(R.id.etPhone)
         etEmail = view.findViewById(R.id.etEmail)
-        etEmergencyContact = view.findViewById(R.id.etEmergencyContact)
         btnSaveProfile = view.findViewById(R.id.btnSaveProfile)
         btnLogout = view.findViewById(R.id.btnLogout)
         btnViewTrustedList = view.findViewById(R.id.btnViewTrustedList)
-
+        requireActivity().keepClearOfKeyboard(view)
         if (currentUid != null) {
             generateAndDisplayDynamicQr()
             loadUserProfile()
@@ -140,10 +141,8 @@ class ProfileFragment : Fragment() {
 
     private fun openImagePickerWithPermissionCheck() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ (API 33+) does not require READ_EXTERNAL_STORAGE for standard image selection
             launchImagePickerIntent()
         } else {
-            // Android 12 and lower require runtime READ_EXTERNAL_STORAGE check
             val permission = Manifest.permission.READ_EXTERNAL_STORAGE
             if (ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED) {
                 launchImagePickerIntent()
@@ -236,7 +235,6 @@ class ProfileFragment : Fragment() {
                 etFullName.setText(snapshot.child("name").getValue(String::class.java) ?: "")
                 etPhone.setText(snapshot.child("phone").getValue(String::class.java) ?: "")
                 etEmail.setText(snapshot.child("email").getValue(String::class.java) ?: FirebaseAuth.getInstance().currentUser?.email ?: "")
-                etEmergencyContact.setText(snapshot.child("emergencyPhone").getValue(String::class.java) ?: "")
             }
         }
     }
@@ -246,7 +244,6 @@ class ProfileFragment : Fragment() {
         val name = etFullName.text.toString().trim()
         val phone = etPhone.text.toString().trim()
         val email = etEmail.text.toString().trim()
-        val emergencyPhone = etEmergencyContact.text.toString().trim()
 
         btnSaveProfile.isEnabled = false
 
@@ -254,25 +251,24 @@ class ProfileFragment : Fragment() {
             val photoRef = storage.child("profile_pictures/${uid}.jpg")
             photoRef.putFile(selectedImageUri!!).addOnSuccessListener {
                 photoRef.downloadUrl.addOnSuccessListener { photoUrl ->
-                    updateDatabaseProfile(uid, name, phone, email, emergencyPhone, photoUrl.toString())
+                    updateDatabaseProfile(uid, name, phone, email, photoUrl.toString())
                 }
             }.addOnFailureListener { err ->
                 btnSaveProfile.isEnabled = true
                 Toast.makeText(requireContext(), "Failed to upload photo: ${err.message}", Toast.LENGTH_SHORT).show()
             }
         } else {
-            updateDatabaseProfile(uid, name, phone, email, emergencyPhone, null)
+            updateDatabaseProfile(uid, name, phone, email, null)
         }
     }
 
     private fun updateDatabaseProfile(
-        uid: String, name: String, phone: String, email: String, emergencyPhone: String, photoUrl: String?
+        uid: String, name: String, phone: String, email: String, photoUrl: String?
     ) {
         val updates = hashMapOf<String, Any>(
             "name" to name,
             "phone" to phone,
-            "email" to email,
-            "emergencyPhone" to emergencyPhone
+            "email" to email
         )
         if (photoUrl != null) updates["profilePictureUrl"] = photoUrl
 

@@ -4,14 +4,18 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
@@ -30,47 +34,77 @@ class LoginActivity : AppCompatActivity() {
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
             val account = task.getResult(ApiException::class.java)!!
-            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+            val idToken = account.idToken
 
-            setLoading(true)
-            auth.signInWithCredential(credential)
-                .addOnSuccessListener { authResult ->
-                    val uid = authResult.user?.uid
-                    if (uid != null) {
-                        fetchRoleAndNavigate(uid)
-                    } else {
-                        setLoading(false)
-                        showError("User ID not found.")
+            if (!idToken.isNullOrEmpty()) {
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
+                setLoading(true)
+                auth.signInWithCredential(credential)
+                    .addOnSuccessListener { authResult ->
+                        val uid = authResult.user?.uid
+                        if (uid != null) {
+                            fetchRoleAndNavigate(uid)
+                        } else {
+                            setLoading(false)
+                            showError("User ID not found.")
+                        }
                     }
-                }
-                .addOnFailureListener { e ->
-                    setLoading(false)
-                    showError("Google login failed: ${e.message}")
-                }
+                    .addOnFailureListener { e ->
+                        setLoading(false)
+                        showError("Google login failed: ${e.localizedMessage}")
+                    }
+            } else {
+                setLoading(false)
+                showError("Could not retrieve a valid Google ID token. Please try again.")
+            }
+        } catch (e: ApiException) {
+            setLoading(false)
+            showError("Google Sign-In canceled or failed (Code: ${e.statusCode})")
         } catch (e: Exception) {
             setLoading(false)
-            Toast.makeText(this, "Google Sign-In canceled or failed.", Toast.LENGTH_SHORT).show()
+            showError("Google Sign-In failed: ${e.localizedMessage}")
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 1. Inflate binding FIRST
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Setup Google Auth Client
-        setupGoogleSignIn()
+        // 2. Enable Edge-to-Edge
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Auto-check session immediately
+        // 3. Dynamic Keyboard (IME) and System Bar Inset Handling
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+
+            // Sets bottom padding based on whichever is larger (keyboard or nav bar)
+            view.setPadding(
+                systemBars.left,
+                systemBars.top,
+                systemBars.right,
+                maxOf(imeInsets.bottom, systemBars.bottom)
+            )
+            insets
+        }
+
+        setupGoogleSignIn()
         checkAutoLogin()
 
+        // 4. Standard Email/Password Login
         binding.btnLogin.setOnClickListener { attemptLogin() }
 
-        // Trigger Google Sign-In on button click
+        // 5. Google Sign-In with forced client sign-out to clear stale tokens
         binding.btnGoogle.setOnClickListener {
+            hideError()
             setLoading(true)
-            val signInIntent = googleSignInClient.signInIntent
-            googleLoginLauncher.launch(signInIntent)
+            googleSignInClient.signOut().addOnCompleteListener {
+                val signInIntent = googleSignInClient.signInIntent
+                googleLoginLauncher.launch(signInIntent)
+            }
         }
 
         binding.txtGoSignup.setOnClickListener {
@@ -93,13 +127,11 @@ class LoginActivity : AppCompatActivity() {
         val cachedUid = prefs.getString("USER_UID", null)
         val cachedRole = prefs.getString("USER_ROLE", null)
 
-        // FAST-PATH: Only bypass network if the cached user ID strictly matches the logged-in Firebase UID
         if (cachedUid == currentUser.uid && !cachedRole.isNullOrEmpty()) {
             goToHome(parseRole(cachedRole))
             return
         }
 
-        // If UIDs don't match or cache is missing, clear old cache and fetch fresh role from Firebase
         prefs.edit().clear().apply()
         setLoading(true)
         fetchRoleAndNavigate(currentUser.uid)
@@ -134,7 +166,12 @@ class LoginActivity : AppCompatActivity() {
             }
             .addOnFailureListener { exception ->
                 setLoading(false)
-                showError(exception.localizedMessage ?: "Login failed. Please check your credentials.")
+                val friendlyMessage = when (exception) {
+                    is FirebaseAuthInvalidCredentialsException -> "Incorrect email or password."
+                    is FirebaseAuthInvalidUserException -> "No account found with this email."
+                    else -> exception.localizedMessage ?: "Login failed. Please check your credentials."
+                }
+                showError(friendlyMessage)
             }
     }
 
@@ -144,18 +181,22 @@ class LoginActivity : AppCompatActivity() {
             .child(uid)
             .get()
             .addOnSuccessListener { snapshot ->
-                setLoading(false)
                 val roleStr = snapshot.child("role").getValue(String::class.java) ?: "PASSENGER"
                 val userName = snapshot.child("name").getValue(String::class.java) ?: "User"
-
-                // Cache user details locally to skip network calls on subsequent launches
-                val prefs = getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
-                prefs.edit()
-                    .putString("USER_ROLE", roleStr)
-                    .putString("USER_NAME", userName)
-                    .apply()
+                val isApproved = snapshot.child("isApproved").getValue(Boolean::class.java) ?: false
 
                 val role = parseRole(roleStr)
+
+                setLoading(false)
+
+                val prefs = getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putString("USER_UID", uid)
+                    .putString("USER_ROLE", roleStr)
+                    .putString("USER_NAME", userName)
+                    .putBoolean("IS_APPROVED", isApproved)
+                    .apply()
+
                 goToHome(role)
             }
             .addOnFailureListener { exception ->

@@ -42,53 +42,30 @@
             android:text="@string/signup_subtitle"
             android:textColor="@color/ruta_text_secondary"
             android:textSize="14sp" />
-
-        <!-- Role picker -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/signup_as"
-            android:textColor="@color/ruta_text_secondary"
-            android:textSize="13sp" />
-
         <RadioGroup
-            android:id="@+id/roleGroup"
+            android:id="@+id/rgRole"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:orientation="horizontal"
-            android:weightSum="2">
+            android:gravity="center"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="16dp">
 
             <RadioButton
-                android:id="@+id/roleUser"
-                style="@style/Widget.AppCompat.CompoundButton.RadioButton"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:button="@null"
-                android:gravity="center"
+                android:id="@+id/rbPassenger"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Passenger"
                 android:checked="true"
-                android:background="@drawable/bg_role_chip"
-                android:textColor="@color/role_chip_text"
-                android:text="@string/role_passenger"
-                android:textSize="12sp" />
+                android:textColor="@color/ruta_black" />
 
             <RadioButton
-                android:id="@+id/roleDriver"
-                style="@style/Widget.AppCompat.CompoundButton.RadioButton"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:layout_marginStart="6dp"
-                android:button="@null"
-                android:gravity="center"
-                android:background="@drawable/bg_role_chip"
-                android:textColor="@color/role_chip_text"
-                android:text="@string/role_driver"
-                android:textSize="12sp" />
-
+                android:id="@+id/rbDriver"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:text="Driver"
+                android:textColor="@color/ruta_black" />
         </RadioGroup>
 
         <!-- First Name & Last Name -->
@@ -121,7 +98,13 @@
                 android:autofillHints="personFamilyName" />
 
         </LinearLayout>
-
+        <EditText
+            android:id="@+id/edtPhoneNumber"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Phone Number (e.g., 09123456789)"
+            android:inputType="phone"
+            android:maxLength="11" />
         <EditText
             android:id="@+id/edtEmail"
             style="@style/RutaEditText"
@@ -132,15 +115,16 @@
             android:inputType="textEmailAddress"
             android:autofillHints="emailAddress" />
 
-        <!-- Birth Date Field -->
         <EditText
             android:id="@+id/edtBirthDate"
             style="@style/RutaEditText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:hint="Birth Date (YYYY-MM-DD)"
-            android:inputType="date" />
+            android:hint="Tap to select birth date"
+            android:focusable="false"
+            android:clickable="true"
+            android:cursorVisible="false" />
 
         <EditText
             android:id="@+id/edtPassword"
@@ -161,74 +145,6 @@
             android:hint="@string/confirm_password_hint"
             android:inputType="textPassword"
             android:autofillHints="newPassword" />
-
-        <LinearLayout
-            android:id="@+id/layoutDriverFields"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone"
-            tools:visibility="visible">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="Vehicle Information"
-                android:textColor="@color/ruta_primary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/edtVehicleModel"
-                style="@style/RutaEditText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:hint="Vehicle Model (e.g., Toyota Vios)"
-                android:inputType="textCapWords" />
-
-            <!-- Row for Plate Number & Vehicle Color -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="4dp">
-
-                    <EditText
-                        android:id="@+id/edtPlateNumber"
-                        style="@style/RutaEditText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Plate Number"
-                        android:inputType="textCapCharacters" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="4dp">
-
-                    <EditText
-                        android:id="@+id/edtVehicleColor"
-                        style="@style/RutaEditText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Color (e.g., Black)"
-                        android:inputType="textCapWords" />
-                </LinearLayout>
-
-            </LinearLayout>
-
-        </LinearLayout>
 
         <TextView
             android:id="@+id/txtError"
@@ -280,7 +196,6 @@
 
         </LinearLayout>
 
-        <!-- Full Width Google Button -->
         <Button
             android:id="@+id/btnGoogle"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"

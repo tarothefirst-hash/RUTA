@@ -27,7 +27,7 @@
             android:layout_marginTop="4dp"
             android:layout_marginBottom="20dp"
             android:text="Apply verified discounts to your RUTA rides"
-            android:textColor="@color/text_gray"
+            android:textColor="@color/ruta_primary_dark"
             android:textSize="13sp" />
 
         <!-- Discount Type Selection -->
@@ -45,6 +45,7 @@
                 android:layout_weight="1"
                 android:checked="true"
                 android:text="Student (20%)"
+                android:textColor="@color/ruta_black"
                 android:textSize="14sp" />
 
             <RadioButton
@@ -53,6 +54,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Senior / PWD (20%)"
+                android:textColor="@color/ruta_black"
                 android:textSize="14sp" />
         </RadioGroup>
 
@@ -61,6 +63,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="@color/white"
             app:cardCornerRadius="14dp"
             app:cardElevation="2dp">
 
@@ -85,7 +88,7 @@
                     android:layout_marginTop="4dp"
                     android:layout_marginBottom="16dp"
                     android:text="Please capture or select clear images of the front and back of your ID for verification."
-                    android:textColor="@color/text_gray"
+                    android:textColor="@color/ruta_primary_dark"
                     android:textSize="12sp" />
 
                 <!-- Front ID Preview & Upload Button -->
@@ -93,6 +96,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="ID Front Image"
+                    android:textColor="@color/ruta_black"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -121,6 +125,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="ID Back Image"
+                    android:textColor="@color/ruta_black"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 

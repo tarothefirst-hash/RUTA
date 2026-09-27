@@ -86,7 +86,39 @@
             android:layout_marginTop="16dp"
             android:contentDescription="GCash QR Code"
             android:src="@drawable/gcash" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="16dp">
 
+            <Button
+                android:id="@+id/btnSelectReceipt"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Attach Proof of Payment (Image)" />
+
+            <TextView
+                android:id="@+id/txtReceiptPlaceholder"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="4dp"
+                android:text="No receipt image selected"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+
+            <ImageView
+                android:id="@+id/imgReceiptPreview"
+                android:layout_width="match_parent"
+                android:layout_height="180dp"
+                android:layout_marginTop="8dp"
+                android:background="#F1F5F9"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                android:contentDescription="Receipt Preview" />
+        </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -41,6 +41,7 @@ import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -74,6 +75,8 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var txtPickupDisplay: TextView
     private lateinit var txtDropoffDisplay: TextView
     private lateinit var btnConfirmStage: Button
+    private lateinit var btnCancelSearch: MaterialButton
+    private lateinit var btnCancelTrip: MaterialButton
 
     // Card Overlay Driver Info Views
     private lateinit var cardDriverInfo: MaterialCardView
@@ -139,7 +142,8 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         txtPickupDisplay = findViewById(R.id.txtPickupDisplay)
         txtDropoffDisplay = findViewById(R.id.txtDropoffDisplay)
         btnConfirmStage = findViewById(R.id.btnConfirmStage)
-
+        btnCancelSearch = findViewById(R.id.btnCancelSearch)
+        btnCancelTrip = findViewById(R.id.btnCancelTrip)
         cardDriverInfo = findViewById(R.id.cardDriverInfo)
         txtPassengerTripStatus = findViewById(R.id.txtPassengerTripStatus)
         txtDriverName = findViewById(R.id.txtDriverName)
@@ -160,6 +164,12 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             startActivity(intent)
         }
 
+        btnCancelSearch.setOnClickListener {
+            cancelActiveRide()
+        }
+        btnCancelTrip.setOnClickListener {
+            cancelActiveRide()
+        }
         setupSearchAutocomplete()
 
         val mapFragment = supportFragmentManager
@@ -177,6 +187,46 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
+    private fun updateSearchingUi(isSearching: Boolean) {
+        if (isSearching) {
+            btnConfirmStage.isEnabled = false
+            btnCancelSearch.visibility = View.VISIBLE
+        } else {
+            btnConfirmStage.isEnabled = true
+            btnCancelSearch.visibility = View.GONE
+        }
+    }
+
+    private fun cancelActiveRide() {
+        val bookingId = currentRequestId ?: return
+
+        database.child("bookings").child(bookingId).child("status").get()
+            .addOnSuccessListener { snapshot ->
+                val status = snapshot.getValue(String::class.java) ?: ""
+                if (status == "IN_PROGRESS") {
+                    Toast.makeText(this, "Cannot cancel a ride already in progress.", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+
+                val updates = mapOf<String, Any>(
+                    "status" to "CANCELLED",
+                    "cancelledAt" to System.currentTimeMillis()
+                )
+
+                database.child("bookings").child(bookingId).updateChildren(updates)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Ride request cancelled.", Toast.LENGTH_SHORT).show()
+                        rideshareFlow?.stop()
+                        rideshareFlow = null
+                        updateSearchingUi(false)
+                        finish()
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(this, "Error cancelling ride: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+    }
+
     private fun setupPassengerRideTracking(bookingId: String) {
         val bookingRef = FirebaseDatabase.getInstance().reference.child("bookings").child(bookingId)
 
@@ -184,21 +234,15 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val status = snapshot.child("status").getValue(String::class.java) ?: return
 
-                // 1. Get Live Driver Coordinates
                 val driverLat = snapshot.child("driverLat").getValue(Double::class.java)
                 val driverLng = snapshot.child("driverLng").getValue(Double::class.java)
 
                 if (driverLat != null && driverLng != null && driverLat != 0.0 && driverLng != 0.0) {
                     val driverPos = LatLng(driverLat, driverLng)
-
-                    // Update car position on passenger map
                     updateLiveDriverMarker(driverLat, driverLng)
-
-                    // Dynamic polyline trimming behind vehicle
                     trimPassengerPolyline(driverPos)
                 }
 
-                // 2. Handle Pickup Marker Removal
                 when (status) {
                     "ACCEPTED", "ARRIVED" -> {
                         if (passengerPickupMarker == null && pickupLatLng != null) {
@@ -212,7 +256,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     }
 
                     "IN_PROGRESS" -> {
-                        // Green Pin vanishes immediately when trip begins
                         passengerPickupMarker?.remove()
                         passengerPickupMarker = null
                         pickupMarker?.remove()
@@ -265,6 +308,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
             when (status) {
                 "MATCHING" -> {
+                    updateSearchingUi(true)
                     btnConfirmStage.text = "Matching co-passenger..."
 
                     val pLat = snapshot.child("pickupLat").getValue(Double::class.java) ?: 0.0
@@ -283,14 +327,17 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         runOnUiThread {
                             when (state) {
                                 RideshareFlowManager.RideshareState.SEARCHING_FOR_CO_PASSENGER -> {
+                                    updateSearchingUi(true)
                                     btnConfirmStage.text = "Matching co-passenger..."
                                 }
                                 RideshareFlowManager.RideshareState.MATCHED -> {
                                     Toast.makeText(this, "Co-passenger found! Searching for driver...", Toast.LENGTH_SHORT).show()
+                                    updateSearchingUi(true)
                                     btnConfirmStage.text = "Searching for driver..."
                                 }
                                 RideshareFlowManager.RideshareState.NO_MATCH_PROCEEDING_SOLO -> {
                                     Toast.makeText(this, "No co-passenger found — booking as a solo ride.", Toast.LENGTH_LONG).show()
+                                    updateSearchingUi(true)
                                     btnConfirmStage.text = "Searching for driver..."
                                 }
                             }
@@ -299,13 +346,16 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     rideshareFlow?.start()
                 }
                 "MATCHED", "REQUESTED", "SEARCHING" -> {
+                    updateSearchingUi(true)
                     btnConfirmStage.text = "Searching for driver..."
                 }
                 "ACCEPTED", "ARRIVED", "IN_PROGRESS" -> {
+                    updateSearchingUi(false)
                     cardDriverInfo.visibility = View.VISIBLE
                     txtPassengerTripStatus.text = if (status == "IN_PROGRESS") "Trip in progress" else "Driver en route"
                 }
                 "COMPLETED", "CANCELLED" -> {
+                    updateSearchingUi(false)
                     Toast.makeText(this, "This trip has been $status.", Toast.LENGTH_SHORT).show()
                     finish()
                 }
@@ -402,6 +452,42 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             }
             override fun afterTextChanged(s: Editable?) {}
         })
+    }
+
+    private fun updateFareBanner(
+        userFare: Double,
+        isRideshare: Boolean = false,
+        coMatchFare: Double? = null
+    ) {
+        val cardFareDetails = findViewById<MaterialCardView>(R.id.cardFareDetails)
+        val txtUserFare = findViewById<TextView>(R.id.txtUserFare)
+        val txtTripCalculation = findViewById<TextView>(R.id.txtTripCalculation)
+
+        cardFareDetails?.visibility = View.VISIBLE
+
+        if (userFare <= 0.0) {
+            txtUserFare?.text = "Calculating Fare..."
+            txtTripCalculation?.text = "Fetching route distance..."
+            return
+        }
+
+        if (isRideshare) {
+            if (coMatchFare != null && coMatchFare > 0.0) {
+                val overallTripTotal = userFare + coMatchFare
+                txtUserFare?.text = String.format(Locale.getDefault(), "Your Fare: ₱%.2f", userFare)
+                txtTripCalculation?.text = String.format(
+                    Locale.getDefault(),
+                    "Overall Trip Total: ₱%.2f (Co-matched Split)",
+                    overallTripTotal
+                )
+            } else {
+                txtUserFare?.text = String.format(Locale.getDefault(), "Est. Share: ₱%.2f", userFare)
+                txtTripCalculation?.text = "Overall calculation updates upon co-match."
+            }
+        } else {
+            txtUserFare?.text = String.format(Locale.getDefault(), "Total Fare: ₱%.2f", userFare)
+            txtTripCalculation?.text = "Solo Ride • Direct route fare"
+        }
     }
 
     private fun fetchPlaceSuggestions(query: String) {
@@ -575,7 +661,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 currentPolyline?.remove()
 
                 if (routePoints.isNotEmpty()) {
-                    // Populate polyline points for trimming
                     passengerPolylinePoints = routePoints.toMutableList()
 
                     currentPolyline = mMap.addPolyline(
@@ -598,6 +683,8 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     )
                     routePolyline = currentPolyline
                 }
+
+                updateFareBanner(currentCalculatedFare, isRideshare = false)
 
                 val surgeText = if (currentSurgeMultiplier > 1.0) " (${currentSurgeMultiplier}x Surge)" else ""
                 if (!suppressRouteButtonUpdate) {
@@ -664,11 +751,13 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
         view.findViewById<View>(R.id.btnOptionRegular)?.setOnClickListener {
             dialog.dismiss()
+            updateFareBanner(fareRegular, isRideshare = false)
             submitRegularBooking(fareRegular)
         }
 
         view.findViewById<View>(R.id.btnOptionShared)?.setOnClickListener {
             dialog.dismiss()
+            updateFareBanner(fareShared, isRideshare = true)
             submitRideshareBooking(fareShared)
         }
 
@@ -683,6 +772,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             maxPax = 1,
             initialStatus = "REQUESTED"
         ) {
+            updateSearchingUi(true)
             btnConfirmStage.text = "Searching for driver..."
         }
     }
@@ -699,6 +789,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             maxPax = 2,
             initialStatus = "MATCHING"
         ) { bookingId ->
+            updateSearchingUi(true)
             btnConfirmStage.text = "Matching co-passenger..."
 
             rideshareFlow = RideshareFlowManager(
@@ -713,14 +804,17 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 runOnUiThread {
                     when (state) {
                         RideshareFlowManager.RideshareState.SEARCHING_FOR_CO_PASSENGER -> {
+                            updateSearchingUi(true)
                             btnConfirmStage.text = "Matching co-passenger..."
                         }
                         RideshareFlowManager.RideshareState.MATCHED -> {
                             Toast.makeText(this, "Co-passenger found! Searching for driver...", Toast.LENGTH_SHORT).show()
+                            updateSearchingUi(true)
                             btnConfirmStage.text = "Searching for driver..."
                         }
                         RideshareFlowManager.RideshareState.NO_MATCH_PROCEEDING_SOLO -> {
                             Toast.makeText(this, "No co-passenger found — booking as a solo ride.", Toast.LENGTH_LONG).show()
+                            updateSearchingUi(true)
                             btnConfirmStage.text = "Searching for driver..."
                         }
                     }
@@ -745,8 +839,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
         val currentUser = FirebaseAuth.getInstance().currentUser ?: return
         val currentUserId = currentUser.uid
-
-        btnConfirmStage.isEnabled = false
 
         database.child("users").child(currentUserId)
             .addListenerForSingleValueEvent(object : ValueEventListener {
@@ -793,7 +885,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
 
                 override fun onCancelled(error: DatabaseError) {
-                    btnConfirmStage.isEnabled = true
+                    updateSearchingUi(false)
                 }
             })
     }
@@ -892,7 +984,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun listenForRideStatusUpdates(bookingId: String) {
-        // Start passenger ride tracking logic
         setupPassengerRideTracking(bookingId)
 
         database.child("bookings").child(bookingId)
@@ -930,14 +1021,14 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         "MATCHING" -> {
                             cardDriverInfo.visibility = View.GONE
                             btnConfirmStage.visibility = View.VISIBLE
-                            btnConfirmStage.isEnabled = false
+                            updateSearchingUi(true)
                             btnConfirmStage.text = "Matching co-passenger..."
                             btnConfirmStage.setBackgroundColor(Color.parseColor("#9E9E9E"))
                         }
                         "REQUESTED", "SEARCHING" -> {
                             cardDriverInfo.visibility = View.GONE
                             btnConfirmStage.visibility = View.VISIBLE
-                            btnConfirmStage.isEnabled = false
+                            updateSearchingUi(true)
                             btnConfirmStage.setBackgroundColor(Color.parseColor("#9E9E9E"))
 
                             if (isShared && !tripGroupId.isNullOrEmpty()) {
@@ -950,9 +1041,14 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         }
                         "ACCEPTED", "ARRIVED", "IN_PROGRESS" -> {
                             btnConfirmStage.visibility = View.GONE
+                            updateSearchingUi(false)
                             cardDriverInfo.visibility = View.VISIBLE
                             cardDriverInfo.bringToFront()
-
+                            if (status == "IN_PROGRESS") {
+                                btnCancelTrip.visibility = View.GONE
+                            } else {
+                                btnCancelTrip.visibility = View.VISIBLE
+                            }
                             val driverLat = snapshot.child("driverLat").getValue(Double::class.java)
                             val driverLng = snapshot.child("driverLng").getValue(Double::class.java)
                             updateLiveDriverMarker(driverLat, driverLng)
@@ -980,7 +1076,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                             driverMarker = null
                             cardDriverInfo.visibility = View.GONE
                             btnConfirmStage.visibility = View.VISIBLE
-                            btnConfirmStage.isEnabled = true
+                            updateSearchingUi(false)
 
                             if (status == "COMPLETED") {
                                 btnConfirmStage.text = "Trip Completed"

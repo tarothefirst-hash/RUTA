@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -41,8 +42,7 @@ class PassengerHomeActivity : AppCompatActivity() {
     private var activeBookingId: String? = null
     private var hasFiredNotification = false
 
-    // Incoming pairing / emergency listeners — live only while this app is open,
-    // same scope limitation as everything else in RUTA's notification system.
+    // Incoming pairing / emergency listeners
     private var pairRequestListener: ValueEventListener? = null
     private var alertListener: ValueEventListener? = null
     private val shownPairRequestUids = mutableSetOf<String>()
@@ -118,12 +118,10 @@ class PassengerHomeActivity : AppCompatActivity() {
             hasFiredNotification = false
         }
 
-        // Emergency SOS: no more dialing 911 — RUTA notifies the rider's own
-        // trusted contacts with the driver's info and current location instead.
         btnSosEmergency.setOnClickListener {
             val bookingId = activeBookingId
             if (bookingId == null) {
-                android.widget.Toast.makeText(this, "No active trip to report.", android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No active trip to report.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -133,7 +131,7 @@ class PassengerHomeActivity : AppCompatActivity() {
                 } else {
                     "No trusted contacts set up yet — add one from your Profile."
                 }
-                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -147,25 +145,69 @@ class PassengerHomeActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Public method to cancel an ongoing ride search or active booking.
+     * Can be invoked from HomeFragment or dialogs.
+     */
+    fun cancelActiveRide(rideId: String, onComplete: (() -> Unit)? = null) {
+        val updates = mapOf<String, Any>(
+            "status" to "CANCELLED",
+            "cancelledAt" to System.currentTimeMillis(),
+            "cancelledBy" to "PASSENGER"
+        )
+
+        // Updates status in both possible nodes for compatibility across booking versions
+        database.child("ride_requests").child(rideId).updateChildren(updates)
+        database.child("bookings").child(rideId).updateChildren(updates)
+            .addOnSuccessListener {
+                if (activeBookingId == rideId) {
+                    detachRouteDeviationListener()
+                    activeBookingId = null
+                    cardRouteDeviationWarning.visibility = View.GONE
+                }
+                Toast.makeText(this, "Ride request cancelled.", Toast.LENGTH_SHORT).show()
+                onComplete?.invoke()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Failed to cancel: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
     private fun listenForActivePassengerTrip() {
         val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
         database.child("bookings").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                var foundActiveTrip = false
+                var newActiveBookingId: String? = null
+
                 for (child in snapshot.children) {
                     val passengerId = child.child("passengerId").getValue(String::class.java)
                     val status = child.child("status").getValue(String::class.java)
 
-                    if (passengerId == currentUserId && (status == "ACCEPTED" || status == "IN_PROGRESS")) {
-                        val bookingId = child.key ?: return
-                        if (activeBookingId != bookingId) {
-                            activeBookingId = bookingId
-                            monitorRouteDeviationForBooking(bookingId)
-                        }
-                        return
+                    // Includes searching/matching status as well as active accepted trips
+                    if (passengerId == currentUserId &&
+                        (status == "PENDING" || status == "MATCHING" || status == "ACCEPTED" || status == "IN_PROGRESS")) {
+
+                        newActiveBookingId = child.key
+                        foundActiveTrip = true
+                        break
                     }
                 }
+
+                if (foundActiveTrip && newActiveBookingId != null) {
+                    if (activeBookingId != newActiveBookingId) {
+                        detachRouteDeviationListener()
+                        activeBookingId = newActiveBookingId
+                        monitorRouteDeviationForBooking(newActiveBookingId)
+                    }
+                } else {
+                    detachRouteDeviationListener()
+                    activeBookingId = null
+                    cardRouteDeviationWarning.visibility = View.GONE
+                }
             }
+
             override fun onCancelled(error: DatabaseError) {}
         })
     }
@@ -175,7 +217,15 @@ class PassengerHomeActivity : AppCompatActivity() {
 
         activeBookingListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                val status = snapshot.child("status").getValue(String::class.java)
                 val routeStatus = snapshot.child("routeStatus").getValue(String::class.java)
+
+                if (status == "CANCELLED" || status == "COMPLETED") {
+                    cardRouteDeviationWarning.visibility = View.GONE
+                    hasFiredNotification = false
+                    detachRouteDeviationListener()
+                    return
+                }
 
                 if (routeStatus == "DEVIATED") {
                     cardRouteDeviationWarning.visibility = View.VISIBLE
@@ -188,18 +238,22 @@ class PassengerHomeActivity : AppCompatActivity() {
                     hasFiredNotification = false
                 }
             }
+
             override fun onCancelled(error: DatabaseError) {}
         }
 
         bookingRef.addValueEventListener(activeBookingListener!!)
     }
 
-    /**
-     * Shows an Accept/Decline dialog the moment someone scans your QR and sends a
-     * pairing request. shownPairRequestUids stops the same pending request from
-     * re-triggering a dialog every time this node fires again for an unrelated
-     * reason (e.g. a second, different request arriving).
-     */
+    private fun detachRouteDeviationListener() {
+        activeBookingId?.let { id ->
+            activeBookingListener?.let { listener ->
+                database.child("bookings").child(id).removeEventListener(listener)
+            }
+        }
+        activeBookingListener = null
+    }
+
     private fun startIncomingPairRequestListener() {
         val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
@@ -213,7 +267,7 @@ class PassengerHomeActivity : AppCompatActivity() {
                 .setCancelable(false)
                 .setPositiveButton("Accept") { dialog, _ ->
                     EmergencyContactManager.acceptPairRequest(database, myUid, requesterUid) { _, message ->
-                        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                     }
                     shownPairRequestUids.remove(requesterUid)
                     dialog.dismiss()
@@ -227,11 +281,6 @@ class PassengerHomeActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Shows a popup with the sender's name, their driver's info, and a "View on
-     * Map" shortcut whenever a trusted contact you're watching over sends an
-     * emergency alert.
-     */
     private fun startIncomingEmergencyAlertListener() {
         val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
@@ -259,11 +308,7 @@ class PassengerHomeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        activeBookingId?.let { id ->
-            activeBookingListener?.let { listener ->
-                database.child("bookings").child(id).removeEventListener(listener)
-            }
-        }
+        detachRouteDeviationListener()
         FirebaseAuth.getInstance().currentUser?.uid?.let { myUid ->
             pairRequestListener?.let { database.child("pairRequests").child(myUid).removeEventListener(it) }
             alertListener?.let { database.child("emergencyAlerts").child(myUid).removeEventListener(it) }

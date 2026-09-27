@@ -56,6 +56,7 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.maps.android:android-maps-utils:3.8.2")
+    implementation("com.github.bumptech.glide:glide:4.16.0")
     // Firebase BOM (Bill of Materials)
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation("com.google.firebase:firebase-auth")

@@ -34,6 +34,7 @@
                         android:id="@+id/btnMenu"
                         android:layout_width="24dp"
                         android:layout_height="24dp"
+                        android:contentDescription="Open menu"
                         android:src="@drawable/ic_menu"
                         app:tint="@color/ruta_black" />
 
@@ -127,8 +128,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="24dp"
-                        android:columnCount="2"
-                        android:rowCount="2">
+                        android:columnCount="2">
 
                         <!-- Total Riders -->
                         <com.google.android.material.card.MaterialCardView
@@ -164,6 +164,7 @@
                                         android:layout_width="16dp"
                                         android:layout_height="16dp"
                                         android:layout_alignParentEnd="true"
+                                        android:contentDescription="@null"
                                         android:src="@drawable/ic_person"
                                         app:tint="#EF4444" />
                                 </RelativeLayout>
@@ -222,6 +223,7 @@
                                         android:layout_width="16dp"
                                         android:layout_height="16dp"
                                         android:layout_alignParentEnd="true"
+                                        android:contentDescription="@null"
                                         android:src="@drawable/ic_car"
                                         app:tint="#EF4444" />
                                 </RelativeLayout>
@@ -280,6 +282,7 @@
                                         android:layout_width="16dp"
                                         android:layout_height="16dp"
                                         android:layout_alignParentEnd="true"
+                                        android:contentDescription="@null"
                                         android:src="@drawable/ic_notification"
                                         app:tint="#F59E0B" />
                                 </RelativeLayout>
@@ -330,6 +333,7 @@
                                         android:layout_width="16dp"
                                         android:layout_height="16dp"
                                         android:layout_alignParentEnd="true"
+                                        android:contentDescription="@null"
                                         android:src="@drawable/ic_swap_horiz"
                                         app:tint="#EF4444" />
                                 </RelativeLayout>
@@ -351,6 +355,64 @@
                                     android:textColor="#EF4444"
                                     android:textSize="10sp"
                                     android:textStyle="bold" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- TOTAL DRIVER FEES COLLECTED -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_rowWeight="1"
+                            android:layout_columnWeight="2"
+                            android:layout_margin="4dp"
+                            app:cardBackgroundColor="@color/white"
+                            app:cardCornerRadius="8dp"
+                            app:cardElevation="1dp"
+                            app:strokeWidth="0dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <RelativeLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="TOTAL DRIVER FEES COLLECTED"
+                                        android:textColor="@color/ruta_text_muted"
+                                        android:textSize="10sp"
+                                        android:textStyle="bold" />
+
+                                    <ImageView
+                                        android:layout_width="16dp"
+                                        android:layout_height="16dp"
+                                        android:layout_alignParentEnd="true"
+                                        android:contentDescription="@null"
+                                        android:src="@drawable/ic_wallet"
+                                        app:tint="#10B981" />
+                                </RelativeLayout>
+
+                                <TextView
+                                    android:id="@+id/txtTotalPlatformFees"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:text="₱0.00"
+                                    android:textColor="#10B981"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="TOTAL SERVICE COMMISSIONS"
+                                    android:textColor="@color/ruta_text_muted"
+                                    android:textSize="10sp" />
                             </LinearLayout>
                         </com.google.android.material.card.MaterialCardView>
                     </GridLayout>
@@ -420,7 +482,7 @@
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
 
-                <!-- 2. RIDER ACCOUNTS SECTION -->
+                <!-- 2. ID CONFIRMATION SECTION -->
                 <LinearLayout
                     android:id="@+id/layoutRiders"
                     android:layout_width="match_parent"
@@ -440,7 +502,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Rider accounts"
+                        android:text="ID Confirmation"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -448,7 +510,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Recently registered accounts in the RUTA network."
+                        android:text="Verify rider identities and registered accounts across RUTA."
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -470,7 +532,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Accounts"
+                                android:text="Verified Accounts"
                                 android:textColor="@color/ruta_black"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
@@ -478,7 +540,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Manage the people using RUTA."
+                                android:text="Manage identity statuses for passengers."
                                 android:textColor="@color/ruta_text_secondary"
                                 android:textSize="12sp" />
 
@@ -539,13 +601,29 @@
                             android:orientation="vertical"
                             android:padding="16dp">
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="All driver applications"
-                                android:textColor="@color/ruta_black"
-                                android:textSize="14sp"
-                                android:textStyle="bold" />
+                            <RelativeLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_centerVertical="true"
+                                    android:text="All driver applications"
+                                    android:textColor="@color/ruta_black"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                                <Button
+                                    android:id="@+id/btnAddDriver"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="36dp"
+                                    android:layout_alignParentEnd="true"
+                                    android:backgroundTint="@color/ruta_primary"
+                                    android:paddingHorizontal="12dp"
+                                    android:text="+ Add Driver"
+                                    android:textSize="11sp" />
+                            </RelativeLayout>
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -614,17 +692,10 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Recent activity"
+                                android:text="Recent Trips"
                                 android:textColor="@color/ruta_black"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Live events from your network."
-                                android:textColor="@color/ruta_text_secondary"
-                                android:textSize="12sp" />
 
                             <LinearLayout
                                 android:id="@+id/layoutTripFeed"
@@ -636,9 +707,9 @@
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
 
-                <!-- 5. SETTINGS SECTION -->
+                <!-- 5. DRIVER WALLET CASH-INS SECTION -->
                 <LinearLayout
-                    android:id="@+id/layoutSettings"
+                    android:id="@+id/layoutDriverWallet"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
@@ -648,7 +719,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="SYSTEM"
+                        android:text="WORKSPACE"
                         android:textColor="#10B981"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -656,7 +727,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Settings"
+                        android:text="Driver Wallet Cash-ins"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -664,7 +735,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Manage your dashboard preferences and session."
+                        android:text="Review and approve wallet top-up requests from drivers."
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -680,96 +751,63 @@
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical">
+                            android:orientation="vertical"
+                            android:padding="16dp">
 
-                            <RelativeLayout
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Pending Cash-in Requests"
+                                android:textColor="@color/ruta_black"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <LinearLayout
+                                android:id="@+id/layoutWalletRequestsList"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:padding="16dp">
-
-                                <LinearLayout
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Dark mode"
-                                        android:textColor="@color/ruta_black"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Use a darker color scheme for the admin dashboard."
-                                        android:textColor="@color/ruta_text_secondary"
-                                        android:textSize="12sp" />
-                                </LinearLayout>
-
-                                <com.google.android.material.switchmaterial.SwitchMaterial
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_alignParentEnd="true"
-                                    android:layout_centerVertical="true" />
-                            </RelativeLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="#F3F4F6" />
-
-                            <RelativeLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:padding="16dp">
-
-                                <LinearLayout
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Sign out"
-                                        android:textColor="@color/ruta_black"
-                                        android:textSize="14sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="End your current administrator session."
-                                        android:textColor="@color/ruta_text_secondary"
-                                        android:textSize="12sp" />
-                                </LinearLayout>
-
-                                <Button
-                                    android:id="@+id/btnAdminLogout"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_alignParentEnd="true"
-                                    android:layout_centerVertical="true"
-                                    android:text="Sign out"
-                                    android:textColor="#EF4444"
-                                    app:strokeColor="#EF4444" />
-                            </RelativeLayout>
-
+                                android:layout_marginTop="16dp"
+                                android:orientation="vertical" />
                         </LinearLayout>
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
 
-                <!-- Spacer for bottom padding -->
-                <View
+                <!-- 6. SETTINGS SECTION -->
+                <LinearLayout
+                    android:id="@+id/layoutSettings"
                     android:layout_width="match_parent"
-                    android:layout_height="64dp" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SYSTEM"
+                        android:textColor="@color/ruta_text_muted"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Settings"
+                        android:textColor="@color/ruta_black"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnAdminLogout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:backgroundTint="#EF4444"
+                        android:text="LOGOUT ADMIN" />
+                </LinearLayout>
 
             </FrameLayout>
         </androidx.core.widget.NestedScrollView>
-
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <com.google.android.material.navigation.NavigationView
@@ -777,11 +815,7 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="@color/white"
         app:headerLayout="@layout/nav_header_admin"
-        app:itemIconTint="@color/ruta_text_secondary"
-        app:itemShapeFillColor="#F3F4F6"
-        app:itemTextColor="@color/ruta_text_secondary"
         app:menu="@menu/menu_admin_drawer" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

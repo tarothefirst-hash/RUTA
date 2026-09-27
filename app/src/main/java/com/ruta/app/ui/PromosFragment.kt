@@ -1,26 +1,24 @@
 package com.ruta.app.ui
 
-import android.Manifest
-import android.app.Activity
-import android.content.Intent
-import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
+import android.util.Base64
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.storage.FirebaseStorage
 import com.ruta.app.databinding.FragmentPromosBinding
 import com.ruta.app.model.DiscountRequest
-import java.util.UUID
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import com.ruta.app.util.ImageUtils
 
 class PromosFragment : Fragment() {
 
@@ -33,34 +31,19 @@ class PromosFragment : Fragment() {
 
     private val auth = FirebaseAuth.getInstance()
     private val database = FirebaseDatabase.getInstance().reference
-    private val storage = FirebaseStorage.getInstance().reference
 
-    // Image Picker Launcher
+    // Standard activity result launcher for image selection
     private val imagePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val uri = result.data?.data
-            if (uri != null) {
-                if (isSelectingFront) {
-                    frontImageUri = uri
-                    binding.imgFrontPreview.setImageURI(uri)
-                } else {
-                    backImageUri = uri
-                    binding.imgBackPreview.setImageURI(uri)
-                }
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            if (isSelectingFront) {
+                frontImageUri = it
+                binding.imgFrontPreview.setImageURI(it)
+            } else {
+                backImageUri = it
+                binding.imgBackPreview.setImageURI(it)
             }
-        }
-    }
-
-    // Permission Launcher for Android 12 and lower
-    private val requestStoragePermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            launchImagePickerIntent()
-        } else {
-            Toast.makeText(requireContext(), "Storage permission is required to upload ID photos.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -72,12 +55,12 @@ class PromosFragment : Fragment() {
 
         binding.btnUploadFront.setOnClickListener {
             isSelectingFront = true
-            openImagePickerWithPermissionCheck()
+            imagePickerLauncher.launch("image/*")
         }
 
         binding.btnUploadBack.setOnClickListener {
             isSelectingFront = false
-            openImagePickerWithPermissionCheck()
+            imagePickerLauncher.launch("image/*")
         }
 
         binding.btnSubmitDiscount.setOnClickListener {
@@ -87,60 +70,56 @@ class PromosFragment : Fragment() {
         return binding.root
     }
 
-    private fun openImagePickerWithPermissionCheck() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ (API 33+) does not need explicit READ_EXTERNAL_STORAGE for photo picking
-            launchImagePickerIntent()
-        } else {
-            // Android 12 and below require runtime READ_EXTERNAL_STORAGE check
-            val permission = Manifest.permission.READ_EXTERNAL_STORAGE
-            if (ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED) {
-                launchImagePickerIntent()
-            } else {
-                requestStoragePermissionLauncher.launch(permission)
-            }
-        }
-    }
-
-    private fun launchImagePickerIntent() {
-        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-        imagePickerLauncher.launch(intent)
-    }
-
     private fun submitDiscountApplication() {
-        val user = auth.currentUser ?: return
-        if (frontImageUri == null || backImageUri == null) {
+        val user = auth.currentUser
+        if (user == null) {
+            Toast.makeText(context, "User not authenticated.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val frontUri = frontImageUri
+        val backUri = backImageUri
+
+        if (frontUri == null || backUri == null) {
             Toast.makeText(context, "Please upload both Front and Back of your ID.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val discountType = if (binding.radioStudent.isChecked) "STUDENT" else "SENIOR"
         binding.progressBar.visibility = View.VISIBLE
         binding.btnSubmitDiscount.isEnabled = false
 
-        // 1. Upload Front Image
-        val frontRef = storage.child("discount_ids/${user.uid}_front_${UUID.randomUUID()}.jpg")
-        frontRef.putFile(frontImageUri!!).addOnSuccessListener {
-            frontRef.downloadUrl.addOnSuccessListener { frontUrl: Uri ->
+        // Convert images on a background thread to prevent UI freeze
+        Thread {
+            try {
+                val frontBase64 = ImageUtils.uriToCompressedBase64(requireContext(), frontUri)
+                val backBase64 = ImageUtils.uriToCompressedBase64(requireContext(), backUri)
 
-                // 2. Upload Back Image
-                val backRef = storage.child("discount_ids/${user.uid}_back_${UUID.randomUUID()}.jpg")
-                backRef.putFile(backImageUri!!).addOnSuccessListener {
-                    backRef.downloadUrl.addOnSuccessListener { backUrl: Uri ->
-
-                        // 3. Save Request to Firebase Realtime Database
-                        saveRequestToDatabase(discountType, frontUrl.toString(), backUrl.toString())
+                requireActivity().runOnUiThread {
+                    if (frontBase64 == null || backBase64 == null) {
+                        resetLoadingState()
+                        Toast.makeText(context, "Failed to process ID photos.", Toast.LENGTH_SHORT).show()
+                        return@runOnUiThread
                     }
+
+                    val discountType = if (binding.radioStudent.isChecked) "STUDENT" else "SENIOR"
+
+                    // Format as Data URI before saving to Realtime Database
+                    val frontDataUri = "data:image/jpeg;base64,$frontBase64"
+                    val backDataUri = "data:image/jpeg;base64,$backBase64"
+
+                    saveRequestToDatabase(discountType, frontDataUri, backDataUri)
+                }
+            } catch (e: Exception) {
+                requireActivity().runOnUiThread {
+                    resetLoadingState()
+                    Log.e("PromosFragment", "Base64 conversion failed", e)
+                    Toast.makeText(context, "Error processing images: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
-        }.addOnFailureListener { err ->
-            binding.progressBar.visibility = View.GONE
-            binding.btnSubmitDiscount.isEnabled = true
-            Toast.makeText(context, "Failed to upload images: ${err.message}", Toast.LENGTH_SHORT).show()
-        }
+        }.start()
     }
 
-    private fun saveRequestToDatabase(type: String, frontUrl: String, backUrl: String) {
+    private fun saveRequestToDatabase(type: String, frontBase64: String, backBase64: String) {
         val uid = auth.currentUser?.uid ?: return
         val requestId = database.child("discount_requests").push().key ?: return
 
@@ -148,22 +127,72 @@ class PromosFragment : Fragment() {
             val firstName = snapshot.child("firstName").getValue(String::class.java) ?: ""
             val lastName = snapshot.child("lastName").getValue(String::class.java) ?: ""
 
+            // Base64 strings formatted as Data URIs so image loaders like Glide/Picasso or web admins can render them directly
             val request = DiscountRequest(
                 requestId = requestId,
                 userId = uid,
                 userName = "$firstName $lastName".trim(),
                 discountType = type,
-                idFrontUrl = frontUrl,
-                idBackUrl = backUrl,
+                idFrontUrl = "data:image/jpeg;base64,$frontBase64",
+                idBackUrl = "data:image/jpeg;base64,$backBase64",
                 status = "PENDING"
             )
 
             database.child("discount_requests").child(requestId).setValue(request)
                 .addOnSuccessListener {
-                    binding.progressBar.visibility = View.GONE
+                    resetLoadingState()
                     Toast.makeText(context, "Application submitted! Pending admin review.", Toast.LENGTH_LONG).show()
                 }
+                .addOnFailureListener { err ->
+                    resetLoadingState()
+                    Toast.makeText(context, "Database error: ${err.message}", Toast.LENGTH_SHORT).show()
+                }
+        }.addOnFailureListener { err ->
+            resetLoadingState()
+            Toast.makeText(context, "Failed to fetch user data: ${err.message}", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // Helper method to scale and compress the image before encoding
+    private fun uriToBase64(uri: Uri): String? {
+        return try {
+            val inputStream: InputStream? = requireContext().contentResolver.openInputStream(uri)
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close() ?: return null
+
+            // Resize image to max 800px width/height while maintaining aspect ratio
+            val maxDimension = 800
+            val width = originalBitmap.width
+            val height = originalBitmap.height
+
+            val scaledWidth: Int
+            val scaledHeight: Int
+
+            if (width > height) {
+                scaledWidth = maxDimension
+                scaledHeight = (maxDimension * (height.toFloat() / width)).toInt()
+            } else {
+                scaledHeight = maxDimension
+                scaledWidth = (maxDimension * (width.toFloat() / height)).toInt()
+            }
+
+            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, scaledWidth, scaledHeight, true)
+            val byteArrayOutputStream = ByteArrayOutputStream()
+
+            // Compress as JPEG with 70% quality (keeps payload under ~150KB per photo)
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream)
+            val byteArray = byteArrayOutputStream.toByteArray()
+
+            Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.e("PromosFragment", "Error converting Uri to Base64", e)
+            null
+        }
+    }
+
+    private fun resetLoadingState() {
+        binding.progressBar.visibility = View.GONE
+        binding.btnSubmitDiscount.isEnabled = true
     }
 
     override fun onDestroyView() {

@@ -5,6 +5,9 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
@@ -14,7 +17,7 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
-
+import com.ruta.app.util.keepClearOfKeyboard
 class ChatActivity : AppCompatActivity() {
 
     private lateinit var bookingId: String
@@ -26,34 +29,55 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 1. Enable Edge-to-Edge display
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         setContentView(R.layout.activity_chat)
+
+        // 2. Adjust top padding for Status Bar so MaterialToolbar isn't cut off
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(
+                systemBars.left,
+                systemBars.top,
+                systemBars.right,
+                view.paddingBottom
+            )
+            insets
+        }
+
+        // 3. Attach keyboard handler to dynamically lift chat input and messages
+        keepClearOfKeyboard(findViewById(android.R.id.content))
 
         bookingId = intent.getStringExtra("BOOKING_ID") ?: run {
             Toast.makeText(this, "No active booking found", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
-        currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: run {
+            Toast.makeText(this, "User not authenticated", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
 
-        // Matching your XML IDs: rvChatMessage, btnSendChat, chatToolbar, recyclerChat
         val etChatMessage = findViewById<EditText>(R.id.rvChatMessage)
         val btnSendChat = findViewById<Button>(R.id.btnSendChat)
         val toolbar = findViewById<MaterialToolbar>(R.id.chatToolbar)
+
         setSupportActionBar(toolbar)
+
         FirebaseDatabase.getInstance().reference.child("users").child(currentUserId).child("role")
             .get().addOnSuccessListener { snapshot ->
                 val role = snapshot.getValue(String::class.java)
-                if (role == "DRIVER") {
-                    toolbar.title = "Chat with Passenger"
-                } else {
-                    toolbar.title = "Chat with Driver"
-                }
+                toolbar.title = if (role == "DRIVER") "Chat with Passenger" else "Chat with Driver"
             }
+
         toolbar.setNavigationOnClickListener {
             finish()
         }
 
-        // Initialize RecyclerView with your layout's ID: recyclerChat
+        // Initialize RecyclerView
         recyclerChat = findViewById(R.id.recyclerChat)
         val layoutManager = LinearLayoutManager(this)
         layoutManager.stackFromEnd = true // Keeps chat pushed to bottom

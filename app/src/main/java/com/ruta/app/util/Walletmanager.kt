@@ -6,18 +6,6 @@ import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.MutableData
 import com.google.firebase.database.Transaction
 
-/**
- * WalletManager
- * -------------
- * Driver wallet: platform commission auto-deducted per completed trip, plus
- * pseudo-real GCash cash-in (driver declares an amount sent via QR, an admin
- * confirms it out-of-band — no proof upload / admin approval screen tonight,
- * that's next-pass scope).
- *
- * Balance is allowed to go negative. RUTA gives drivers a 2-day grace period
- * before any enforcement kicks in, so no floor/blocking is applied here at all —
- * that's a deliberate product decision, not a missing feature.
- */
 object WalletManager {
 
     private const val STANDARD_COMMISSION_RATE = 0.10   // regular rides
@@ -28,11 +16,17 @@ object WalletManager {
         return fare * rate
     }
 
-    /**
-     * Deducts commission via a Firebase transaction so two trips completing close
-     * together (e.g. a shared ride's two bookings finishing back-to-back) can't
-     * race each other and silently drop an update.
-     */
+    private fun Any?.toDoubleValue(): Double {
+        return when (this) {
+            is Double -> this
+            is Long -> this.toDouble()
+            is Int -> this.toDouble()
+            is Float -> this.toDouble()
+            is String -> this.toDoubleOrNull() ?: 0.0
+            else -> 0.0
+        }
+    }
+
     fun deductCommission(
         database: DatabaseReference,
         driverId: String,
@@ -45,14 +39,21 @@ object WalletManager {
 
         walletRef.runTransaction(object : Transaction.Handler {
             override fun doTransaction(currentData: MutableData): Transaction.Result {
-                val current = currentData.getValue(Double::class.java) ?: 0.0
-                currentData.value = current - commission
+                // Read raw value safely to prevent Long -> Double deserialization nulls
+                val currentRaw = currentData.value
+                val current = currentRaw.toDoubleValue()
+
+                val updatedBalance = current - commission
+                currentData.value = updatedBalance
                 return Transaction.success(currentData)
             }
 
             override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
-                if (committed) {
-                    onComplete(snapshot?.getValue(Double::class.java) ?: 0.0)
+                if (committed && snapshot != null) {
+                    val finalBalance = snapshot.value.toDoubleValue()
+                    onComplete(finalBalance)
+                } else {
+                    onComplete(0.0)
                 }
             }
         })
@@ -77,7 +78,7 @@ object WalletManager {
             "driverId" to driverId,
             "driverName" to driverName,
             "amount" to amount,
-            "status" to "PENDING", // PENDING -> APPROVED / REJECTED (admin-side, not built tonight)
+            "status" to "PENDING", // PENDING -> APPROVED / REJECTED
             "createdAt" to System.currentTimeMillis()
         )
         ref.setValue(data)
