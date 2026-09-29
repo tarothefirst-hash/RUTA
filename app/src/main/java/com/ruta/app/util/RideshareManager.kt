@@ -107,15 +107,52 @@ object RideshareManager {
     }
 
     // ---------------------------------------------------------------------------
-    // 2. STOP SEQUENCING
+    // 2. STOP SEQUENCING (GLOBAL PATH OPTIMIZATION)
     // ---------------------------------------------------------------------------
     object Sequencer {
-        fun sequenceStops(driverStart: LatLng, candidates: List<RideshareCandidate>): List<RideshareStop> {
-            val stops = mutableListOf<RideshareStop>()
-            var current = driverStart
 
+        fun sequenceStops(driverStart: LatLng, candidates: List<RideshareCandidate>): List<RideshareStop> {
+            if (candidates.isEmpty()) return emptyList()
+
+            // Single candidate fallback
+            if (candidates.size == 1) {
+                val c = candidates.first()
+                return listOf(
+                    RideshareStop(c.bookingId, StopType.PICKUP, c.pickup),
+                    RideshareStop(c.bookingId, StopType.DROPOFF, c.dropoff)
+                )
+            }
+
+            // 2-Passenger shared ride path evaluation
+            if (candidates.size == 2) {
+                val a = candidates[0]
+                val b = candidates[1]
+
+                val pA = RideshareStop(a.bookingId, StopType.PICKUP, a.pickup)
+                val dA = RideshareStop(a.bookingId, StopType.DROPOFF, a.dropoff)
+                val pB = RideshareStop(b.bookingId, StopType.PICKUP, b.pickup)
+                val dB = RideshareStop(b.bookingId, StopType.DROPOFF, b.dropoff)
+
+                // 4 Valid logical permutations where Pickups precede Dropoffs
+                val validPermutations = listOf(
+                    listOf(pA, pB, dA, dB),
+                    listOf(pA, pB, dB, dA),
+                    listOf(pA, dA, pB, dB),
+                    listOf(pB, pA, dB, dA),
+                    listOf(pB, pA, dA, dB),
+                    listOf(pB, dB, pA, dA)
+                )
+
+                return validPermutations.minByOrNull { perm ->
+                    calculateTotalTripDistance(driverStart, perm)
+                } ?: validPermutations.first()
+            }
+
+            // Fallback strategy for 3+ passengers: Global insertion approach
+            val stops = mutableListOf<RideshareStop>()
             val remainingPickups = candidates.toMutableList()
             val awaitingDropoff = mutableListOf<RideshareCandidate>()
+            var current = driverStart
 
             while (remainingPickups.isNotEmpty() || awaitingDropoff.isNotEmpty()) {
                 val nearestPickup = remainingPickups.minByOrNull { distanceMeters(current, it.pickup) }
@@ -137,6 +174,16 @@ object RideshareManager {
             }
 
             return stops
+        }
+
+        private fun calculateTotalTripDistance(start: LatLng, path: List<RideshareStop>): Double {
+            var total = 0.0
+            var prev = start
+            for (stop in path) {
+                total += distanceMeters(prev, stop.location)
+                prev = stop.location
+            }
+            return total
         }
 
         private fun distanceMeters(a: LatLng, b: LatLng): Double {

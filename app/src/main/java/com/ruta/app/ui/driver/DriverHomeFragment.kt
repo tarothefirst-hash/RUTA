@@ -4,11 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Rect
 import android.location.Location
 import android.os.Bundle
 import android.os.Looper
@@ -30,7 +26,6 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
@@ -50,6 +45,7 @@ import com.ruta.app.model.Booking
 import com.ruta.app.ui.ChatActivity
 import com.ruta.app.ui.DirectionsHelper
 import com.ruta.app.ui.LoginActivity
+import com.ruta.app.util.MapMarkerUtils
 import com.ruta.app.util.RideshareFareCalculator
 import com.ruta.app.util.RideshareManager
 import com.ruta.app.util.RideshareRouteOptimizer
@@ -62,15 +58,15 @@ import java.util.concurrent.Executors
 class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
-        private const val PICKUP_RADIUS_METERS = 100.0   // looser — driver can also override manually anytime
-        private const val DROPOFF_RADIUS_METERS = 60.0   // strict — no manual override, must be within range
+        private const val PICKUP_RADIUS_METERS = 100.0
+        private const val DROPOFF_RADIUS_METERS = 60.0
     }
 
     private enum class DriverRideState {
-        IDLE,               // Looking for requests
-        REQUEST_RECEIVED,   // Incoming booking banner shown (Pickup <-> Dropoff preview)
-        ACCEPTED,           // On the way to Pickup (Driver -> Pickup route)
-        IN_PROGRESS         // On the way to Dropoff (Driver -> Dropoff route)
+        IDLE,
+        REQUEST_RECEIVED,
+        ACCEPTED,
+        IN_PROGRESS
     }
 
     private var _binding: FragmentDriverHomeBinding? = null
@@ -148,38 +144,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         mMap = googleMap
         mMap.uiSettings.isZoomControlsEnabled = true
         checkLocationPermission()
-    }
-
-    private fun createLavenderMarkerWithLabel(label: String): BitmapDescriptor {
-        val context = context ?: return BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET)
-
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#4A3B83")
-            textSize = 36f
-            isFakeBoldText = true
-        }
-
-        val textBounds = Rect()
-        textPaint.getTextBounds(label, 0, label.length, textBounds)
-
-        val drawable = ContextCompat.getDrawable(context, R.drawable.ic_location_pin)
-        val pinWidth = 80
-        val pinHeight = 100
-
-        drawable?.setTint(Color.parseColor("#BDB2FE"))
-
-        val bitmapWidth = (pinWidth + textBounds.width() + 30).coerceAtLeast(120)
-        val bitmapHeight = pinHeight + textBounds.height() + 20
-
-        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-
-        drawable?.setBounds(0, 0, pinWidth, pinHeight)
-        drawable?.draw(canvas)
-
-        canvas.drawText(label, (pinWidth + 10).toFloat(), (pinHeight / 2 + textBounds.height() / 2).toFloat(), textPaint)
-
-        return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
     private fun setupOnlineSwitch() {
@@ -419,16 +383,17 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             trimPassedRoutePoints(latLng)
         }
 
-        if (currentRideState == DriverRideState.IN_PROGRESS && rawRoutePoints.isNotEmpty()) {
+        val isTripActive = (currentRideState == DriverRideState.IN_PROGRESS) ||
+                (!currentBooking?.tripGroupId.isNullOrEmpty() && currentRideState == DriverRideState.ACCEPTED)
+
+        if (isTripActive && rawRoutePoints.isNotEmpty()) {
             val isDeviated = RouteDeviationManager.isDriverDeviated(location, rawRoutePoints)
             if (isDeviated && !wasDeviated) {
                 wasDeviated = true
                 flagTripAsDeviated()
             } else if (!isDeviated && wasDeviated) {
                 wasDeviated = false
-                activeBookingId?.let { id ->
-                    database.child("bookings").child(id).child("routeStatus").setValue("NORMAL")
-                }
+                clearTripDeviation()
             }
         }
 
@@ -483,7 +448,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun flagTripAsDeviated() {
-        val bookingId = activeBookingId ?: return
+        val booking = currentBooking ?: return
+        val tripGroupId = booking.tripGroupId
 
         val deviationUpdates = hashMapOf<String, Any>(
             "routeStatus" to "DEVIATED",
@@ -492,7 +458,42 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             "deviatedTimestamp" to System.currentTimeMillis()
         )
 
-        database.child("bookings").child(bookingId).updateChildren(deviationUpdates)
+        if (!tripGroupId.isNullOrEmpty()) {
+            database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        for (child in snapshot.children) {
+                            child.ref.updateChildren(deviationUpdates)
+                        }
+                    }
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        } else {
+            activeBookingId?.let { id ->
+                database.child("bookings").child(id).updateChildren(deviationUpdates)
+            }
+        }
+    }
+
+    private fun clearTripDeviation() {
+        val booking = currentBooking ?: return
+        val tripGroupId = booking.tripGroupId
+
+        if (!tripGroupId.isNullOrEmpty()) {
+            database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        for (child in snapshot.children) {
+                            child.ref.child("routeStatus").setValue("NORMAL")
+                        }
+                    }
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        } else {
+            activeBookingId?.let { id ->
+                database.child("bookings").child(id).child("routeStatus").setValue("NORMAL")
+            }
+        }
     }
 
     private fun trimPassedRoutePoints(driverPos: LatLng) {
@@ -644,30 +645,30 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         activePolyline = null
 
         val bounds = LatLngBounds.Builder()
-        var pickupIndex = 1
-        var dropoffIndex = 1
+        val candidates = group.map {
+            RideshareManager.RideshareCandidate(
+                it.bookingId, it.passengerId,
+                LatLng(it.pickupLat, it.pickupLng), LatLng(it.dropoffLat, it.dropoffLng)
+            )
+        }
+        val anchor = currentLatLng ?: candidates.first().pickup
+        val sequencedStops = RideshareManager.Sequencer.sequenceStops(anchor, candidates)
 
-        group.forEach { booking ->
-            val pLoc = LatLng(booking.pickupLat, booking.pickupLng)
-            val dLoc = LatLng(booking.dropoffLat, booking.dropoffLng)
+        var pCount = 1
+        var dCount = 1
+
+        sequencedStops.forEach { stop ->
+            val isPickup = stop.type == RideshareManager.StopType.PICKUP
+            val tag = if (isPickup) "P${pCount++}" else "D${dCount++}"
+            val color = if (isPickup) Color.parseColor("#4CAF50") else Color.parseColor("#E53935")
 
             mMap.addMarker(
                 MarkerOptions()
-                    .position(pLoc)
-                    .title("Pickup $pickupIndex: ${booking.passengerName}")
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))
+                    .position(stop.location)
+                    .title("Stop $tag")
+                    .icon(MapMarkerUtils.createNumberedMarker(requireContext(), tag, color))
             )
-            bounds.include(pLoc)
-            pickupIndex++
-
-            mMap.addMarker(
-                MarkerOptions()
-                    .position(dLoc)
-                    .title("Dropoff $dropoffIndex: ${booking.passengerName}")
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
-            )
-            bounds.include(dLoc)
-            dropoffIndex++
+            bounds.include(stop.location)
         }
 
         currentLatLng?.let { driverLoc ->
@@ -763,13 +764,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     Toast.makeText(requireContext(), "Ride accepted!", Toast.LENGTH_SHORT).show()
                 }
         }
-    }
-
-    private fun getRutaPrimaryMarkerIcon(): BitmapDescriptor {
-        val colorInt = ContextCompat.getColor(requireContext(), R.color.ruta_primary_dark)
-        val hsv = FloatArray(3)
-        Color.colorToHSV(colorInt, hsv)
-        return BitmapDescriptorFactory.defaultMarker(hsv[0])
     }
 
     private fun acceptCurrentRide() {
@@ -873,10 +867,40 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         )
                     }
                     val anchor = currentLatLng ?: candidates.first().pickup
-                    onReady(RideshareManager.Sequencer.sequenceStops(anchor, candidates))
+                    val sequencedStops = RideshareManager.Sequencer.sequenceStops(anchor, candidates)
+
+                    val bookingsMap = group.associateBy { it.bookingId }
+                    syncSequenceToFirebase(tripGroupId, sequencedStops, bookingsMap)
+
+                    onReady(sequencedStops)
                 }
                 override fun onCancelled(error: DatabaseError) {}
             })
+    }
+
+    private fun syncSequenceToFirebase(
+        tripGroupId: String,
+        sortedStops: List<RideshareManager.RideshareStop>,
+        bookingsMap: Map<String, Booking> = emptyMap()
+    ) {
+        var pCount = 1
+        var dCount = 1
+
+        val sequenceData = sortedStops.mapIndexed { index, stop ->
+            val isPickup = stop.type == RideshareManager.StopType.PICKUP
+            val label = if (isPickup) "P${pCount++}" else "D${dCount++}"
+            val passengerId = bookingsMap[stop.bookingId]?.passengerId ?: ""
+
+            mapOf(
+                "bookingId" to stop.bookingId,
+                "passengerId" to passengerId,
+                "label" to label,
+                "sequenceOrder" to index + 1,
+                "isPickup" to isPickup
+            )
+        }
+
+        database.child("tripGroups").child(tripGroupId).child("stops").setValue(sequenceData)
     }
 
     private fun drawGroupRoutePreviewOnly(stops: List<RideshareManager.RideshareStop>) {
@@ -884,7 +908,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val apiKey = getString(R.string.google_maps_key)
 
         executor.execute {
-            val finalRoute = RideshareRouteOptimizer.buildFinalDriverRoute(driverLoc, stops, apiKey)
+            val remainingStops = if (currentStopIndex in stops.indices) stops.subList(currentStopIndex, stops.size) else stops
+            val finalRoute = RideshareRouteOptimizer.buildFinalDriverRoute(driverLoc, remainingStops, apiKey)
             activity?.runOnUiThread {
                 if (::mMap.isInitialized) {
                     mMap.clear()
@@ -902,25 +927,19 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     )
                 }
 
-                var pickupCount = 0
-                var dropoffCount = 0
-                val rutaIcon = getRutaPrimaryMarkerIcon()
+                var pickupCount = 1
+                var dropoffCount = 1
 
                 stops.forEach { stop ->
                     val isPickup = stop.type == RideshareManager.StopType.PICKUP
-                    val label = if (isPickup) {
-                        pickupCount++
-                        "Pickup $pickupCount"
-                    } else {
-                        dropoffCount++
-                        "Drop Off $dropoffCount"
-                    }
+                    val tag = if (isPickup) "P${pickupCount++}" else "D${dropoffCount++}"
+                    val color = if (isPickup) Color.parseColor("#4CAF50") else Color.parseColor("#E53935")
 
                     val marker = mMap.addMarker(
                         MarkerOptions()
                             .position(stop.location)
-                            .title(label)
-                            .icon(rutaIcon)
+                            .title("$tag: ${if (isPickup) "Pickup" else "Dropoff"}")
+                            .icon(MapMarkerUtils.createNumberedMarker(requireContext(), tag, color))
                     )
                     marker?.showInfoWindow()
                 }
@@ -940,7 +959,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val pickupLatLng = LatLng(booking.pickupLat, booking.pickupLng)
 
         pickupMarker = mMap.addMarker(
-            MarkerOptions().position(pickupLatLng).title("Pickup Point")
+            MarkerOptions()
+                .position(pickupLatLng)
+                .title("Pickup Point (P1)")
+                .icon(MapMarkerUtils.createNumberedMarker(requireContext(), "P1", Color.parseColor("#4CAF50")))
         )
 
         drawRoute(driverLoc, pickupLatLng)
@@ -961,8 +983,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val dropoffLatLng = LatLng(booking.dropoffLat, booking.dropoffLng)
 
         dropoffMarker = mMap.addMarker(
-            MarkerOptions().position(dropoffLatLng).title("Dropoff Point")
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))
+            MarkerOptions()
+                .position(dropoffLatLng)
+                .title("Dropoff Point (D1)")
+                .icon(MapMarkerUtils.createNumberedMarker(requireContext(), "D1", Color.parseColor("#E53935")))
         )
 
         drawRoute(driverLoc, dropoffLatLng)
@@ -1050,9 +1074,36 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         database.child("tripGroups").child(tripGroupId).child("currentStopIndex").setValue(currentStopIndex)
             .addOnCompleteListener {
                 if (currentStopIndex >= currentGroupStops.size) {
-                    finishSharedTrip(tripGroupId)
+                    database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+                        .addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(snapshot: DataSnapshot) {
+                                val activeBookingsExist = snapshot.children.any { child ->
+                                    val status = child.child("status").getValue(String::class.java)
+                                    status != "COMPLETED" && status != "CANCELLED"
+                                }
+
+                                if (!activeBookingsExist) {
+                                    finishSharedTrip(tripGroupId)
+                                } else {
+                                    loadGroupStopsLocally(tripGroupId) { refreshedStops ->
+                                        currentGroupStops = refreshedStops
+                                        updateCardForCurrentStop()
+                                        if (currentGroupStops.isNotEmpty()) {
+                                            drawGroupRoutePreviewOnly(currentGroupStops)
+                                        }
+                                    }
+                                }
+                            }
+
+                            override fun onCancelled(error: DatabaseError) {
+                                finishSharedTrip(tripGroupId)
+                            }
+                        })
                 } else {
                     updateCardForCurrentStop()
+                    if (currentGroupStops.isNotEmpty()) {
+                        drawGroupRoutePreviewOnly(currentGroupStops)
+                    }
                 }
             }
     }
@@ -1319,11 +1370,12 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         clearRouteAndMarkers()
 
         pickupMarker = mMap.addMarker(
-            MarkerOptions().position(pickupLatLng).title("Pickup Point")
+            MarkerOptions().position(pickupLatLng).title("Pickup Point (P1)")
+                .icon(MapMarkerUtils.createNumberedMarker(requireContext(), "P1", Color.parseColor("#4CAF50")))
         )
         dropoffMarker = mMap.addMarker(
-            MarkerOptions().position(dropoffLatLng).title("Dropoff Point")
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))
+            MarkerOptions().position(dropoffLatLng).title("Dropoff Point (D1)")
+                .icon(MapMarkerUtils.createNumberedMarker(requireContext(), "D1", Color.parseColor("#E53935")))
         )
 
         drawRoute(pickupLatLng, dropoffLatLng)

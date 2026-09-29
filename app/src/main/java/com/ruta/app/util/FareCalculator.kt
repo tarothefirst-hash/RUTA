@@ -6,7 +6,7 @@ enum class VehicleType(
     val ratePerMin: Double
 ) {
     SEDAN(45.0, 15.0, 2.0),
-    SUV(55.0, 18.0, 2.0)
+
 }
 
 object FareCalculator {
@@ -19,6 +19,9 @@ object FareCalculator {
         }
     }
 
+    /**
+     * Calculates single-passenger or full-route fares.
+     */
     fun calculateFare(
         distanceKm: Double,
         durationMin: Double,
@@ -32,16 +35,38 @@ object FareCalculator {
         val timeCost = durationMin * vehicleType.ratePerMin
         var totalFare = vehicleType.flagDown + distanceCost + timeCost
 
-        totalFare *= getSurgeMultiplier(hourOfDay)   // <-- was missing entirely
+        totalFare *= getSurgeMultiplier(hourOfDay)
 
+        // Apply shared ride reduction factor to base distance/time rates
         if (isShared) {
             totalFare *= (1.0 - sharedDiscountPercentage)
         }
 
+        // Apply Student/PWD/Senior ID discount
         if (hasDiscount) {
             totalFare *= 0.80
         }
 
         return kotlin.math.round(totalFare)
+    }
+
+
+    fun calculateRideshareSegmentFare(
+        passengerSegmentDistanceKm: Double,
+        passengerSegmentDurationMin: Double,
+        vehicleType: VehicleType,
+        hasDiscount: Boolean = false,
+        sharedDiscountPercentage: Double = 0.25,
+        hourOfDay: Int = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    ): Double {
+        return calculateFare(
+            distanceKm = passengerSegmentDistanceKm,
+            durationMin = passengerSegmentDurationMin,
+            vehicleType = vehicleType,
+            isShared = true,
+            hasDiscount = hasDiscount,
+            sharedDiscountPercentage = sharedDiscountPercentage,
+            hourOfDay = hourOfDay
+        )
     }
 }

@@ -203,7 +203,8 @@ class AdminHomeActivity : AppCompatActivity() {
             }
             R.id.nav_riders -> {
                 binding.layoutRiders.visibility = View.VISIBLE
-                binding.txtToolbarTitle.text = "Rider Accounts"
+                binding.txtToolbarTitle.text = "ID Confirmation"
+                loadPendingDiscountRequests()
             }
             R.id.nav_driver_approvals -> {
                 binding.layoutApprovals.visibility = View.VISIBLE
@@ -224,7 +225,94 @@ class AdminHomeActivity : AppCompatActivity() {
             }
         }
     }
+    private fun loadPendingDiscountRequests() {
+        binding.layoutFullRiderList.removeAllViews()
 
+        database.child("discount_requests").orderByChild("status").equalTo("PENDING")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    if (isFinishing || isDestroyed) return
+                    binding.layoutFullRiderList.removeAllViews()
+                    val inflater = LayoutInflater.from(this@AdminHomeActivity)
+
+                    if (!snapshot.exists()) {
+                        val empty = TextView(this@AdminHomeActivity).apply {
+                            text = "No pending ID submissions."
+                            setTextColor(Color.GRAY)
+                            setPadding(0, 32, 0, 32)
+                        }
+                        binding.layoutFullRiderList.addView(empty)
+                        return
+                    }
+
+                    for (reqSnap in snapshot.children) {
+                        val requestId = reqSnap.key ?: continue
+                        val userId = reqSnap.child("userId").getValue(String::class.java) ?: continue
+                        val userName = reqSnap.child("userName").getValue(String::class.java) ?: "Passenger"
+                        val discountType = reqSnap.child("discountType").getValue(String::class.java) ?: "N/A"
+                        val frontUrl = reqSnap.child("idFrontUrl").getValue(String::class.java)
+                        val backUrl = reqSnap.child("idBackUrl").getValue(String::class.java)
+
+                        val view = inflater.inflate(R.layout.item_booking_history, binding.layoutFullRiderList, false)
+                        view.findViewById<TextView>(R.id.txtHistoryPickup).text = "Applicant: $userName"
+                        view.findViewById<TextView>(R.id.txtHistoryDropoff).text = "Discount Type: $discountType"
+                        view.findViewById<TextView>(R.id.txtHistoryFare).visibility = View.GONE
+                        view.findViewById<TextView>(R.id.txtHistoryServiceType).visibility = View.GONE
+                        view.findViewById<TextView>(R.id.txtHistoryDate).text = "Pending Review"
+                        view.findViewById<TextView>(R.id.txtHistoryDate).setTextColor(Color.parseColor("#EF4444"))
+
+                        val innerLayout = view.findViewById<TextView>(R.id.txtHistoryPickup).parent as LinearLayout
+
+                        addDocumentReviewButton(innerLayout, "View Front ID", frontUrl)
+                        addDocumentReviewButton(innerLayout, "View Back ID", backUrl)
+
+                        val btnApprove = Button(this@AdminHomeActivity).apply {
+                            text = "APPROVE DISCOUNT"
+                            setBackgroundColor(Color.parseColor("#10B981"))
+                            setTextColor(Color.WHITE)
+                            textSize = 12f
+                            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120)
+                            params.setMargins(0, 12, 0, 0)
+                            layoutParams = params
+                        }
+                        btnApprove.setOnClickListener { approveDiscountRequest(requestId, userId) }
+
+                        val btnReject = Button(this@AdminHomeActivity).apply {
+                            text = "REJECT"
+                            setBackgroundColor(Color.parseColor("#F3F4F6"))
+                            setTextColor(Color.parseColor("#EF4444"))
+                            textSize = 12f
+                            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                            params.setMargins(0, 8, 0, 0)
+                            layoutParams = params
+                        }
+                        btnReject.setOnClickListener { rejectDiscountRequest(requestId) }
+
+                        innerLayout.addView(btnApprove)
+                        innerLayout.addView(btnReject)
+
+                        binding.layoutFullRiderList.addView(view)
+                        addDivider(binding.layoutFullRiderList)
+                    }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
+
+    private fun approveDiscountRequest(requestId: String, userId: String) {
+        val updates = mapOf<String, Any>(
+            "discount_requests/$requestId/status" to "APPROVED",
+            "users/$userId/hasDiscount" to true
+        )
+        database.updateChildren(updates)
+            .addOnSuccessListener { Toast.makeText(this, "Discount approved.", Toast.LENGTH_SHORT).show() }
+            .addOnFailureListener { e -> Toast.makeText(this, "Failed: ${e.message}", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun rejectDiscountRequest(requestId: String) {
+        database.child("discount_requests").child(requestId).child("status").setValue("REJECTED")
+            .addOnSuccessListener { Toast.makeText(this, "Application rejected.", Toast.LENGTH_SHORT).show() }
+    }
     private fun loadPendingWalletRequests() {
         val container = findViewById<LinearLayout>(R.id.layoutWalletRequestsList) ?: return
         container.removeAllViews()
@@ -364,7 +452,7 @@ class AdminHomeActivity : AppCompatActivity() {
                 binding.txtActiveDrivers.text = activeDrivers.toString()
                 binding.txtPendingReview.text = pendingApprovals.toString()
 
-                updateRiderList(allRiders)
+
                 updateApprovalList(pendingDrivers)
 
                 binding.txtQueueEmpty.visibility = if (pendingDrivers.isEmpty()) View.VISIBLE else View.GONE
