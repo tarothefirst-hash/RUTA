@@ -145,12 +145,6 @@ class LoginActivity : AppCompatActivity() {
             showError("Please fill in both email and password.")
             return
         }
-        if (email.equals("admin@ruta.app", ignoreCase = true)) {
-            if (password != "LigmaRUTA2.31") {
-                showError("Invalid admin credentials.")
-                return
-            }
-        }
         setLoading(true)
         hideError()
 
@@ -181,6 +175,49 @@ class LoginActivity : AppCompatActivity() {
             .child(uid)
             .get()
             .addOnSuccessListener { snapshot ->
+                if (!snapshot.exists()) {
+                    val currentUser = auth.currentUser
+                    val displayName = currentUser?.displayName
+                    val nameParts = displayName?.trim()?.split(Regex("\\s+")) ?: emptyList()
+                    val firstName = nameParts.firstOrNull()?.takeUnless { it.isBlank() } ?: "User"
+                    val lastName = if (nameParts.size > 1) nameParts.drop(1).joinToString(" ") else ""
+                    val email = currentUser?.email ?: ""
+                    val fullName = "$firstName $lastName".trim()
+
+                    val profileMap = hashMapOf<String, Any>(
+                        "uid" to uid,
+                        "firstName" to firstName,
+                        "lastName" to lastName,
+                        "name" to fullName,
+                        "email" to email,
+                        "phoneNumber" to "",
+                        "birthDate" to "Not Provided",
+                        "role" to "PASSENGER",
+                        "isActive" to true,
+                        "isApproved" to true,
+                        "createdAt" to System.currentTimeMillis()
+                    )
+
+                    database.reference.child("users").child(uid)
+                        .setValue(profileMap)
+                        .addOnSuccessListener {
+                            setLoading(false)
+                            val prefs = getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putString("USER_UID", uid)
+                                .putString("USER_ROLE", "PASSENGER")
+                                .putString("USER_NAME", fullName)
+                                .putBoolean("IS_APPROVED", true)
+                                .apply()
+                            goToHome(UserRole.PASSENGER)
+                        }
+                        .addOnFailureListener { exception ->
+                            setLoading(false)
+                            showError("Failed to create user profile: ${exception.localizedMessage}")
+                        }
+                    return@addOnSuccessListener
+                }
+
                 val roleStr = snapshot.child("role").getValue(String::class.java) ?: "PASSENGER"
                 val userName = snapshot.child("name").getValue(String::class.java) ?: "User"
                 val isApproved = snapshot.child("isApproved").getValue(Boolean::class.java) ?: false

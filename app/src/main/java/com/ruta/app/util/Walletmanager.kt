@@ -58,31 +58,4 @@ object WalletManager {
             }
         })
     }
-
-    /**
-     * Records a declared cash-in: driver picks a preset amount, sends it via the
-     * GCash QR shown in-app, taps confirm. Whoever approves this (admin console,
-     * or manually in the Firebase console for tonight's demo) is responsible for
-     * crediting walletBalance — this call only files the request.
-     */
-    fun submitTopUpRequest(
-        database: DatabaseReference,
-        driverId: String,
-        driverName: String,
-        amount: Double,
-        onComplete: (success: Boolean) -> Unit = {}
-    ) {
-        val ref = database.child("walletTopUpRequests").push()
-        val data = hashMapOf(
-            "requestId" to ref.key,
-            "driverId" to driverId,
-            "driverName" to driverName,
-            "amount" to amount,
-            "status" to "PENDING", // PENDING -> APPROVED / REJECTED
-            "createdAt" to System.currentTimeMillis()
-        )
-        ref.setValue(data)
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
-    }
 }

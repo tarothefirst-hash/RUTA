@@ -15,7 +15,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Driver Wallet"
+            android:text="@string/dr_driver_wallet_title"
             android:textColor="@color/ruta_text_primary"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -37,7 +37,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Current Balance"
+                    android:text="@string/dr_current_balance"
                     android:textColor="@color/ruta_primary_light"
                     android:textSize="13sp" />
 
@@ -55,7 +55,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="10% platform fee is deducted per completed trip (4% for PWD/Student rides)."
+                    android:text="@string/dr_platform_fee_note"
                     android:textColor="@color/ruta_primary_light"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -65,7 +65,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="Cash In via GCash"
+            android:text="@string/dr_cash_in_via_gcash"
             android:textColor="@color/ruta_text_primary"
             android:textSize="16sp"
             android:textStyle="bold" />
@@ -74,7 +74,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Scan the QR, send your chosen amount, then tap the matching button below."
+            android:text="@string/dr_gcash_scan_instructions"
             android:textColor="@color/ruta_text_secondary"
             android:textSize="13sp" />
 
@@ -84,7 +84,7 @@
             android:layout_height="300dp"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="16dp"
-            android:contentDescription="GCash QR Code"
+            android:contentDescription="@string/dr_gcash_qr_content_desc"
             android:src="@drawable/gcash" />
         <LinearLayout
             android:layout_width="match_parent"
@@ -97,7 +97,7 @@
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Attach Proof of Payment (Image)" />
+                android:text="@string/dr_attach_proof_of_payment" />
 
             <TextView
                 android:id="@+id/txtReceiptPlaceholder"
@@ -105,7 +105,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:layout_marginTop="4dp"
-                android:text="No receipt image selected"
+                android:text="@string/dr_no_receipt_selected"
                 android:textColor="#94A3B8"
                 android:textSize="12sp" />
 
@@ -117,7 +117,7 @@
                 android:background="#F1F5F9"
                 android:scaleType="centerCrop"
                 android:visibility="gone"
-                android:contentDescription="Receipt Preview" />
+                android:contentDescription="@string/dr_receipt_preview_content_desc" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
@@ -181,7 +181,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:text="Selected amount: none"
+            android:text="@string/dr_selected_amount_none"
             android:textColor="@color/ruta_text_secondary"
             android:textSize="13sp" />
 
@@ -191,7 +191,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:backgroundTint="@color/ruta_status_success"
-            android:text="I've Sent Payment" />
+            android:text="@string/dr_ive_sent_payment" />
 
         <TextView
             android:id="@+id/txtLastTopUpStatus"

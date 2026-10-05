@@ -7,7 +7,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -83,10 +82,12 @@ class HomeFragment : Fragment() {
 
         detachActiveTripListener()
 
+        // Read this passenger's bookings and pick the active one explicitly.
+        // limitToLast(1) used to hide the real active trip whenever a newer
+        // completed booking existed; status filtering needs no extra DB index.
         activeTripQueryRef = database.child("bookings")
             .orderByChild("passengerId")
             .equalTo(passengerId)
-            .limitToLast(1)
 
         activeTripListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -214,22 +215,5 @@ class HomeFragment : Fragment() {
 
                 override fun onCancelled(error: DatabaseError) {}
             })
-    }
-
-    fun cancelBooking(bookingId: String) {
-        val updates = hashMapOf<String, Any>(
-            "status" to "CANCELLED",
-            "cancelledAt" to System.currentTimeMillis()
-        )
-
-        database.child("bookings").child(bookingId).updateChildren(updates)
-            .addOnSuccessListener {
-                Toast.makeText(requireContext(), "Ride cancelled.", Toast.LENGTH_SHORT).show()
-                cardActiveTripEta.visibility = View.GONE
-                currentActiveBookingId = null
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(requireContext(), "Failed to cancel: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
     }
 }

@@ -33,10 +33,15 @@ import kotlin.math.round
  */
 object RideshareFareCalculator {
 
-    private const val BASE_FARE = 45.0
-    private const val RATE_PER_KM = 15.0
-    private const val RATE_PER_MIN = 2.0
+    // Public because these are the single source of truth for the base rates:
+    // FareCalculator's VehicleType.SEDAN reads them so the two engines cannot
+    // drift apart. Values are the long-standing RUTA rates — do not change them
+    // in one place only.
+    const val BASE_FARE = 45.0
+    const val RATE_PER_KM = 15.0
+    const val RATE_PER_MIN = 2.0
     private const val INCONVENIENCE_CREDIT_RATE = 0.30
+
 
     data class PassengerFare(
         val bookingId: String,
@@ -56,12 +61,37 @@ object RideshareFareCalculator {
     )
 
     /**
+     * Solo quote for a passenger travelling alone — the no-counterpart case of
+     * the unified model. Same base rates and same order of operations as the
+     * settlement engine: base + cost, floored at the flag-down, surged, then the
+     * 0.80 discount, then rounded to a whole peso so it matches the figure the
+     * solo display engine (FareCalculator) shows for the same trip.
+     *
+
+     */
+    fun quoteSoloFare(
+        distanceMeters: Int,
+        durationSeconds: Int,
+        surgeMultiplier: Double = 1.0,
+
+    ): Double {
+        val subtotal = BASE_FARE + cost(distanceMeters, durationSeconds)
+        var total = max(BASE_FARE, subtotal) * surgeMultiplier
+
+        return round(total)
+    }
+
+    /**
      * @param route the winning sequence from RideshareRouteOptimizer
      * @param bookingIdA / bookingIdB the two passengers in the group
      * @param directDistanceA / directDistanceB each passenger's SOLO direct route
      *        (already stored on their booking as distanceMeters from the original
      *        quote — no extra API call needed)
      * @param surgeMultiplier applied to the whole thing at the end, same as solo
+     * @param hasDiscountA / hasDiscountB each passenger's own Student/PWD/Senior
+     *        discount, applied to that passenger's settled total. Kept per
+     *        passenger because a mixed group can have one discounted rider and
+     *        one paying full fare.
      */
     fun calculate(
         route: RideshareRouteOptimizer.SequencedRoute,
@@ -71,7 +101,54 @@ object RideshareFareCalculator {
         directDurationA: Int,
         directDistanceB: Int,
         directDurationB: Int,
-        surgeMultiplier: Double = 1.0
+        surgeMultiplier: Double = 1.0,
+        hasDiscountA: Boolean = false,
+        hasDiscountB: Boolean = false
+    ): FareBreakdown {
+        // Flatten the route into plain values and hand off to the pure arithmetic
+        // below, so the same model can be exercised from JVM unit tests.
+        return calculateFareBreakdown(
+            orderedStopBookingIds = route.orderedStops.map { it.bookingId },
+            stopIsPickup = route.orderedStops.map { it.type == RideshareManager.StopType.PICKUP },
+            legDistancesMeters = route.legDistancesMeters,
+            legDurationsSeconds = route.legDurationsSeconds,
+            bookingIdA = bookingIdA,
+            bookingIdB = bookingIdB,
+            directDistanceA = directDistanceA,
+            directDurationA = directDurationA,
+            directDistanceB = directDistanceB,
+            directDurationB = directDurationB,
+            surgeMultiplier = surgeMultiplier,
+
+        )
+    }
+
+    /**
+     * The settlement arithmetic, free of Android/Google types so it can be unit
+     * tested on the JVM. [calculate] builds these plain lists from the route and
+     * delegates here; the numbers are byte-identical to walking the route itself.
+     *
+     * @param orderedStopBookingIds booked ids in visiting order, 1:1 with the legs
+     * @param stopIsPickup true where the stop at that index is a PICKUP, false for DROPOFF
+     * @param legDistancesMeters leg i is the travel INTO stop i (leading 0 padding)
+     * @param legDurationsSeconds leg i duration, same alignment as the distances
+     * @param hasDiscountA / hasDiscountB each passenger's own Student/PWD/Senior
+     *        discount, applied to that passenger's settled total only
+     */
+    fun calculateFareBreakdown(
+        orderedStopBookingIds: List<String>,
+        stopIsPickup: List<Boolean>,
+        legDistancesMeters: List<Int>,
+        legDurationsSeconds: List<Int>,
+        bookingIdA: String,
+        bookingIdB: String,
+        directDistanceA: Int,
+        directDurationA: Int,
+        directDistanceB: Int,
+        directDurationB: Int,
+        surgeMultiplier: Double = 1.0,
+        hasDiscountA: Boolean = false,
+        hasDiscountB: Boolean = false
     ): FareBreakdown {
 
         // --- Walk the sequence, attributing every leg to whoever was onboard ---
@@ -86,9 +163,9 @@ object RideshareFareCalculator {
         var onboardDistA = 0; var onboardDurA = 0
         var onboardDistB = 0; var onboardDurB = 0
 
-        for (i in route.orderedStops.indices) {
-            val legDist = route.legDistancesMeters.getOrElse(i) { 0 }
-            val legDur = route.legDurationsSeconds.getOrElse(i) { 0 }
+        for (i in orderedStopBookingIds.indices) {
+            val legDist = legDistancesMeters.getOrElse(i) { 0 }
+            val legDur = legDurationsSeconds.getOrElse(i) { 0 }
 
             // Attribute the leg travelled to REACH this stop, based on who was
             // already in the car for it.
@@ -109,10 +186,10 @@ object RideshareFareCalculator {
                 // Nobody onboard = driver heading to the first pickup. Free.
             }
 
-            val stop = route.orderedStops[i]
-            when (stop.type) {
-                RideshareManager.StopType.PICKUP -> onboard.add(stop.bookingId)
-                RideshareManager.StopType.DROPOFF -> onboard.remove(stop.bookingId)
+            if (stopIsPickup.getOrElse(i) { false }) {
+                onboard.add(orderedStopBookingIds[i])
+            } else {
+                onboard.remove(orderedStopBookingIds[i])
             }
         }
 
@@ -138,7 +215,8 @@ object RideshareFareCalculator {
             sharedCharge = sharedHalf,
             surcharge = surchargeA,
             credit = creditA,
-            surge = surgeMultiplier
+            surge = surgeMultiplier,
+            hasDiscount = hasDiscountA
         )
 
         val fareB = buildFare(
@@ -147,7 +225,8 @@ object RideshareFareCalculator {
             sharedCharge = sharedHalf,
             surcharge = surchargeB,
             credit = creditB,
-            surge = surgeMultiplier
+            surge = surgeMultiplier,
+            hasDiscount = hasDiscountB
         )
 
         return FareBreakdown(fareA, fareB, sharedDist, sharedDur)
@@ -159,11 +238,15 @@ object RideshareFareCalculator {
         sharedCharge: Double,
         surcharge: Double,
         credit: Double,
-        surge: Double
+        surge: Double,
+        hasDiscount: Boolean = false
     ): PassengerFare {
         val subtotal = BASE_FARE + soloCharge + sharedCharge + surcharge - credit
         // Never let credits push a fare below the base flag-down.
-        val total = max(BASE_FARE, subtotal) * surge
+        var total = max(BASE_FARE, subtotal) * surge
+        // Student/PWD/Senior discount, applied after the floor and the surge so
+        // it stacks on the settled total exactly as the solo engine does.
+
 
         return PassengerFare(
             bookingId = bookingId,

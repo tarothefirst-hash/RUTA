@@ -3,7 +3,6 @@ package com.ruta.app.util
 import android.location.Location
 import com.google.android.gms.maps.model.LatLng
 import kotlin.math.*
-import android.util.Log
 
 /**
  * RideshareManager
@@ -31,43 +30,48 @@ object RideshareManager {
     // 1. MATCHING
     // ---------------------------------------------------------------------------
     object Matcher {
-        private const val MAX_PICKUP_DETOUR_METERS = 6000.0
-        private const val MAX_DROPOFF_DETOUR_METERS = 6000.0
-        private const val MAX_DIRECTION_ANGLE_DEGREES = 45.0
+        // Internal (not private) so JVM unit tests can assert the boundary against
+        // the real thresholds instead of a hardcoded copy.
+        internal const val MAX_PICKUP_DETOUR_METERS = 6000.0
+        internal const val MAX_DROPOFF_DETOUR_METERS = 6000.0
+        internal const val MAX_DIRECTION_ANGLE_DEGREES = 45.0
 
         fun isCompatible(a: RideshareCandidate, b: RideshareCandidate): Boolean {
-            Log.d("RUTA_MATCH", "Checking compatibility between Booking A: ${a.bookingId} and Booking B: ${b.bookingId}")
+            return isCompatible(
+                samePassenger = a.passengerId == b.passengerId,
+                bearingDifferenceDegrees = angleDifference(
+                    bearing(a.pickup, a.dropoff),
+                    bearing(b.pickup, b.dropoff)
+                ),
+                pickupGapMeters = distanceMeters(a.pickup, b.pickup),
+                dropoffGapMeters = distanceMeters(a.dropoff, b.dropoff)
+            )
+        }
 
-            if (a.passengerId == b.passengerId) {
-                Log.d("RUTA_MATCH", "REJECTED: Same passengerId (${a.passengerId})")
+        /**
+         * The compatibility arithmetic, free of Android/Google runtime types so the
+         * rules can be pinned on the local JVM. The production [isCompatible] measures
+         * the pair (bearings and geodesic gaps) and delegates here, so this is the
+         * single source of truth for the four rules.
+         */
+        internal fun isCompatible(
+            samePassenger: Boolean,
+            bearingDifferenceDegrees: Double,
+            pickupGapMeters: Double,
+            dropoffGapMeters: Double
+        ): Boolean {
+            if (samePassenger) {
                 return false
             }
-
-            val bearingA = bearing(a.pickup, a.dropoff)
-            val bearingB = bearing(b.pickup, b.dropoff)
-            val diffBearing = angleDifference(bearingA, bearingB)
-            Log.d("RUTA_MATCH", "Bearing A: $bearingA, Bearing B: $bearingB, Diff: $diffBearing (Max: $MAX_DIRECTION_ANGLE_DEGREES)")
-
-            if (diffBearing > MAX_DIRECTION_ANGLE_DEGREES) {
-                Log.d("RUTA_MATCH", "REJECTED: Direction angle difference too large")
+            if (bearingDifferenceDegrees > MAX_DIRECTION_ANGLE_DEGREES) {
                 return false
             }
-
-            val pickupGap = distanceMeters(a.pickup, b.pickup)
-            Log.d("RUTA_MATCH", "Pickup distance gap: ${pickupGap}m (Max: ${MAX_PICKUP_DETOUR_METERS}m)")
-            if (pickupGap > MAX_PICKUP_DETOUR_METERS) {
-                Log.d("RUTA_MATCH", "REJECTED: Pickup gap too far")
+            if (pickupGapMeters > MAX_PICKUP_DETOUR_METERS) {
                 return false
             }
-
-            val dropoffGap = distanceMeters(a.dropoff, b.dropoff)
-            Log.d("RUTA_MATCH", "Dropoff distance gap: ${dropoffGap}m (Max: ${MAX_DROPOFF_DETOUR_METERS}m)")
-            if (dropoffGap > MAX_DROPOFF_DETOUR_METERS) {
-                Log.d("RUTA_MATCH", "REJECTED: Dropoff gap too far")
+            if (dropoffGapMeters > MAX_DROPOFF_DETOUR_METERS) {
                 return false
             }
-
-            Log.d("RUTA_MATCH", "SUCCESS: Booking A and B are COMPATIBLE!")
             return true
         }
 
@@ -77,10 +81,6 @@ object RideshareManager {
                 .minByOrNull {
                     distanceMeters(newRequest.pickup, it.pickup) + distanceMeters(newRequest.dropoff, it.dropoff)
                 }
-        }
-
-        fun findAllCompatible(newRequest: RideshareCandidate, pendingPool: List<RideshareCandidate>): List<RideshareCandidate> {
-            return pendingPool.filter { isCompatible(newRequest, it) }
         }
 
         private fun bearing(from: LatLng, to: LatLng): Double {
@@ -93,7 +93,7 @@ object RideshareManager {
             return (Math.toDegrees(atan2(y, x)) + 360) % 360
         }
 
-        private fun angleDifference(b1: Double, b2: Double): Double {
+        internal fun angleDifference(b1: Double, b2: Double): Double {
             var delta = abs(b1 - b2)
             if (delta > 180.0) delta = 360.0 - delta
             return delta
@@ -111,7 +111,22 @@ object RideshareManager {
     // ---------------------------------------------------------------------------
     object Sequencer {
 
-        fun sequenceStops(driverStart: LatLng, candidates: List<RideshareCandidate>): List<RideshareStop> {
+        fun sequenceStops(driverStart: LatLng, candidates: List<RideshareCandidate>): List<RideshareStop> =
+            sequenceStopsWithDistance(driverStart, candidates) { a, b -> distanceMeters(a, b) }
+
+        /**
+         * The stop-ordering search, with the geodesic measurement passed in as a plain
+         * `(LatLng, LatLng) -> Double` seam. The production [sequenceStops] supplies the
+         * real Android [Location.distanceBetween]; JVM unit tests supply a deterministic
+         * function (for example Euclidean degrees) so the permutation search can be pinned
+         * without the Android framework. Only the measurement is swapped — the ordering
+         * rules are byte-for-byte the production ones.
+         */
+        internal fun sequenceStopsWithDistance(
+            driverStart: LatLng,
+            candidates: List<RideshareCandidate>,
+            distance: (LatLng, LatLng) -> Double
+        ): List<RideshareStop> {
             if (candidates.isEmpty()) return emptyList()
 
             // Single candidate fallback
@@ -144,7 +159,7 @@ object RideshareManager {
                 )
 
                 return validPermutations.minByOrNull { perm ->
-                    calculateTotalTripDistance(driverStart, perm)
+                    calculateTotalTripDistance(driverStart, perm, distance)
                 } ?: validPermutations.first()
             }
 
@@ -155,11 +170,11 @@ object RideshareManager {
             var current = driverStart
 
             while (remainingPickups.isNotEmpty() || awaitingDropoff.isNotEmpty()) {
-                val nearestPickup = remainingPickups.minByOrNull { distanceMeters(current, it.pickup) }
-                val nearestDropoff = awaitingDropoff.minByOrNull { distanceMeters(current, it.dropoff) }
+                val nearestPickup = remainingPickups.minByOrNull { distance(current, it.pickup) }
+                val nearestDropoff = awaitingDropoff.minByOrNull { distance(current, it.dropoff) }
 
-                val pickupDist = nearestPickup?.let { distanceMeters(current, it.pickup) } ?: Double.MAX_VALUE
-                val dropoffDist = nearestDropoff?.let { distanceMeters(current, it.dropoff) } ?: Double.MAX_VALUE
+                val pickupDist = nearestPickup?.let { distance(current, it.pickup) } ?: Double.MAX_VALUE
+                val dropoffDist = nearestDropoff?.let { distance(current, it.dropoff) } ?: Double.MAX_VALUE
 
                 if (nearestPickup != null && pickupDist <= dropoffDist) {
                     stops.add(RideshareStop(nearestPickup.bookingId, StopType.PICKUP, nearestPickup.pickup))
@@ -176,11 +191,15 @@ object RideshareManager {
             return stops
         }
 
-        private fun calculateTotalTripDistance(start: LatLng, path: List<RideshareStop>): Double {
+        private fun calculateTotalTripDistance(
+            start: LatLng,
+            path: List<RideshareStop>,
+            distance: (LatLng, LatLng) -> Double
+        ): Double {
             var total = 0.0
             var prev = start
             for (stop in path) {
-                total += distanceMeters(prev, stop.location)
+                total += distance(prev, stop.location)
                 prev = stop.location
             }
             return total
@@ -190,72 +209,6 @@ object RideshareManager {
             val results = FloatArray(1)
             Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, results)
             return results[0].toDouble()
-        }
-    }
-
-    // ---------------------------------------------------------------------------
-    // 3. FAIR FARE SPLITTING
-    // ---------------------------------------------------------------------------
-    object FareSplitter {
-        fun splitByOnboardDuration(
-            totalSharedFare: Double,
-            stops: List<RideshareStop>,
-            legDurationsSeconds: List<Int>
-        ): Map<String, Double> {
-            require(stops.size == legDurationsSeconds.size) {
-                "legDurationsSeconds must have exactly one entry per stop"
-            }
-
-            val active = mutableSetOf<String>()
-            val creditedSeconds = mutableMapOf<String, Double>()
-            var totalWeightedSeconds = 0.0
-
-            for (i in stops.indices) {
-                val legSeconds = legDurationsSeconds[i].toDouble()
-
-                if (active.isNotEmpty()) {
-                    val perRiderShare = legSeconds / active.size
-                    active.forEach { id ->
-                        creditedSeconds[id] = (creditedSeconds[id] ?: 0.0) + perRiderShare
-                    }
-                    totalWeightedSeconds += legSeconds
-                }
-
-                when (stops[i].type) {
-                    StopType.PICKUP -> active.add(stops[i].bookingId)
-                    StopType.DROPOFF -> active.remove(stops[i].bookingId)
-                }
-            }
-
-            if (totalWeightedSeconds <= 0.0) {
-                val distinctIds = stops.map { it.bookingId }.distinct()
-                val equalShare = totalSharedFare / distinctIds.size
-                return distinctIds.associateWith { round2(equalShare) }
-            }
-
-            return creditedSeconds.mapValues { (_, seconds) ->
-                round2(totalSharedFare * (seconds / totalWeightedSeconds))
-            }
-        }
-
-        private fun round2(value: Double): Double = round(value * 100.0) / 100.0
-    }
-
-    // ---------------------------------------------------------------------------
-    // 4. COMBINED ROUTE BUILDER
-    // ---------------------------------------------------------------------------
-    object RouteBuilder {
-        fun combineLegs(legPolylines: List<List<LatLng>>): List<LatLng> {
-            val combined = mutableListOf<LatLng>()
-            for (leg in legPolylines) {
-                if (leg.isEmpty()) continue
-                if (combined.isNotEmpty() && combined.last() == leg.first()) {
-                    combined.addAll(leg.drop(1))
-                } else {
-                    combined.addAll(leg)
-                }
-            }
-            return combined
         }
     }
 }

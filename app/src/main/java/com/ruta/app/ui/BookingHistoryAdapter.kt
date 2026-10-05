@@ -40,7 +40,9 @@ class BookingHistoryAdapter(
 
         holder.txtPickup.text = "From: ${booking.pickupAddress ?: "N/A"}"
         holder.txtDropoff.text = "To: ${booking.dropoffAddress ?: "N/A"}"
-        holder.txtFare.text = "₱${String.format("%.2f", booking.fare ?: 0.0)}"
+        // Shared rides settle to a finalFare; solo and unfinished rides keep their quoted fare.
+        val displayFare = if (booking.finalFare > 0.0) booking.finalFare else (booking.fare ?: 0.0)
+        holder.txtFare.text = "₱${String.format("%.2f", displayFare)}"
         holder.txtServiceType.text = booking.serviceType?.replace("_", " ") ?: "Standard"
 
         when (booking.status) {
@@ -68,9 +70,4 @@ class BookingHistoryAdapter(
     }
 
     override fun getItemCount(): Int = bookings.size
-
-    fun updateList(newList: List<BookingModel>) {
-        bookings = newList
-        notifyDataSetChanged()
-    }
 }

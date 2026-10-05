@@ -4,19 +4,19 @@
     <item
         android:id="@+id/navigation_driver_home"
         android:icon="@android:drawable/ic_menu_compass"
-        android:title="Home" />
+        android:title="@string/m_driver_home" />
 
     <item
         android:id="@+id/navigation_driver_rides"
         android:icon="@android:drawable/ic_menu_agenda"
-        android:title="My Trips" />
+        android:title="@string/m_driver_my_trips" />
     <item
         android:id="@+id/navigation_driver_wallet"
         android:icon="@android:drawable/ic_menu_send"
-        android:title="Wallet" />
+        android:title="@string/m_driver_wallet" />
     <item
         android:id="@+id/navigation_driver_profile"
         android:icon="@android:drawable/ic_menu_myplaces"
-        android:title="Profile" />
+        android:title="@string/m_driver_profile" />
 
 </menu>

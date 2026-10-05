@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUTA Test Graphics - Index</title>
+<style>
+:root{--bg:#fafaf9;--surface:#fff;--ink:#18181b;--muted:#52525b;--line:#e4e4e7;--emerald:#0e9f6e;--emerald-ink:#065f46;--radius:14px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Atkinson Hyperlegible","Segoe UI",system-ui,-apple-system,Arial,sans-serif;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 20px 48px}
+h1{font-size:40px;letter-spacing:-.03em;line-height:1.05;margin:8px 0 6px;max-width:24ch}
+.sub{color:var(--muted);max-width:74ch;margin:0 0 16px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px;margin:16px 0 16px}
+.tab{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tab:hover{border-color:var(--ink)}
+.tab:active{transform:translateY(1px)}
+.panel{display:none}
+.panel.active{display:block}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 4px}
+.card p{font-size:13px;color:var(--muted);margin:0 0 10px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:860px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:30px}}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 14px}
+.stat b{font-size:22px;display:block;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat span{font-size:12px;color:var(--muted)}
+.stat a{font-size:12px;color:var(--emerald-ink);font-weight:700}
+.frame{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;height:760px}
+.stack .frame{height:820px;margin-top:10px}
+.sec-title{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin:22px 0 6px}
+.sec-title h2{font-size:16px;margin:0}
+.sec-title a{font-size:12px;color:var(--emerald-ink);font-weight:700}
+.foot{font-size:12px;color:var(--muted);margin-top:16px}
+:focus-visible{outline:3px solid var(--emerald);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RUTA test graphics: all four charts, one tabbed view.</h1>
+<p class="sub">Pick a tab to focus, or stay on All in one for the full story. Numbers: 68 deep checks (26.47% pass), 51 user steps (64.71% pass), 30 defects, 7 Critical, 7,575 lines in 47 files. Static inferred, no emulator.</p>
+<div class="tabs" role="tablist" aria-label="Graphics tabs">
+<button class="tab" role="tab" id="tab-all" aria-controls="panel-all" aria-selected="true">All in one</button>
+<button class="tab" role="tab" id="tab-01" aria-controls="panel-01" aria-selected="false" tabindex="-1">01 Overall</button>
+<button class="tab" role="tab" id="tab-02" aria-controls="panel-02" aria-selected="false" tabindex="-1">02 Levels</button>
+<button class="tab" role="tab" id="tab-03" aria-controls="panel-03" aria-selected="false" tabindex="-1">03 Defects</button>
+<button class="tab" role="tab" id="tab-04" aria-controls="panel-04" aria-selected="false" tabindex="-1">04 Gates</button>
+</div>
+<section class="panel active" id="panel-all" role="tabpanel" aria-labelledby="tab-all" tabindex="0">
+<div class="stats">
+<div class="stat"><b>26.47%</b><span>68 deep pass (18 of 68)</span><br><a href="#s01" data-goto="tab-01">Open 01</a></div>
+<div class="stat"><b>64.71%</b><span>51 steps pass (33 of 51)</span><br><a href="#s02" data-goto="tab-02">Open 02</a></div>
+<div class="stat"><b>1.32/KLOC</b><span>Density (10 over 7.575)</span><br><a href="#s03" data-goto="tab-03">Open 03</a></div>
+<div class="stat"><b>NO-SHIP</b><span>Prod verdict, demo yes</span><br><a href="#s04" data-goto="tab-04">Open 04</a></div>
+</div>
+<div class="stack">
+<div class="card"><div class="sec-title"><h2 id="s01">01 - Overall health</h2><a href="ruta-graph-01-overall-health.html">Open full page</a></div><p>Donuts for 68 and 51 with formulas 18/68 and 33/51.</p><iframe class="frame" title="01 Overall health" src="ruta-graph-01-overall-health.html" loading="lazy"></iframe></div>
+<div class="card"><div class="sec-title"><h2 id="s02">02 - Scope levels</h2><a href="ruta-graph-02-scope-levels.html">Open full page</a></div><p>Bars for Unit to Production plus Manual 24 vs Automated 0 of 18.</p><iframe class="frame" title="02 Scope levels" src="ruta-graph-02-scope-levels.html" loading="lazy"></iframe></div>
+<div class="card"><div class="sec-title"><h2 id="s03">03 - Defects and density</h2><a href="ruta-graph-03-defects-density.html">Open full page</a></div><p>Bars Critical 7, High 11, Medium 8, Low 4 with cumulative line 7 to 30.</p><iframe class="frame" title="03 Defects and density" src="ruta-graph-03-defects-density.html" loading="lazy"></iframe></div>
+<div class="card"><div class="sec-title"><h2 id="s04">04 - Production gates</h2><a href="ruta-graph-04-production-gates.html">Open full page</a></div><p>Eight gates: 4 fail, 2 warn, 1 pass, 1 warn. Fix 7 P0 in 3 to 5 days.</p><iframe class="frame" title="04 Production gates" src="ruta-graph-04-production-gates.html" loading="lazy"></iframe></div>
+</div>
+</section>
+<section class="panel" id="panel-01" role="tabpanel" aria-labelledby="tab-01" tabindex="0" hidden>
+<div class="card"><h2>01 - Overall health</h2><p>Same file as standalone, shown in tab.</p><iframe class="frame" title="01 Overall health tab" src="ruta-graph-01-overall-health.html" loading="lazy"></iframe></div>
+</section>
+<section class="panel" id="panel-02" role="tabpanel" aria-labelledby="tab-02" tabindex="0" hidden>
+<div class="card"><h2>02 - Scope levels</h2><p>Same file as standalone, shown in tab.</p><iframe class="frame" title="02 Scope levels tab" src="ruta-graph-02-scope-levels.html" loading="lazy"></iframe></div>
+</section>
+<section class="panel" id="panel-03" role="tabpanel" aria-labelledby="tab-03" tabindex="0" hidden>
+<div class="card"><h2>03 - Defects and density</h2><p>Same file as standalone, shown in tab.</p><iframe class="frame" title="03 Defects tab" src="ruta-graph-03-defects-density.html" loading="lazy"></iframe></div>
+</section>
+<section class="panel" id="panel-04" role="tabpanel" aria-labelledby="tab-04" tabindex="0" hidden>
+<div class="card"><h2>04 - Production gates</h2><p>Same file as standalone, shown in tab.</p><iframe class="frame" title="04 Gates tab" src="ruta-graph-04-production-gates.html" loading="lazy"></iframe></div>
+</section>
+<p class="foot">Sources: tester 68, writer 51, researcher criticals. Math: 18/68=26.47, 33/51=64.71, 10/51=19.61, 10/7.575=1.32. Range used here: pages 1-4.</p>
+</div>
+<script>
+(function(){
+var tabs=Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+var panels={};tabs.forEach(function(t){panels[t.id]=document.getElementById(t.getAttribute('aria-controls'));});
+function select(tab,focus){
+tabs.forEach(function(t){var on=t===tab;t.setAttribute('aria-selected',on?'true':'false');t.tabIndex=on?0:-1;var p=document.getElementById(t.getAttribute('aria-controls'));if(on){p.classList.add('active');p.hidden=false;}else{p.classList.remove('active');p.hidden=true;}});
+if(focus){tab.focus();}}
+tabs.forEach(function(t,i){
+t.addEventListener('click',function(){select(t,false);});
+t.addEventListener('keydown',function(e){
+var n=null;
+if(e.key==='ArrowRight'){n=tabs[(i+1)%tabs.length];}
+if(e.key==='ArrowLeft'){n=tabs[(i-1+tabs.length)%tabs.length];}
+if(e.key==='Home'){n=tabs[0];}
+if(e.key==='End'){n=tabs[tabs.length-1];}
+if(n){e.preventDefault();select(n,true);}});});
+document.querySelectorAll('[data-goto]').forEach(function(a){
+a.addEventListener('click',function(e){
+var id=a.getAttribute('data-goto');var t=document.getElementById(id);if(t){e.preventDefault();select(t,true);}});});
+})();
+</script>
+</body>
+</html>

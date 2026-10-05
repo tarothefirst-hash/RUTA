@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -119,8 +118,8 @@ class DriverProfileFragment : Fragment() {
         try {
             val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
             profilePhotoLauncher.launch(intent)
-        } catch (e: Exception) {
-            Log.e("DriverProfile", "Error launching gallery", e)
+        } catch (_: Exception) {
+            context?.let { Toast.makeText(it, "Unable to open gallery. Please try again.", Toast.LENGTH_SHORT).show() }
         }
     }
 
@@ -142,8 +141,8 @@ class DriverProfileFragment : Fragment() {
                     }
                 }
             }
-        }.addOnFailureListener { e ->
-            Log.e("DriverProfile", "Failed fetching profile: ${e.message}")
+        }.addOnFailureListener {
+            context?.let { Toast.makeText(it, "Failed to load profile. Please try again.", Toast.LENGTH_SHORT).show() }
         }
     }
 
@@ -212,8 +211,8 @@ class DriverProfileFragment : Fragment() {
                     .error(R.drawable.carpin)
                     .circleCrop()
                     .into(binding.imgDriverProfile)
-            } catch (e: Exception) {
-                Log.e("DriverProfile", "Glide image load error", e)
+            } catch (_: Exception) {
+                context?.let { Toast.makeText(it, "Failed to load profile photo.", Toast.LENGTH_SHORT).show() }
             }
         }
     }

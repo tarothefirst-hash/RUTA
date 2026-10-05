@@ -2,7 +2,6 @@ package com.ruta.app.ui.driver
 
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
@@ -149,7 +148,6 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     progressBar.visibility = View.GONE
-                    Log.e("DriverDocUpload", "Image encoding failed", e)
                     Toast.makeText(this, "Error processing images: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }

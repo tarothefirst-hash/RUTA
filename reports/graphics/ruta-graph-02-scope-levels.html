@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUTA 02: Scope Levels (Unit to Production)</title>
+<style>
+:root{--bg:#fafaf9;--surface:#fff;--ink:#18181b;--muted:#52525b;--line:#e4e4e7;--emerald:#0e9f6e;--rose:#e11d48;--amber:#b45309;--radius:14px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Atkinson Hyperlegible","Segoe UI",system-ui,-apple-system,Arial,sans-serif;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 40px}
+.kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:700}
+h1{font-size:38px;letter-spacing:-.03em;line-height:1.05;margin:8px 0 6px;max-width:22ch}
+.sub{color:var(--muted);max-width:70ch;margin:0 0 18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:860px){.grid{grid-template-columns:1fr}h1{font-size:30px}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.card h2{font-size:15px;margin:0 0 2px}
+.desc{font-size:13px;color:var(--muted);margin:0 0 12px}
+.row{margin:12px 0}
+.row .top{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row .top strong{font-variant-numeric:tabular-nums}
+.track{height:12px;background:#f4f4f5;border-radius:999px;overflow:hidden;margin-top:6px;display:flex}
+.track i{display:block;height:100%}
+.badge{font-size:11px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:3px 8px;border:1px solid var(--line)}
+.fail{background:#fff1f2;color:#9f1239;border-color:#fecdd3}.warn{background:#fffbeb;color:#92400e;border-color:#fde68a}.pass{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px}
+th,td{padding:8px;border-top:1px solid var(--line);text-align:left;font-variant-numeric:tabular-nums}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.foot{font-size:12px;color:var(--muted);margin-top:14px}
+:focus-visible{outline:3px solid var(--emerald);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="kicker">RUTA test graphics · 02 / 04</div>
+<h1>Where it breaks by level: unit to production.</h1>
+<p class="sub">Manual: 24 cases inferred (10 PASS · 7 FAIL · 7 WARN). Automated: 0 exist, 18 required JUnit + 4 Espresso. Scope levels below are tester verdicts, bar length = readiness (not invented %).</p>
+<div class="grid">
+<section class="card" aria-labelledby="a"><h2 id="a">Scope / level readiness</h2><p class="desc">Unit FAIL · Integration WARN · System WARN · Acceptance WARN · Production FAIL</p>
+<div class="row"><div class="top"><span>A. Unit: 0/47 files covered <span class="badge fail">FAIL</span></span><strong>5%</strong></div><div class="track"><i style="width:5%;background:#e11d48"></i></div></div>
+<div class="row"><div class="top"><span>B. Integration (Auth+DB, Maps+Location) <span class="badge warn">WARN</span></span><strong>50%</strong></div><div class="track"><i style="width:50%;background:#b45309"></i></div></div>
+<div class="row"><div class="top"><span>C. System (passenger → driver E2E) <span class="badge warn">WARN</span></span><strong>55%</strong></div><div class="track"><i style="width:55%;background:#b45309"></i></div></div>
+<div class="row"><div class="top"><span>D. Acceptance (capstone demo) <span class="badge warn">WARN</span></span><strong>60%</strong></div><div class="track"><i style="width:60%;background:#b45309"></i></div></div>
+<div class="row"><div class="top"><span>E. Production (release) <span class="badge fail">FAIL</span></span><strong>15%</strong></div><div class="track"><i style="width:15%;background:#e11d48"></i></div></div>
+<table><tr><th>Level</th><th>Verdict</th><th>Evidence</th></tr><tr><td>Unit</td><td>FAIL</td><td>FareCalculator, RideshareManager untested</td></tr><tr><td>Integration</td><td>WARN</td><td>Maps→fare 0.70/0.75 fork</td></tr><tr><td>System</td><td>WARN</td><td>finalFare invisible to payer</td></tr><tr><td>Acceptance</td><td>WARN</td><td>Demoable if avoid M-20/M-21 + 5-min wait</td></tr><tr><td>Production</td><td>FAIL</td><td>Secrets + minify off + allowBackup true</td></tr></table>
+</section>
+<section class="card" aria-labelledby="b"><h2 id="b">Execution method: manual vs automated</h2><p class="desc">Manual 24 inferred · Automated 0 present (needs device + Firebase for 3)</p>
+<div class="row"><div class="top"><span>Manual PASS: 10 / 24 (41.67%)</span><strong>10</strong></div><div class="track"><i style="width:41.67%;background:#0e9f6e"></i></div></div>
+<div class="row"><div class="top"><span>Manual FAIL: 7 / 24 (29.17%)</span><strong>7</strong></div><div class="track"><i style="width:29.17%;background:#e11d48"></i></div></div>
+<div class="row"><div class="top"><span>Manual WARN: 7 / 24 (29.17%)</span><strong>7</strong></div><div class="track"><i style="width:29.17%;background:#b45309"></i></div></div>
+<div class="row"><div class="top"><span>Automated coverage: 0 / 18 JUnit (0%)</span><strong>0</strong></div><div class="track"><i style="width:2%;background:#a1a1aa"></i></div></div>
+<table><tr><th>Method</th><th>Count</th><th>Note</th></tr><tr><td>Manual PASS</td><td>10</td><td>M-01,02,05,06,10,11,12,15,16,17</td></tr><tr><td>Manual FAIL</td><td>7</td><td>M-03,04,07,08,20,21,22</td></tr><tr><td>Manual WARN</td><td>7</td><td>M-09,13,18,19,23,24 + timing</td></tr><tr><td>JUnit required</td><td>18</td><td>Fare, Rideshare, Auth, Deviation</td></tr></table>
+</section>
+</div>
+<p class="foot">Formulas: 10÷24=41.67%, 7÷24=29.17%. Scope bars are qualitative readiness from tester verdicts, not pass-rates.</p>
+</div>
+</body>
+</html>

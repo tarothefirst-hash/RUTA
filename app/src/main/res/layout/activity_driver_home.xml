@@ -27,7 +27,7 @@
         android:textColor="@color/ruta_text_primary"
         android:textSize="22sp"
         android:textStyle="bold"
-        android:text="Welcome!"
+        android:text="@string/d_driver_welcome"
         app:layout_constraintTop_toBottomOf="@id/imgLogo"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
@@ -40,7 +40,7 @@
         android:textColor="@color/ruta_primary"
         android:textSize="14sp"
         android:textStyle="bold"
-        android:text="Driver dashboard"
+        android:text="@string/d_driver_dashboard"
         app:layout_constraintTop_toBottomOf="@id/txtWelcome"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
@@ -53,7 +53,7 @@
         android:gravity="center"
         android:textColor="@color/ruta_text_secondary"
         android:textSize="13sp"
-        android:text="This screen is a placeholder. Build out the Driver experience here."
+        android:text="@string/d_driver_placeholder"
         app:layout_constraintTop_toBottomOf="@id/txtRoleLabel"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />

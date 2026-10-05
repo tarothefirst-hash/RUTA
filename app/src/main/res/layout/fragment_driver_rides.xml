@@ -10,7 +10,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Trip History"
+        android:text="@string/dr_trip_history"
         android:textColor="@color/ruta_text_primary"
         android:textSize="22sp"
         android:textStyle="bold"

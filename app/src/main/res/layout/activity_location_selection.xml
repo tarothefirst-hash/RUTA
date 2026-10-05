@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginTop="16dp"
-        android:text="‹ Return"
+        android:text="@string/a_loc_return"
         android:textAllCaps="false"
         android:textColor="@color/white"
         android:textSize="14sp"
@@ -44,7 +44,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@null"
-            android:hint="Search your Location..."
+            android:hint="@string/a_loc_search_hint"
             android:padding="12dp"
             android:textColor="@color/ruta_text_primary"
             android:textColorHint="@color/ruta_text_muted"
@@ -117,7 +117,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="Finding nearby drivers..."
+                    android:text="@string/a_loc_finding_drivers"
                     android:textColor="@color/ruta_text_primary"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -128,7 +128,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:layout_marginTop="8dp"
-                    android:text="Cancel Ride Request"
+                    android:text="@string/a_loc_cancel_ride_request"
                     android:textColor="#E53935"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -144,7 +144,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Pick Up"
+                    android:text="@string/a_loc_pick_up"
                     android:textColor="@color/ruta_primary_dark"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -156,7 +156,7 @@
                     android:layout_marginTop="4dp"
                     android:ellipsize="end"
                     android:maxLines="2"
-                    android:text="Detecting location..."
+                    android:text="@string/a_loc_detecting_location"
                     android:textColor="@color/ruta_text_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -165,7 +165,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="To"
+                    android:text="@string/a_loc_to"
                     android:textColor="@color/ruta_text_secondary"
                     android:textSize="12sp" />
 
@@ -177,7 +177,7 @@
                     android:background="@drawable/bg_input_field"
                     android:backgroundTint="@color/ruta_bg"
                     android:padding="10dp"
-                    android:text="Add Location"
+                    android:text="@string/a_loc_add_location"
                     android:textColor="@color/ruta_text_muted"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -203,19 +203,37 @@
                         android:id="@+id/txtUserFare"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Your Fare: ₱0.00"
+                        android:text="@string/a_loc_your_fare"
                         android:textColor="@color/white"
                         android:textSize="18sp"
                         android:textStyle="bold" />
-
+                    <TextView
+                        android:id="@+id/tvDiscountBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="20% Student/Senior Discount Applied"
+                        android:textColor="#2E7D32"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
                     <TextView
                         android:id="@+id/txtTripCalculation"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp"
-                        android:text="Trip Total: ₱0.00"
+                        android:text="@string/a_loc_trip_total"
                         android:textColor="#F0E6FF"
                         android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/txtFinalFareDetail"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/fare_detail_finalising"
+                        android:textColor="#F0E6FF"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -242,7 +260,7 @@
                         android:id="@+id/txtPassengerTripStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Driver is on the way to pick you up!"
+                        android:text="@string/a_loc_driver_on_the_way"
                         android:textColor="@color/ruta_primary_dark"
                         android:textSize="14sp"
                         android:textStyle="bold" />
@@ -252,7 +270,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="Driver Name"
+                        android:text="@string/i_wallet_driver_name_placeholder"
                         android:textColor="@color/ruta_text_primary"
                         android:textSize="18sp"
                         android:textStyle="bold" />
@@ -262,7 +280,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Vehicle • Plate Number"
+                        android:text="@string/a_loc_vehicle_plate"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -271,7 +289,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="Chat with Driver"
+                        android:text="@string/a_loc_chat_with_driver"
                         android:textColor="@color/white"
                         android:textSize="14sp"
                         android:textStyle="bold"
@@ -286,7 +304,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:layout_marginTop="16dp"
-                android:text="Confirm Pickup"
+                android:text="@string/a_loc_confirm_pickup"
                 android:textColor="@color/white"
                 android:textSize="15sp"
                 android:textStyle="bold"
@@ -299,7 +317,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="8dp"
-                android:text="Cancel Ride"
+                android:text="@string/a_loc_cancel_ride"
                 android:textColor="@color/ruta_cancel"
                 android:textSize="14sp"
                 android:textStyle="bold" />

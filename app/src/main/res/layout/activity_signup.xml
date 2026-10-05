@@ -42,6 +42,7 @@
             android:text="@string/signup_subtitle"
             android:textColor="@color/ruta_text_secondary"
             android:textSize="14sp" />
+
         <RadioGroup
             android:id="@+id/rgRole"
             android:layout_width="match_parent"
@@ -55,7 +56,7 @@
                 android:id="@+id/rbPassenger"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Passenger"
+                android:text="@string/role_passenger"
                 android:checked="true"
                 android:textColor="@color/ruta_black" />
 
@@ -64,7 +65,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:text="Driver"
+                android:text="@string/role_driver"
                 android:textColor="@color/ruta_black" />
         </RadioGroup>
 
@@ -72,7 +73,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="12dp"
             android:orientation="horizontal">
 
             <EditText
@@ -82,7 +83,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="6dp"
-                android:hint="First Name"
+                android:hint="@string/d_first_name_hint"
                 android:inputType="textPersonName"
                 android:autofillHints="personGivenName" />
 
@@ -93,18 +94,22 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
-                android:hint="Last Name"
+                android:hint="@string/d_last_name_hint"
                 android:inputType="textPersonName"
                 android:autofillHints="personFamilyName" />
 
         </LinearLayout>
+
         <EditText
             android:id="@+id/edtPhoneNumber"
+            style="@style/RutaEditText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Phone Number (e.g., 09123456789)"
+            android:layout_marginTop="14dp"
+            android:hint="@string/a_signup_phone_hint"
             android:inputType="phone"
             android:maxLength="11" />
+
         <EditText
             android:id="@+id/edtEmail"
             style="@style/RutaEditText"
@@ -121,7 +126,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:hint="Tap to select birth date"
+            android:hint="@string/a_signup_birth_date_hint"
             android:focusable="false"
             android:clickable="true"
             android:cursorVisible="false" />
@@ -146,6 +151,37 @@
             android:inputType="textPassword"
             android:autofillHints="newPassword" />
 
+        <!-- Terms and Conditions Agreement Checkbox -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <CheckBox
+                android:id="@+id/chkTerms"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="I agree to the "
+                android:textColor="@color/ruta_text_secondary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/txtTermsNotice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Terms &amp; Conditions"
+                android:textColor="@color/ruta_primary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
         <TextView
             android:id="@+id/txtError"
             android:layout_width="match_parent"
@@ -162,7 +198,7 @@
             style="@style/RutaButton"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:layout_marginTop="22dp"
+            android:layout_marginTop="16dp"
             android:backgroundTint="@color/ruta_primary"
             android:text="@string/signup_button"
             android:textAllCaps="false" />
@@ -184,7 +220,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingHorizontal="12dp"
-                android:text="OR"
+                android:text="@string/a_signup_or"
                 android:textColor="@color/ruta_text_muted"
                 android:textSize="12sp" />
 
@@ -202,7 +238,7 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginTop="16dp"
-            android:text="Sign up with Google"
+            android:text="@string/a_signup_google"
             android:textColor="@color/ruta_primary"
             android:textAllCaps="false"
             app:strokeColor="@color/ruta_primary" />

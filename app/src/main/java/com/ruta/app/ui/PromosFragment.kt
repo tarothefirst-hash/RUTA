@@ -1,11 +1,7 @@
 package com.ruta.app.ui
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.util.Base64
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,8 +12,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.databinding.FragmentPromosBinding
 import com.ruta.app.model.DiscountRequest
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import com.ruta.app.util.ImageUtils
 
 class PromosFragment : Fragment() {
@@ -103,16 +97,12 @@ class PromosFragment : Fragment() {
 
                     val discountType = if (binding.radioStudent.isChecked) "STUDENT" else "SENIOR"
 
-                    // Format as Data URI before saving to Realtime Database
-                    val frontDataUri = "data:image/jpeg;base64,$frontBase64"
-                    val backDataUri = "data:image/jpeg;base64,$backBase64"
-
-                    saveRequestToDatabase(discountType, frontDataUri, backDataUri)
+                    // Pass raw Base64 through; saveRequestToDatabase applies the single Data URI prefix
+                    saveRequestToDatabase(discountType, frontBase64, backBase64)
                 }
             } catch (e: Exception) {
                 requireActivity().runOnUiThread {
                     resetLoadingState()
-                    Log.e("PromosFragment", "Base64 conversion failed", e)
                     Toast.makeText(context, "Error processing images: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -150,43 +140,6 @@ class PromosFragment : Fragment() {
         }.addOnFailureListener { err ->
             resetLoadingState()
             Toast.makeText(context, "Failed to fetch user data: ${err.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // Helper method to scale and compress the image before encoding
-    private fun uriToBase64(uri: Uri): String? {
-        return try {
-            val inputStream: InputStream? = requireContext().contentResolver.openInputStream(uri)
-            val originalBitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close() ?: return null
-
-            // Resize image to max 800px width/height while maintaining aspect ratio
-            val maxDimension = 800
-            val width = originalBitmap.width
-            val height = originalBitmap.height
-
-            val scaledWidth: Int
-            val scaledHeight: Int
-
-            if (width > height) {
-                scaledWidth = maxDimension
-                scaledHeight = (maxDimension * (height.toFloat() / width)).toInt()
-            } else {
-                scaledHeight = maxDimension
-                scaledWidth = (maxDimension * (width.toFloat() / height)).toInt()
-            }
-
-            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, scaledWidth, scaledHeight, true)
-            val byteArrayOutputStream = ByteArrayOutputStream()
-
-            // Compress as JPEG with 70% quality (keeps payload under ~150KB per photo)
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream)
-            val byteArray = byteArrayOutputStream.toByteArray()
-
-            Base64.encodeToString(byteArray, Base64.NO_WRAP)
-        } catch (e: Exception) {
-            Log.e("PromosFragment", "Error converting Uri to Base64", e)
-            null
         }
     }
 

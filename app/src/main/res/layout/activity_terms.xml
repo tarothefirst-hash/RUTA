@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ruta_bg"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/ruta_primary"
+        app:title="Terms &amp; Conditions"
+        app:titleTextColor="@color/white"
+        app:navigationIcon="@drawable/ic_back" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingExtra="4dp"
+            android:textColor="@color/ruta_text_primary"
+            android:textSize="14sp"
+            android:text="RUTA RIDESHARE PLATFORM - TERMS OF SERVICE &amp; PRIVACY POLICY\n\nLast Updated: October 2026\n\n1. ACCEPTANCE OF TERMS\nBy creating an account or using the RUTA mobile application (&quot;App&quot;), you agree to be bound by these Terms of Service. If you do not agree, do not use the service.\n\n2. SERVICE DESCRIPTION\nRUTA is a multi-passenger rideshare matching platform that connects passengers with independent drivers within designated service zones. RUTA does not operate as a transportation carrier directly.\n\n3. USER RESPONSIBILITIES\n- Users must provide accurate, complete registration details (including real name and contact information).\n- Passengers agree to be present at specified pick-up points on time.\n- Drivers agree to maintain valid licenses, vehicle registrations, and abide by traffic laws.\n\n4. SAFETY &amp; CONDUCT\n- Zero tolerance for harassment, hate speech, or dangerous behavior toward drivers or passengers.\n- Accounts violating safety rules will be suspended or permanently terminated.\n\n5. LOCATION &amp; DATA PRIVACY\n- RUTA collects background and foreground device location to calculate routes, match drivers, and show live trip status.\n- Personal information is handled securely and will not be sold to third parties.\n\n6. LIMITATION OF LIABILITY\nRUTA is not liable for indirect damages, lost items during trips, or delay issues caused by unexpected traffic or weather conditions." />
+
+    </ScrollView>
+
+    <Button
+        android:id="@+id/btnCloseTerms"
+        style="@style/RutaButton"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_margin="16dp"
+        android:backgroundTint="@color/ruta_primary"
+        android:text="I Understand"
+        android:textAllCaps="false" />
+
+</LinearLayout>

@@ -15,7 +15,6 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -49,20 +48,24 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import com.google.maps.android.PolyUtil
 import com.ruta.app.R
 import com.ruta.app.model.LocationItem
+import com.ruta.app.util.FareCalculator
+import com.ruta.app.util.FareDisplay
+import com.ruta.app.util.MapsApi
+import com.ruta.app.util.RideshareFareCalculator
 import com.ruta.app.util.RideshareFlowManager
 import com.ruta.app.util.RideshareManager
 import com.ruta.app.util.RideshareRouteOptimizer
 import com.ruta.app.util.RouteDeviationWatcher
+import com.ruta.app.util.VehicleType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.Calendar
 import java.util.Locale
-
+import android.text.Html
 class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
@@ -92,19 +95,31 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private var dropoffLatLng: LatLng? = null
     private var pickupAddress: String = "Detecting location..."
     private var dropoffAddress: String = "Add Location"
-
+    private var currentFareBeforeDiscount: Double = 0.0
+    private var currentDiscountAmount: Double = 0.0
     private var currentCalculatedFare: Double = 0.0
     private var routeDistanceMeters: Int = 0
     private var routeDurationSeconds: Int = 0
     private var currentSurgeMultiplier: Double = 1.0
+    // Admin-approved Student/PWD/Senior flag for the signed-in passenger. Loaded
+    // once per route calculation and reused for both the displayed and stored fare
+    // so the two can never disagree.
+    private var currentUserHasDiscount: Boolean = false
+
+    // Whether the booking currently being tracked is a shared one. Restored from the
+    // booking snapshot so the fare banner is not mistakenly rendered as solo after a
+    // resume (the banner defaults to solo before the snapshot lands).
+    private var activeBookingIsShared: Boolean = false
+
+    // Set once a settled final fare has been painted on the card, so a late quote
+    // redraw (e.g. the route request finishing after a resume) cannot overwrite it.
+    private var settledFinalFareShown: Boolean = false
 
     private var driverMarker: Marker? = null
     private var activeMarker: Marker? = null
     private var pickupMarker: Marker? = null
     private var dropoffMarker: Marker? = null
     private var currentPolyline: Polyline? = null
-    private var isDeviationAlertShowing = false
-    private var userDismissedDeviation = false
     private var currentRequestId: String? = null
     private var activeDriverId: String? = null
     private var isProgrammaticTextUpdate = false
@@ -120,11 +135,21 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private var deviationWatcher: RouteDeviationWatcher? = null
     private var rideshareFlow: RideshareFlowManager? = null
 
-    private val placesApiKey = "AIzaSyD_CZcqO8veYRbJxyD9EPNBcmGK3IoeDMQ"
+    // Ride/location trackers attached for the active booking. Held in fields so
+    // they can be detached in onDestroy and stop updating once the screen is gone.
+    private var bookingTrackingRef: DatabaseReference? = null
+    private var bookingTrackingListener: ValueEventListener? = null
+    private var rideStatusRef: DatabaseReference? = null
+    private var rideStatusListener: ValueEventListener? = null
+    private var cancelDialogShown = false
+
+    private val placesApiKey: String by lazy { MapsApi.key(this) }
     private val locationPermissionRequestCode = 1001
+    private var currentNoShowFee = 0.0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContentView(R.layout.activity_location_selection)
 
         database = FirebaseDatabase.getInstance().reference
@@ -132,6 +157,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         if (!Places.isInitialized()) {
             Places.initialize(applicationContext, placesApiKey)
         }
+        loadNoShowDebt()
         placesClient = Places.createClient(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
@@ -230,7 +256,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun setupPassengerRideTracking(bookingId: String) {
         val bookingRef = FirebaseDatabase.getInstance().reference.child("bookings").child(bookingId)
 
-        bookingRef.addValueEventListener(object : ValueEventListener {
+        val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val status = snapshot.child("status").getValue(String::class.java) ?: return
 
@@ -271,9 +297,16 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             }
 
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        bookingTrackingRef = bookingRef
+        bookingTrackingListener = listener
+        bookingRef.addValueEventListener(listener)
     }
-
+    private fun loadNoShowDebt() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        database.child("users").child(uid).child("noShowDebt").get()
+            .addOnSuccessListener { currentNoShowFee = it.getValue(Double::class.java) ?: 0.0 }
+    }
     private fun trimPassengerPolyline(driverPos: LatLng) {
         if (passengerPolylinePoints.size <= 1) return
 
@@ -322,7 +355,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         myPassengerId = passengerId,
                         myPickup = LatLng(pLat, pLng),
                         myDropoff = LatLng(dLat, dLng),
-                        apiKey = getString(R.string.google_maps_key)
+                        apiKey = placesApiKey
                     ) { state ->
                         runOnUiThread {
                             when (state) {
@@ -459,6 +492,8 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         isRideshare: Boolean = false,
         coMatchFare: Double? = null
     ) {
+        // A settled fare is final for this screen; don't let a quote redraw clobber it.
+        if (settledFinalFareShown) return
         val cardFareDetails = findViewById<MaterialCardView>(R.id.cardFareDetails)
         val txtUserFare = findViewById<TextView>(R.id.txtUserFare)
         val txtTripCalculation = findViewById<TextView>(R.id.txtTripCalculation)
@@ -485,10 +520,84 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 txtTripCalculation?.text = "Overall calculation updates upon co-match."
             }
         } else {
-            txtUserFare?.text = String.format(Locale.getDefault(), "Total Fare: ₱%.2f", userFare)
-            txtTripCalculation?.text = "Solo Ride • Direct route fare"
+            if (currentDiscountAmount > 0.0) {
+                val originalFare = if (currentFareBeforeDiscount > 0.0) currentFareBeforeDiscount else (userFare + currentDiscountAmount)
+                val htmlText = String.format(
+                    Locale.getDefault(),
+                    "Total Fare: <font color='#D1D5DB'><small><s>₱%.2f</s></small></font>  <b>₱%.2f</b>",
+                    originalFare,
+                    userFare
+                )
+                txtUserFare?.text = Html.fromHtml(htmlText, Html.FROM_HTML_MODE_COMPACT)
+                txtTripCalculation?.text = String.format(
+                    Locale.getDefault(),
+                    "Solo Ride • Discount applied (-₱%.2f)",
+                    currentDiscountAmount
+                )
+            } else {
+                txtUserFare?.text = String.format(Locale.getDefault(), "Total Fare: ₱%.2f", userFare)
+                txtTripCalculation?.text = "Solo Ride • Direct route fare"
+            }
+        }
+
+        if (currentNoShowFee > 0.0) {
+            txtTripCalculation?.append(
+                String.format(Locale.getDefault(), "\n+ ₱%.2f unpaid no-show fee", currentNoShowFee)
+            )
         }
     }
+
+    /**
+     * Renders the settled fare (and the running-shared / finalising hints) onto the
+     * passenger fare card. All wording and numeric formatting lives in [FareDisplay];
+     * this only reads the snapshot values and maps the helper's output onto the views.
+     */
+    private fun updateFinalFareDisplay(snapshot: DataSnapshot, status: String, isShared: Boolean) {
+        val rendered = FareDisplay.render(
+            FareDisplay.Snapshot(
+                finalFare = snapshot.child("finalFare").getValue(Double::class.java) ?: 0.0,
+                fareBase = snapshot.child("fareBase").getValue(Double::class.java) ?: 0.0,
+                fareSoloCharge = snapshot.child("fareSoloCharge").getValue(Double::class.java) ?: 0.0,
+                fareSharedCharge = snapshot.child("fareSharedCharge").getValue(Double::class.java) ?: 0.0,
+                fareDetourSurcharge = snapshot.child("fareDetourSurcharge").getValue(Double::class.java) ?: 0.0,
+                fareInconvenienceCredit = snapshot.child("fareInconvenienceCredit").getValue(Double::class.java) ?: 0.0,
+
+                // --- ADD THIS LINE HERE ---
+                fareDiscount = snapshot.child("discountAmount").getValue(Double::class.java) ?: 0.0,
+
+                quotedFare = snapshot.child("fare").getValue(Double::class.java) ?: 0.0,
+                status = status,
+                isShared = isShared
+            ),
+            fareDisplayLabels()
+        )
+
+        rendered.headline?.let { findViewById<TextView>(R.id.txtUserFare)?.text = it }
+        if (rendered.headline != null) settledFinalFareShown = true
+
+        val txtFinalFareDetail = findViewById<TextView>(R.id.txtFinalFareDetail) ?: return
+        val detail = rendered.detail
+        if (detail.isNullOrBlank()) {
+            txtFinalFareDetail.visibility = View.GONE
+        } else {
+            txtFinalFareDetail.text = detail
+            txtFinalFareDetail.visibility = View.VISIBLE
+        }
+    }
+
+    private fun fareDisplayLabels(): FareDisplay.Labels = FareDisplay.Labels(
+        headlineFinal = getString(R.string.fare_headline_final),
+        detailBase = getString(R.string.fare_detail_base),
+        detailYourRide = getString(R.string.fare_detail_your_ride),
+        detailShared = getString(R.string.fare_detail_shared),
+        detailDetour = getString(R.string.fare_detail_detour),
+        detailDiscount = getString(R.string.fare_detail_discount),
+        detailCredit = getString(R.string.fare_detail_credit),
+        detailAdjustedFrom = getString(R.string.fare_detail_adjusted_from),
+        detailFinalising = getString(R.string.fare_detail_finalising),
+        detailAwaitingFinalShare = getString(R.string.fare_detail_awaiting_final_share),
+        moneyFormat = getString(R.string.fare_money_format)
+    )
 
     private fun fetchPlaceSuggestions(query: String) {
         val request = FindAutocompletePredictionsRequest.builder()
@@ -634,6 +743,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun calculateAndDrawRoute() {
         val origin = pickupLatLng ?: return
         val destination = dropoffLatLng ?: return
+        loadNoShowDebt()
 
         currentStage = SelectionStage.ROUTE_READY
         activeMarker?.isDraggable = false
@@ -646,52 +756,96 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
         val url = DirectionsHelper.getDirectionsUrl(origin, destination, placesApiKey)
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val jsonData = DirectionsHelper.downloadUrl(url)
-            val routePoints = DirectionsHelper.parseDirections(jsonData)
+        withUserDiscount {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val jsonData = DirectionsHelper.downloadUrl(url)
+                val routePoints = DirectionsHelper.parseDirections(jsonData)
 
-            val (distMeters, durSeconds) = parseDistanceAndDuration(jsonData)
-            routeDistanceMeters = distMeters
-            routeDurationSeconds = durSeconds
+                val (distMeters, durSeconds) = parseDistanceAndDuration(jsonData)
+                routeDistanceMeters = distMeters
+                routeDurationSeconds = durSeconds
 
-            currentSurgeMultiplier = calculateSurgeMultiplier()
-            currentCalculatedFare = calculateExactFare(routeDistanceMeters, routeDurationSeconds, currentSurgeMultiplier)
+                currentSurgeMultiplier = FareCalculator.getSurgeMultiplier(
+                    Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                )
 
-            withContext(Dispatchers.Main) {
-                currentPolyline?.remove()
+                // Fare calculation
+                currentFareBeforeDiscount = calculateExactFare(
+                    routeDistanceMeters,
+                    routeDurationSeconds,
+                    currentSurgeMultiplier,
+                    applyDiscount = false
+                )
 
-                if (routePoints.isNotEmpty()) {
-                    passengerPolylinePoints = routePoints.toMutableList()
+                currentCalculatedFare = calculateExactFare(
+                    routeDistanceMeters,
+                    routeDurationSeconds,
+                    currentSurgeMultiplier,
+                    applyDiscount = currentUserHasDiscount
+                )
 
-                    currentPolyline = mMap.addPolyline(
-                        PolylineOptions()
-                            .addAll(routePoints)
-                            .width(14f)
-                            .color(Color.parseColor("#A855F7"))
-                            .startCap(RoundCap())
-                            .endCap(RoundCap())
-                            .geodesic(true)
-                    )
-                    routePolyline = currentPolyline
-                } else {
-                    currentPolyline = mMap.addPolyline(
-                        PolylineOptions()
-                            .add(origin, destination)
-                            .width(10f)
-                            .color(Color.RED)
-                            .geodesic(true)
-                    )
-                    routePolyline = currentPolyline
-                }
+                currentDiscountAmount = currentFareBeforeDiscount - currentCalculatedFare
 
-                updateFareBanner(currentCalculatedFare, isRideshare = false)
+                withContext(Dispatchers.Main) {
+                    currentPolyline?.remove()
 
-                val surgeText = if (currentSurgeMultiplier > 1.0) " (${currentSurgeMultiplier}x Surge)" else ""
-                if (!suppressRouteButtonUpdate) {
-                    btnConfirmStage.text = "Select Ride - ₱${currentCalculatedFare.toInt()}$surgeText"
+                    if (routePoints.isNotEmpty()) {
+                        passengerPolylinePoints = routePoints.toMutableList()
+
+                        currentPolyline = mMap.addPolyline(
+                            PolylineOptions()
+                                .addAll(routePoints)
+                                .width(14f)
+                                .color(Color.parseColor("#A855F7"))
+                                .startCap(RoundCap())
+                                .endCap(RoundCap())
+                                .geodesic(true)
+                        )
+                        routePolyline = currentPolyline
+                    } else {
+                        currentPolyline = mMap.addPolyline(
+                            PolylineOptions()
+                                .add(origin, destination)
+                                .width(10f)
+                                .color(Color.RED)
+                                .geodesic(true)
+                        )
+                        routePolyline = currentPolyline
+                    }
+
+                    // Updates fare display and appends unpaid no-show fee if present
+                    updateFareBanner(currentCalculatedFare, isRideshare = activeBookingIsShared)
+
+                    val surgeText = if (currentSurgeMultiplier > 1.0) " (${currentSurgeMultiplier}x Surge)" else ""
+                    if (!suppressRouteButtonUpdate) {
+                        btnConfirmStage.text = "CONFIRM DESTINATION - ₱${currentCalculatedFare.toInt()}$surgeText"
+                    }
                 }
             }
         }
+    }
+    /**
+     * Loads users/<uid>/hasDiscount once and hands back control. The value is
+     * cached on currentUserHasDiscount and used for the displayed fare, the stored
+     * booking fare and the booking's own hasDiscount field, so those stay aligned.
+     */
+    private fun withUserDiscount(onReady: () -> Unit) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid
+        if (userId.isNullOrEmpty()) {
+            currentUserHasDiscount = false
+            onReady()
+            return
+        }
+
+        database.child("users").child(userId).child("hasDiscount").get()
+            .addOnSuccessListener { snapshot ->
+                currentUserHasDiscount = snapshot.getValue(Boolean::class.java) ?: false
+                onReady()
+            }
+            .addOnFailureListener {
+                currentUserHasDiscount = false
+                onReady()
+            }
     }
 
     private fun parseDistanceAndDuration(jsonData: String): Pair<Int, Int> {
@@ -711,29 +865,15 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    private fun calculateExactFare(distanceMeters: Int, durationSeconds: Int, surgeMultiplier: Double): Double {
-        val baseFare = 45.0
-        val perKmRate = 15.0
-        val perMinuteRate = 2.0
-
-        val distanceKm = distanceMeters / 1000.0
-        val durationMinutes = durationSeconds / 60.0
-
-        val distanceCharge = distanceKm * perKmRate
-        val timeCharge = durationMinutes * perMinuteRate
-
-        val totalUnsurged = baseFare + distanceCharge + timeCharge
-        return totalUnsurged * surgeMultiplier
-    }
-
-    private fun calculateSurgeMultiplier(): Double {
-        val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return when (currentHour) {
-            7, 8 -> 1.25
-            17, 18, 19 -> 1.30
-            else -> 1.0
-        }
-    }
+    private fun calculateExactFare(
+        distanceMeters: Int, durationSeconds: Int, surgeMultiplier: Double, applyDiscount: Boolean
+    ): Double = FareCalculator.calculateFare(
+        distanceKm = distanceMeters / 1000.0,
+        durationMin = durationSeconds / 60.0,
+        vehicleType = VehicleType.SEDAN,
+        hasDiscount = applyDiscount,
+        surgeMultiplierOverride = surgeMultiplier
+    )
 
     private fun showRideOptionsDialog(baseCalculatedFare: Double) {
         val dialog = BottomSheetDialog(this)
@@ -741,13 +881,23 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         dialog.setContentView(view)
 
         val fareRegular = baseCalculatedFare
-        val fareShared = baseCalculatedFare * 0.70
+        // The shared ride is quoted with the unified model. Before any co-passenger
+        // exists there is no counterpart, so the quote is the model's base-plus-own-
+        // distance case — numerically identical to the solo fare for the same trip.
+        val fareShared = RideshareFareCalculator.quoteSoloFare(
+            distanceMeters = routeDistanceMeters,
+            durationSeconds = routeDurationSeconds,
+            surgeMultiplier = currentSurgeMultiplier,
 
+        )
+        view.findViewById<TextView>(R.id.txtFareRegular)?.text =
+            if (currentDiscountAmount > 0) "₱${fareRegular.toInt()} • 20% off" else "₱${fareRegular.toInt()}"
         val distanceKm = String.format("%.1f", routeDistanceMeters / 1000.0)
         val durationMin = (routeDurationSeconds / 60)
 
         view.findViewById<TextView>(R.id.txtTripSummaryDetails)?.text = "$distanceKm km • ~$durationMin mins"
         view.findViewById<TextView>(R.id.txtFareRegular)?.text = "₱${fareRegular.toInt()}"
+        view.findViewById<TextView>(R.id.txtFareShared)?.text = "₱${fareShared.toInt()}"
 
         view.findViewById<View>(R.id.btnOptionRegular)?.setOnClickListener {
             dialog.dismiss()
@@ -797,7 +947,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 myPassengerId = userId,
                 myPickup = pickup,
                 myDropoff = dropoff,
-                apiKey = getString(R.string.google_maps_key),
+                apiKey = placesApiKey,
                 maxPickupMinutesApart = 10.0,
                 maxDropoffMinutesApart = 10.0
             ) { state ->
@@ -832,6 +982,9 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         initialStatus: String,
         onWritten: (bookingId: String) -> Unit
     ) {
+        // New booking — a previous settled fare no longer applies to this card.
+        settledFinalFareShown = false
+
         val pLat = pickupLatLng?.latitude ?: return
         val pLng = pickupLatLng?.longitude ?: return
         val dLat = dropoffLatLng?.latitude ?: return
@@ -866,14 +1019,18 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         "distanceMeters" to routeDistanceMeters,
                         "durationSeconds" to routeDurationSeconds,
                         "surgeMultiplier" to currentSurgeMultiplier,
+                        "noShowFee" to currentNoShowFee,
                         "fare" to fare,
+                        "fareBeforeDiscount" to if (isShared) fare else currentFareBeforeDiscount,
+                        "discountAmount" to if (isShared) 0.0 else currentDiscountAmount,
+                        "hasDiscount" to currentUserHasDiscount,
                         "serviceType" to serviceType,
                         "isShared" to isShared,
                         "maxPassengersAllowed" to maxPax,
                         "tripGroupId" to null,
                         "status" to initialStatus,
                         "routeStatus" to "NORMAL",
-                        "timestamp" to System.currentTimeMillis()
+                        "createdAt" to System.currentTimeMillis()
                     )
 
                     ref.setValue(bookingData).addOnSuccessListener {
@@ -890,55 +1047,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             })
     }
 
-    fun onDriverLocationUpdated(
-        currentDriverLatLng: LatLng,
-        routePolyline: List<LatLng>
-    ) {
-        if (routePolyline.size < 2) return
-
-        var minDistanceMeters = Double.MAX_VALUE
-        for (i in 0 until routePolyline.size - 1) {
-            val start = routePolyline[i]
-            val end = routePolyline[i + 1]
-            val distanceToSegment = PolyUtil.distanceToLine(currentDriverLatLng, start, end)
-            if (distanceToSegment < minDistanceMeters) {
-                minDistanceMeters = distanceToSegment
-            }
-        }
-
-        val isOffRoute = minDistanceMeters > 200.0
-
-        if (isOffRoute) {
-            if (!isDeviationAlertShowing && !userDismissedDeviation) {
-                isDeviationAlertShowing = true
-                showRouteDeviationDialog()
-            }
-        } else {
-            userDismissedDeviation = false
-            isDeviationAlertShowing = false
-        }
-    }
-
-    private fun showRouteDeviationDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("⚠️ Route Deviation Warning")
-            .setMessage("Your driver has moved off the designated path. Please verify your current route.")
-            .setPositiveButton("I'M SAFE") { dialog, _ ->
-                userDismissedDeviation = true
-                isDeviationAlertShowing = false
-                dialog.dismiss()
-            }
-            .setNegativeButton("EMERGENCY / SOS") { dialog, _ ->
-                dialog.dismiss()
-                val intent = Intent(Intent.ACTION_DIAL).apply {
-                    data = android.net.Uri.parse("tel:911")
-                }
-                startActivity(intent)
-            }
-            .setCancelable(false)
-            .show()
-    }
-
     private fun restoreAndTrackActiveBooking(bookingId: String) {
         currentRequestId = bookingId
         currentStage = SelectionStage.BOOKING_SUBMITTED
@@ -947,6 +1055,10 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         database.child("bookings").child(bookingId).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (!snapshot.exists()) return
+
+                // Restore the shared flag before the route/fare banner is redrawn so a
+                // resumed shared booking is never rendered as solo.
+                activeBookingIsShared = snapshot.child("isShared").getValue(Boolean::class.java) ?: false
 
                 val pLat = snapshot.child("pickupLat").getValue(Double::class.java) ?: return
                 val pLng = snapshot.child("pickupLng").getValue(Double::class.java) ?: return
@@ -984,113 +1096,145 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun listenForRideStatusUpdates(bookingId: String) {
+        detachRideTrackingListeners()
         setupPassengerRideTracking(bookingId)
 
-        database.child("bookings").child(bookingId)
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val status = snapshot.child("status").getValue(String::class.java) ?: ""
-                    val routeStatus = snapshot.child("routeStatus").getValue(String::class.java) ?: "NORMAL"
-                    val tripGroupId = snapshot.child("tripGroupId").getValue(String::class.java)
-                    val isShared = snapshot.child("isShared").getValue(Boolean::class.java) ?: false
-                    val driverId = snapshot.child("driverId").getValue(String::class.java) ?: ""
-                    val distMeters = snapshot.child("distanceMeters").getValue(Int::class.java) ?: routeDistanceMeters
-                    val durSeconds = snapshot.child("durationSeconds").getValue(Int::class.java) ?: routeDurationSeconds
-                    val distKm = String.format("%.1f km", distMeters / 1000.0)
-                    val durMins = "${durSeconds / 60} mins"
+        val rideRef = database.child("bookings").child(bookingId)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val status = snapshot.child("status").getValue(String::class.java) ?: ""
+                val routeStatus = snapshot.child("routeStatus").getValue(String::class.java) ?: "NORMAL"
+                val tripGroupId = snapshot.child("tripGroupId").getValue(String::class.java)
+                val isShared = snapshot.child("isShared").getValue(Boolean::class.java) ?: false
+                val driverId = snapshot.child("driverId").getValue(String::class.java) ?: ""
+                val distMeters = snapshot.child("distanceMeters").getValue(Int::class.java) ?: routeDistanceMeters
+                val durSeconds = snapshot.child("durationSeconds").getValue(Int::class.java) ?: routeDurationSeconds
+                val distKm = String.format("%.1f km", distMeters / 1000.0)
+                val durMins = "${durSeconds / 60} mins"
 
-                    activeDriverId = driverId
+                activeDriverId = driverId
+                activeBookingIsShared = isShared
 
-                    if (status == "IN_PROGRESS") {
-                        startPassengerLocationUpdates(bookingId)
-                        if (deviationWatcher == null) {
-                            deviationWatcher = RouteDeviationWatcher(this@LocationSelectionActivity, bookingId) { isDeviated ->
-                                txtPassengerTripStatus.setTextColor(
-                                    if (isDeviated) Color.RED else Color.parseColor("#1A237E")
-                                )
-                            }
-                            deviationWatcher?.start()
+                // Keep the fare card in step with the booking on every update.
+                updateFinalFareDisplay(snapshot, status, isShared)
+
+                if (status == "IN_PROGRESS") {
+                    startPassengerLocationUpdates(bookingId)
+                    if (deviationWatcher == null) {
+                        deviationWatcher = RouteDeviationWatcher(this@LocationSelectionActivity, bookingId) { isDeviated ->
+                            txtPassengerTripStatus.setTextColor(
+                                if (isDeviated) Color.RED else Color.parseColor("#1A237E")
+                            )
                         }
-                    } else {
-                        stopPassengerLocationUpdates()
-                        deviationWatcher?.stop()
-                        deviationWatcher = null
+                        deviationWatcher?.start()
                     }
+                } else {
+                    stopPassengerLocationUpdates()
+                    deviationWatcher?.stop()
+                    deviationWatcher = null
+                }
 
-                    when (status) {
-                        "MATCHING" -> {
-                            cardDriverInfo.visibility = View.GONE
-                            btnConfirmStage.visibility = View.VISIBLE
-                            updateSearchingUi(true)
-                            btnConfirmStage.text = "Matching co-passenger..."
-                            btnConfirmStage.setBackgroundColor(Color.parseColor("#9E9E9E"))
+                when (status) {
+                    "MATCHING" -> {
+                        cardDriverInfo.visibility = View.GONE
+                        btnConfirmStage.visibility = View.VISIBLE
+                        updateSearchingUi(true)
+                        btnConfirmStage.text = "Matching co-passenger..."
+                        btnConfirmStage.setBackgroundColor(Color.parseColor("#9E9E9E"))
+                    }
+                    "REQUESTED", "SEARCHING" -> {
+                        cardDriverInfo.visibility = View.GONE
+                        btnConfirmStage.visibility = View.VISIBLE
+                        updateSearchingUi(true)
+                        btnConfirmStage.setBackgroundColor(Color.parseColor("#9E9E9E"))
+
+                        if (isShared && !tripGroupId.isNullOrEmpty()) {
+                            showCoPassengerNameOnce(tripGroupId, bookingId)
+                        } else if (isShared) {
+                            btnConfirmStage.text = "Searching for driver (Solo)..."
+                        } else {
+                            btnConfirmStage.text = "Searching for driver..."
                         }
-                        "REQUESTED", "SEARCHING" -> {
-                            cardDriverInfo.visibility = View.GONE
-                            btnConfirmStage.visibility = View.VISIBLE
-                            updateSearchingUi(true)
-                            btnConfirmStage.setBackgroundColor(Color.parseColor("#9E9E9E"))
+                    }
+                    "ACCEPTED", "ARRIVED", "IN_PROGRESS" -> {
+                        btnConfirmStage.visibility = View.GONE
+                        updateSearchingUi(false)
+                        cardDriverInfo.visibility = View.VISIBLE
+                        cardDriverInfo.bringToFront()
 
-                            if (isShared && !tripGroupId.isNullOrEmpty()) {
-                                showCoPassengerNameOnce(tripGroupId, bookingId)
-                            } else if (isShared) {
-                                btnConfirmStage.text = "Searching for driver (Solo)..."
-                            } else {
-                                btnConfirmStage.text = "Searching for driver..."
-                            }
+                        // FIX: Hide cancel button once a driver accepts, arrives, or starts trip
+                        btnCancelTrip.visibility = View.GONE
+
+                        val driverLat = snapshot.child("driverLat").getValue(Double::class.java)
+                        val driverLng = snapshot.child("driverLng").getValue(Double::class.java)
+                        updateLiveDriverMarker(driverLat, driverLng)
+
+                        val arrivedAt = snapshot.child("arrivedAt").getValue(Long::class.java) ?: 0L
+                        val minsLeft = if (arrivedAt > 0) {
+                            ((arrivedAt + 5 * 60_000L - System.currentTimeMillis()) / 60_000L + 1).coerceAtLeast(0)
+                        } else -1
+
+                        if (status == "IN_PROGRESS" && driverLat != null && driverLng != null && driverLat != 0.0 && driverLng != 0.0) {
+                            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(driverLat, driverLng), 16.5f))
+                        } else if (driverLat != null && driverLng != null && driverLat != 0.0 && driverLng != 0.0) {
+                            fitMapBoundsSafely(LatLng(driverLat, driverLng), pickupLatLng, dropoffLatLng)
                         }
-                        "ACCEPTED", "ARRIVED", "IN_PROGRESS" -> {
-                            btnConfirmStage.visibility = View.GONE
-                            updateSearchingUi(false)
-                            cardDriverInfo.visibility = View.VISIBLE
-                            cardDriverInfo.bringToFront()
-                            if (status == "IN_PROGRESS") {
-                                btnCancelTrip.visibility = View.GONE
-                            } else {
-                                btnCancelTrip.visibility = View.VISIBLE
-                            }
-                            val driverLat = snapshot.child("driverLat").getValue(Double::class.java)
-                            val driverLng = snapshot.child("driverLng").getValue(Double::class.java)
-                            updateLiveDriverMarker(driverLat, driverLng)
 
-                            if (status == "IN_PROGRESS" && driverLat != null && driverLng != null && driverLat != 0.0 && driverLng != 0.0) {
-                                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(driverLat, driverLng), 16.5f))
-                            } else if (driverLat != null && driverLng != null && driverLat != 0.0 && driverLng != 0.0) {
-                                fitMapBoundsSafely(LatLng(driverLat, driverLng), pickupLatLng, dropoffLatLng)
-                            }
-
-                            txtPassengerTripStatus.text = when {
-                                routeStatus == "DEVIATED" -> "⚠️ Route Deviation Detected!"
-                                status == "ARRIVED" -> "Driver has arrived at pickup!"
-                                status == "IN_PROGRESS" -> "Trip in progress • Remaining: $durMins ($distKm)"
-                                else -> "Driver is on the way • ETA $durMins ($distKm)"
-                            }
-
-                            fetchDriverAndVehicleDetails(driverId, snapshot)
-                            if (isShared && !tripGroupId.isNullOrEmpty()) {
-                                drawGroupRouteForPassenger(tripGroupId, driverLat, driverLng)
-                            }
+                        txtPassengerTripStatus.text = when {
+                            routeStatus == "DEVIATED" -> "⚠️ Route Deviation Detected!"
+                            (status == "ACCEPTED" || status == "ARRIVED") && arrivedAt > 0 ->
+                                "Driver has arrived! Please board within $minsLeft min"
+                            status == "ARRIVED" -> "Driver has arrived at pickup!"
+                            status == "IN_PROGRESS" -> "Trip in progress • Remaining: $durMins ($distKm)"
+                            else -> "Driver is on the way • ETA $durMins ($distKm)"
                         }
-                        "COMPLETED", "CANCELLED" -> {
-                            driverMarker?.remove()
-                            driverMarker = null
-                            cardDriverInfo.visibility = View.GONE
-                            btnConfirmStage.visibility = View.VISIBLE
-                            updateSearchingUi(false)
 
-                            if (status == "COMPLETED") {
-                                btnConfirmStage.text = "Trip Completed"
-                                btnConfirmStage.setBackgroundColor(Color.parseColor("#4CAF50"))
-                            } else {
-                                btnConfirmStage.text = "Ride Cancelled"
-                                btnConfirmStage.setBackgroundColor("#E53935".toColorInt())
+                        fetchDriverAndVehicleDetails(driverId, snapshot)
+                        if (isShared && !tripGroupId.isNullOrEmpty()) {
+                            drawGroupRouteForPassenger(tripGroupId, driverLat, driverLng)
+                        }
+                    }
+                    "COMPLETED", "CANCELLED" -> {
+                        driverMarker?.remove()
+                        driverMarker = null
+                        cardDriverInfo.visibility = View.GONE
+                        btnConfirmStage.visibility = View.VISIBLE
+                        updateSearchingUi(false)
+
+                        if (status == "COMPLETED") {
+                            btnConfirmStage.text = "Trip Completed"
+                            btnConfirmStage.setBackgroundColor(Color.parseColor("#4CAF50"))
+                        } else {
+                            btnConfirmStage.text = "Ride Cancelled"
+                            btnConfirmStage.setBackgroundColor("#E53935".toColorInt())
+
+                            if (!cancelDialogShown) {
+                                cancelDialogShown = true
+                                val reason = snapshot.child("cancelReason").getValue(String::class.java)
+                                val owed = snapshot.child("noShowFeeOwed").getValue(Double::class.java) ?: 0.0
+                                val msg = when (reason) {
+                                    "CO_PASSENGER_NO_SHOW" -> "Your co-passenger didn't show up, so this shared ride was cancelled. You won't be charged."
+                                    "NO_SHOW" -> "You weren't at the pickup point in time. ₱%.2f (fare + ₱20 inconvenience fee) will be added to your next booking.".format(owed)
+                                    else -> null
+                                }
+                                msg?.let {
+                                    androidx.appcompat.app.AlertDialog.Builder(this@LocationSelectionActivity)
+                                        .setMessage(it)
+                                        .setPositiveButton("OK") { _, _ -> finish() }
+                                        .setCancelable(false)
+                                        .show()
+                                }
                             }
                         }
                     }
                 }
+            }
 
-                override fun onCancelled(error: DatabaseError) {}
-            })
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        rideStatusRef = rideRef
+        rideStatusListener = listener
+        rideRef.addValueEventListener(listener)
     }
 
     private fun showCoPassengerNameOnce(tripGroupId: String, myBookingId: String) {
@@ -1178,6 +1322,18 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         rideshareFlow = null
         stopPassengerLocationUpdates()
         deviationWatcher?.stop()
+        detachRideTrackingListeners()
+    }
+
+    // Removes the booking ride/location listeners so no database updates keep
+    // firing (and no UI/markers get touched) after the activity is destroyed.
+    private fun detachRideTrackingListeners() {
+        bookingTrackingListener?.let { bookingTrackingRef?.removeEventListener(it) }
+        bookingTrackingListener = null
+        bookingTrackingRef = null
+        rideStatusListener?.let { rideStatusRef?.removeEventListener(it) }
+        rideStatusListener = null
+        rideStatusRef = null
     }
 
     private fun startPassengerLocationUpdates(bookingId: String) {

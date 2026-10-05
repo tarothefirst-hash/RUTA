@@ -74,18 +74,13 @@ class RideshareFlowManager(
                         )
                     }
 
-                    android.util.Log.d("RUTA_MATCH", "Found ${pool.size} candidate(s) in MATCHING pool.")
-
                     val match = RideshareManager.Matcher.findBestMatch(
                         newRequest = myCandidate,
                         pendingPool = pool
                     )
 
                     if (match != null) {
-                        android.util.Log.d("RUTA_MATCH", "Match found with bookingId: ${match.bookingId}")
                         lockInMatch(match.bookingId)
-                    } else {
-                        android.util.Log.d("RUTA_MATCH", "No compatible match in pool of size ${pool.size}")
                     }
                 }
 
@@ -122,13 +117,10 @@ class RideshareFlowManager(
                 currentData: DataSnapshot?
             ) {
                 if (error != null) {
-                    android.util.Log.e("RUTA_MATCH", "Lock transaction error: ${error.message}")
                     return
                 }
 
                 if (committed) {
-                    android.util.Log.d("RUTA_MATCH", "Lock acquired! Flipping status to MATCHED...")
-
                     finished = true
                     stop()
 
@@ -140,14 +132,9 @@ class RideshareFlowManager(
                     )
 
                     database.updateChildren(updates).addOnSuccessListener {
-                        android.util.Log.d("RUTA_MATCH", "Firebase status successfully set to MATCHED!")
                         onStateChanged(RideshareState.MATCHED)
                         solveAndPersistRoute(otherBookingId, pairKey)
-                    }.addOnFailureListener { e ->
-                        android.util.Log.e("RUTA_MATCH", "Failed to update booking status: ${e.message}")
                     }
-                } else {
-                    android.util.Log.d("RUTA_MATCH", "Lock acquisition aborted (already claimed).")
                 }
             }
         })
@@ -174,7 +161,6 @@ class RideshareFlowManager(
                 Executors.newSingleThreadExecutor().execute {
                     val winner = RideshareRouteOptimizer.findOptimalSequence(me, other, apiKey)
                     if (winner == null) {
-                        android.util.Log.e("RUTA_MATCH", "findOptimalSequence returned null — route solving genuinely failed")
                         return@execute
                     }
 
@@ -194,10 +180,8 @@ class RideshareFlowManager(
                     )
 
                     database.child("tripGroups").child(groupId).setValue(tripGroupData)
-                        .addOnFailureListener { e -> android.util.Log.e("RUTA_MATCH", "Failed to write tripGroups: ${e.message}") }
                 }
             }
-            .addOnFailureListener { e -> android.util.Log.e("RUTA_MATCH", "Failed to fetch other booking: ${e.message}") }
     }
 
     private fun promoteToSoloIfStillMatching() {
@@ -207,7 +191,12 @@ class RideshareFlowManager(
             .addOnSuccessListener { snap ->
                 if (snap.getValue(String::class.java) == "MATCHING") {
                     database.child("bookings").child(myBookingId)
-                        .updateChildren(mapOf("status" to "REQUESTED"))
+                        .updateChildren(
+                            mapOf(
+                                "status" to "REQUESTED",
+                                "isShared" to false
+                            )
+                        )
 
                     finished = true
                     onStateChanged(RideshareState.NO_MATCH_PROCEEDING_SOLO)
@@ -224,17 +213,5 @@ class RideshareFlowManager(
         matchingListener = null
         timeoutRunnable?.let { handler.removeCallbacks(it) }
         timeoutRunnable = null
-    }
-
-    fun cancelIfStillMatching() {
-        database.child("bookings").child(myBookingId).child("status").get()
-            .addOnSuccessListener { snap ->
-                if (snap.getValue(String::class.java) == "MATCHING") {
-                    database.child("bookings").child(myBookingId)
-                        .updateChildren(mapOf("status" to "CANCELLED"))
-                }
-            }
-        finished = true
-        stop()
     }
 }

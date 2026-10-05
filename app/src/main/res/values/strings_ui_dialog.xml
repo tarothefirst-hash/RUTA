@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- activity_chat.xml -->
+    <string name="d_chat_type_message_hint">Type a message...</string>
+    <string name="d_chat_send">Send</string>
+
+    <!-- activity_driver_home.xml -->
+    <string name="d_driver_welcome">Welcome!</string>
+    <string name="d_driver_dashboard">Driver dashboard</string>
+    <string name="d_driver_placeholder">This screen is a placeholder. Build out the Driver experience here.</string>
+
+    <!-- activity_login.xml -->
+    <string name="d_sign_in_with_google">Sign in with Google</string>
+
+    <!-- activity_passenger_home.xml -->
+    <string name="d_route_deviation_title">Route Deviation Detected</string>
+    <string name="d_route_deviation_message">Your driver has moved off the designated path. Please check your location and verify your safety.</string>
+    <string name="d_im_safe">I\'M SAFE</string>
+    <string name="d_emergency_call_sos">EMERGENCY / CALL SOS</string>
+
+    <!-- activity_splash.xml -->
+    <string name="d_ruta_logo_cd">RUTA Logo</string>
+
+    <!-- dialog_create_driver.xml -->
+    <string name="d_add_new_driver">Add New Driver</string>
+    <string name="d_create_driver_desc">Creates the account directly — it still lands in the approval queue below until you approve it.</string>
+    <string name="d_first_name_hint">First Name</string>
+    <string name="d_last_name_hint">Last Name</string>
+    <string name="d_phone_number_hint">Phone Number</string>
+    <string name="d_temp_password_hint">Temporary Password (share with driver)</string>
+    <string name="d_vehicle_information">Vehicle Information</string>
+    <string name="d_vehicle_model_hint">Vehicle Model (e.g., Toyota Vios)</string>
+    <string name="d_plate_number_hint">Plate Number</string>
+    <string name="d_color_hint">Color</string>
+    <string name="d_create_driver_account">Create Driver Account</string>
+
+    <!-- dialog_ride_options.xml -->
+    <string name="d_select_ride_option">Select Ride Option</string>
+    <string name="d_trip_summary_placeholder">0.0 km • ~0 mins</string>
+    <string name="d_option_regular_title">Car (Regular Solo)</string>
+    <string name="d_option_regular_subtitle">Private ride • Direct to destination</string>
+    <string name="d_option_shared_title">Car (Rideshare Pool) ⚡</string>
+    <string name="d_option_shared_subtitle">Max 2 passengers • Match co-passenger first</string>
+
+    <!-- dialog_trusted_list.xml -->
+    <string name="d_trusted_contacts_title">Trusted Contacts</string>
+    <string name="d_trusted_contacts_desc">They\'re notified if your ride shows a route deviation and you tap Emergency.</string>
+    <string name="d_no_trusted_contacts">No trusted contacts yet — scan someone\'s QR to send a request.</string>
+</resources>

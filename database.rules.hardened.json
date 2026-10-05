@@ -1,0 +1,97 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'ADMIN')",
+
+        "trustedContacts": {
+          ".write": "auth != null"
+        },
+
+        "activeQr": {
+          "status": {
+            ".write": "auth != null",
+            ".validate": "newData.val() == 'EXPIRED' || auth.uid == $uid"
+          }
+        },
+
+        "role": {
+          ".validate": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || newData.val() == data.val() || (!data.parent().exists() && (newData.val() == 'PASSENGER' || newData.val() == 'DRIVER'))"
+        },
+
+        "isApproved": {
+          ".validate": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || newData.val() == data.val() || (!data.parent().exists() && (newData.val() == false || newData.parent().child('role').val() != 'DRIVER'))"
+        },
+
+        "isActive": {
+          ".validate": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || newData.val() == data.val() || (!data.parent().exists() && newData.isBoolean())"
+        },
+
+        "walletBalance": {
+          ".validate": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || (newData.isNumber() && ((data.isNumber() && newData.val() <= data.val()) || (!data.isNumber() && newData.val() <= 0)))"
+        },
+
+        "hasDiscount": {
+          ".validate": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || newData.val() == data.val()"
+        }
+      }
+    },
+
+    "drivers": {
+      ".read": "auth != null",
+      "$driverId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || auth.uid == $driverId)"
+      }
+    },
+
+    "wallet_requests": {
+      ".read": "auth != null",
+      ".indexOn": ["status", "driverId"],
+      "$requestId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || (!data.exists() && (newData.child('driverUid').val() == auth.uid || newData.child('driverId').val() == auth.uid)))"
+      }
+    },
+
+    "bookings": {
+      ".read": "auth != null",
+      ".indexOn": ["status", "passengerId", "driverId", "tripGroupId"],
+      "$bookingId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || data.child('passengerId').val() == auth.uid || (!data.exists() && newData.child('passengerId').val() == auth.uid) || data.child('driverId').val() == auth.uid || (root.child('users').child(auth.uid).child('role').val() == 'DRIVER' && root.child('users').child(auth.uid).child('isApproved').val() == true && !data.child('driverId').exists() && newData.child('driverId').val() == auth.uid) || data.child('status').val() == 'MATCHING')"
+      }
+    },
+
+    "matchLocks": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "tripGroups": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "pairRequests": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "emergencyAlerts": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "discount_requests": {
+      ".read": "auth != null",
+      ".indexOn": ["status"],
+      "$requestId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || (!data.exists() && newData.child('userId').val() == auth.uid))"
+      }
+    },
+
+    "chats": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

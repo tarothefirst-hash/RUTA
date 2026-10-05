@@ -12,7 +12,7 @@
         android:layout_height="?attr/actionBarSize"
         android:background="@color/ruta_primary"
         app:navigationIcon="@android:drawable/ic_menu_revert"
-        app:title="Chat with Driver"
+        app:title="@string/a_loc_chat_with_driver"
         app:titleTextColor="@color/white" />
 
     <LinearLayout
@@ -40,7 +40,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:hint="Type a message..." />
+                android:hint="@string/d_chat_type_message_hint" />
 
             <Button
                 android:id="@+id/btnSendChat"
@@ -48,7 +48,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:backgroundTint="@color/ruta_primary"
-                android:text="Send" />
+                android:text="@string/d_chat_send" />
         </LinearLayout>
     </LinearLayout>
 

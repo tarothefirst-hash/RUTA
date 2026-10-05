@@ -16,7 +16,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Promos &amp; Discounts"
+            android:text="@string/h_promos_title"
             android:textColor="@color/ruta_red"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -26,7 +26,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="20dp"
-            android:text="Apply verified discounts to your RUTA rides"
+            android:text="@string/h_promos_subtitle"
             android:textColor="@color/ruta_primary_dark"
             android:textSize="13sp" />
 
@@ -44,7 +44,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:checked="true"
-                android:text="Student (20%)"
+                android:text="@string/h_discount_student"
                 android:textColor="@color/ruta_black"
                 android:textSize="14sp" />
 
@@ -53,7 +53,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Senior / PWD (20%)"
+                android:text="@string/h_discount_senior_pwd"
                 android:textColor="@color/ruta_black"
                 android:textSize="14sp" />
         </RadioGroup>
@@ -77,7 +77,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Upload Identification Card"
+                    android:text="@string/h_upload_id_title"
                     android:textColor="@color/ruta_red"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -87,7 +87,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:layout_marginBottom="16dp"
-                    android:text="Please capture or select clear images of the front and back of your ID for verification."
+                    android:text="@string/h_upload_id_instructions"
                     android:textColor="@color/ruta_primary_dark"
                     android:textSize="12sp" />
 
@@ -95,7 +95,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="ID Front Image"
+                    android:text="@string/h_id_front_label"
                     android:textColor="@color/ruta_black"
                     android:textSize="13sp"
                     android:textStyle="bold" />
@@ -116,7 +116,7 @@
                     android:layout_marginTop="8dp"
                     android:layout_marginBottom="16dp"
                     android:backgroundTint="@color/ruta_red"
-                    android:text="Upload Front of ID"
+                    android:text="@string/h_upload_id_front_button"
                     android:textColor="@color/white"
                     android:textSize="12sp" />
 
@@ -124,7 +124,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="ID Back Image"
+                    android:text="@string/h_id_back_label"
                     android:textColor="@color/ruta_black"
                     android:textSize="13sp"
                     android:textStyle="bold" />
@@ -144,7 +144,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:backgroundTint="@color/ruta_red"
-                    android:text="Upload Back of ID"
+                    android:text="@string/h_upload_id_back_button"
                     android:textColor="@color/white"
                     android:textSize="12sp" />
 
@@ -166,7 +166,7 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:backgroundTint="@color/ruta_red"
-            android:text="Submit Verification Request"
+            android:text="@string/h_submit_verification"
             android:textColor="@color/white"
             android:textSize="14sp"
             android:textStyle="bold" />

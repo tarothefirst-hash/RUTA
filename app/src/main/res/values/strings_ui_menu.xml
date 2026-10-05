@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Navigation menu strings extracted from menu_admin_drawer.xml and
+         menu_driver_bottom_nav.xml. Values are byte-identical to the
+         previous hardcoded android:title literals.
+         Where an existing entry already had an exactly matching value,
+         that entry is referenced instead and no duplicate is created here
+         (e.g. a_admin_workspace, a_admin_system, a_admin_settings). -->
+
+    <!-- menu_admin_drawer.xml -->
+    <string name="m_admin_dashboard">Dashboard</string>
+    <string name="m_admin_rider_accounts">Rider accounts</string>
+    <string name="m_admin_topups_cashins">Top-ups &amp; Cash-ins</string>
+
+    <!-- menu_driver_bottom_nav.xml -->
+    <string name="m_driver_home">Home</string>
+    <string name="m_driver_my_trips">My Trips</string>
+    <string name="m_driver_wallet">Wallet</string>
+    <string name="m_driver_profile">Profile</string>
+</resources>

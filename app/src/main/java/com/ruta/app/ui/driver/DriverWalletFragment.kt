@@ -203,7 +203,7 @@ class DriverWalletFragment : Fragment() {
                 "driverName" to fullName,
                 "driverEmail" to email,
                 "amount" to amount,
-                "receiptUrl" to receiptBase64, // Base64 string from ImageUtils
+                "receiptUrl" to "data:image/jpeg;base64,$receiptBase64", // Data URI so the admin console can render it (matches document upload flow)
                 "status" to "PENDING",
                 "timestamp" to ServerValue.TIMESTAMP
             )
@@ -248,7 +248,9 @@ class DriverWalletFragment : Fragment() {
         val uid = auth.currentUser?.uid
         if (uid != null) {
             walletListener?.let { database.child("users").child(uid).child("walletBalance").removeEventListener(it) }
-            pendingRequestListener?.let { database.child("wallet_requests").removeEventListener(it) }
+            pendingRequestListener?.let {
+                database.child("wallet_requests").orderByChild("driverId").equalTo(uid).removeEventListener(it)
+            }
         }
         _binding = null
     }

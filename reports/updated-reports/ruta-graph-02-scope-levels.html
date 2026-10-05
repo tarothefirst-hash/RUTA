@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUTA report 02: test levels</title>
+<style>
+:root{
+  --bg:#fbfaf9;--surface:#ffffff;--ink:#17171a;--body:#3f3f46;--muted:#71717a;
+  --line:#e8e6e3;--line-soft:#f1efec;--accent:#0e9f6e;--accent-ink:#065f46;--accent-soft:#ecfdf5;
+  --warn:#92400e;--warn-soft:#fffbeb;--warn-line:#fde68a;
+  --r:12px;--r-sm:8px;
+  --measure:68ch;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--body);
+  font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Atkinson Hyperlegible",sans-serif;
+  font-size:15px;line-height:1.62;font-feature-settings:"tnum" 1}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+.mono{font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+.top{border-bottom:1px solid var(--line);background:var(--bg)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:20px;padding-bottom:20px}
+.brand{font-weight:700;letter-spacing:-.02em;color:var(--ink);font-size:15px}
+.nav{display:flex;gap:22px;flex-wrap:wrap}
+.nav a{color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500}
+.nav a:hover{color:var(--ink)}
+.nav a[aria-current="page"]{color:var(--ink)}
+
+/* ---------- hero ---------- */
+.hero{padding:72px 0 54px}
+h1{font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+  font-size:clamp(40px,6.4vw,62px);line-height:1.02;letter-spacing:-.042em;font-weight:700;
+  color:var(--ink);margin:0 0 22px;max-width:21ch}
+.lede{font-size:17.5px;line-height:1.6;color:var(--body);max-width:var(--measure);margin:0 0 30px}
+.lede strong{color:var(--ink);font-weight:650}
+
+/* ---------- KPI band ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.kpi{padding:26px 22px 28px;border-right:1px solid var(--line-soft);min-width:0}
+.kpi:last-child{border-right:0}
+.kpi .v{display:block;font-size:30px;line-height:1;letter-spacing:-.035em;font-weight:700;color:var(--ink)}
+.kpi .v .sep{color:#c9c6c1;font-weight:600;padding:0 2px}
+.kpi .k{display:block;margin-top:11px;font-size:12.5px;line-height:1.45;color:var(--muted)}
+@media(max-width:720px){.kpi{border-right:0;border-bottom:1px solid var(--line-soft)}}
+
+/* ---------- sections ---------- */
+section{padding:60px 0}
+section+section{border-top:1px solid var(--line)}
+h2{font-size:22px;line-height:1.25;letter-spacing:-.018em;font-weight:650;color:var(--ink);margin:0 0 10px}
+h3{font-size:15px;line-height:1.3;letter-spacing:-.01em;font-weight:650;color:var(--ink);margin:0 0 8px}
+.sub{color:var(--muted);max-width:var(--measure);margin:0 0 32px;font-size:14.5px}
+.sub.tight{margin-bottom:0}
+
+/* ---------- ledger ---------- */
+.ledger{list-style:none;margin:0;padding:0}
+.ledger li{display:grid;grid-template-columns:1fr auto;gap:6px 20px;align-items:baseline;
+  padding:16px 0;border-bottom:1px solid var(--line-soft)}
+.ledger li:last-child{border-bottom:0}
+.ledger .what{color:var(--ink);font-weight:550}
+.ledger .was{display:block;color:var(--muted);font-size:13.5px;margin-top:3px;font-weight:400}
+.ledger .now{font-weight:700;color:var(--accent-ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ---------- callouts ---------- */
+.callout{border:1px solid var(--warn-line);background:var(--warn-soft);border-radius:var(--r);padding:22px 24px}
+.callout h3{margin:0 0 10px;font-size:15px;color:var(--warn);font-weight:700}
+.callout ul{margin:0;padding-left:18px;color:#7c4a12;font-size:14px}
+.callout li+li{margin-top:6px}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{font-size:11px;letter-spacing:.045em;text-transform:uppercase;color:var(--muted);font-weight:700}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.visually-hidden{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+
+/* ---------- status pills ---------- */
+.pill{display:inline-block;font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:999px;
+  border:1px solid var(--line);letter-spacing:.01em;white-space:nowrap}
+.p-pass{background:var(--accent-soft);color:var(--accent-ink);border-color:#a7f3d0}
+.p-part{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.p-open{background:#fff1f2;color:#9f1239;border-color:#fecdd3}
+
+/* ---------- bars ---------- */
+.bars{display:grid;gap:12px;margin:0 0 26px}
+.bar{display:grid;grid-template-columns:210px 1fr 52px;gap:14px;align-items:center}
+.bar .name{font-size:13px;color:var(--muted);text-align:right;overflow-wrap:anywhere}
+.bar .track{height:14px;background:var(--line-soft);border-radius:4px;overflow:hidden}
+.bar .fill{display:block;height:100%;background:var(--accent);border-radius:4px}
+.bar .val{font-size:13.5px;font-weight:700;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:560px){.bar{grid-template-columns:120px 1fr 42px;gap:10px}}
+
+/* ---------- footer ---------- */
+footer{border-top:1px solid var(--line);padding:34px 0 60px;color:var(--muted);font-size:13px}
+footer p{max-width:var(--measure);margin:0}
+
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="brand">RUTA</span>
+    <nav class="nav" aria-label="Report pages">
+      <a href="index.html">Report home</a>
+      <a href="ruta-graph-01-overall-health.html">01 Overall health</a>
+      <a href="ruta-graph-02-scope-levels.html" aria-current="page">02 Test levels</a>
+      <a href="ruta-graph-03-defects-density.html">03 Defects</a>
+      <a href="ruta-graph-04-production-gates.html">04 Gates</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section class="hero">
+      <h1>Test levels: five partial statuses, each with a measurable fact.</h1>
+      <p class="lede">No readiness percentage is claimed. Every level is a status plus the fact that justifies it.
+        Underneath sit the auditable numbers: 65 unit tests across 6 suites, 0 failures, and two green build variants.</p>
+      <div class="kpis" role="list">
+        <div class="kpi" role="listitem"><span class="v mono">65<span class="sep">/</span>65</span><span class="k">Unit tests passing, 0 failures, 0 errors, 0 skipped</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">6</span><span class="k">Test suites, all passing</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">6<span class="sep">/</span>7</span><span class="k">Pure-logic units with tests, 85.71 percent</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">5</span><span class="k">Levels marked partial, none above partial</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">0</span><span class="k">Device or emulator runs ever completed</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>The five levels</h2>
+      <p class="sub">All five read partial. Each row carries the one fact that shows how far it got.</p>
+      <ul class="ledger">
+        <li>
+          <span class="what">Unit<span class="was">6 of the 7 pure-logic units have tests, which is 85.71 percent.</span></span>
+          <span class="now"><span class="pill p-part">Partial</span></span>
+        </li>
+        <li>
+          <span class="what">Integration<span class="was">One fare calculator and a real Firebase configuration are installed, but nothing has been run against the live backend.</span></span>
+          <span class="now"><span class="pill p-part">Partial</span></span>
+        </li>
+        <li>
+          <span class="what">System<span class="was">Solo and shared accept each write once atomically and the passenger can see the settled fare, but there has been no device run.</span></span>
+          <span class="now"><span class="pill p-part">Partial</span></span>
+        </li>
+        <li>
+          <span class="what">Acceptance<span class="was">Demoable, with two accepted risks documented.</span></span>
+          <span class="now"><span class="pill p-part">Partial</span></span>
+        </li>
+        <li>
+          <span class="what">Production<span class="was">Secrets and logging are cleaned, the rules are authored but not deployed, and image blobs are still inline.</span></span>
+          <span class="now"><span class="pill p-part">Partial</span></span>
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Suite breakdown</h2>
+      <p class="sub">Every suite passes with 0 failures, 0 errors and 0 skipped. The bars are test counts, confirmed
+        in the table below.</p>
+      <div class="bars" role="img" aria-label="Horizontal bar chart of tests per suite: RideshareFareCalculatorTest 19, RideshareManagerTest 11, FareCalculatorTest 10, FareDisplayTest 10, RouteDeviationManagerTest 8, PickupOrdinalTest 7, total 65 with 0 failures, 0 errors and 0 skipped">
+        <div class="bar"><span class="name">RideshareFareCalculatorTest</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="val">19</span></div>
+        <div class="bar"><span class="name">RideshareManagerTest</span><span class="track"><span class="fill" style="width:58%"></span></span><span class="val">11</span></div>
+        <div class="bar"><span class="name">FareCalculatorTest</span><span class="track"><span class="fill" style="width:53%"></span></span><span class="val">10</span></div>
+        <div class="bar"><span class="name">FareDisplayTest</span><span class="track"><span class="fill" style="width:53%"></span></span><span class="val">10</span></div>
+        <div class="bar"><span class="name">RouteDeviationManagerTest</span><span class="track"><span class="fill" style="width:42%"></span></span><span class="val">8</span></div>
+        <div class="bar"><span class="name">PickupOrdinalTest</span><span class="track"><span class="fill" style="width:37%"></span></span><span class="val">7</span></div>
+      </div>
+      <div class="scroll">
+        <table>
+          <caption class="visually-hidden">Tests per suite, measured from the Gradle test report</caption>
+          <thead><tr><th>Suite</th><th class="num">Tests</th><th class="num">Failures</th><th class="num">Errors</th><th class="num">Skipped</th></tr></thead>
+          <tbody>
+            <tr><td>RideshareFareCalculatorTest</td><td class="num mono">19</td><td class="num mono">0</td><td class="num mono">0</td><td class="num mono">0</td></tr>
+            <tr><td>RideshareManagerTest</td><td class="num mono">11</td><td class="num mono">0</td><td class="num mono">0</td><td class="num mono">0</td></tr>
+            <tr><td>FareCalculatorTest</td><td class="num mono">10</td><td class="num mono">0</td><td class="num mono">0</td><td class="num mono">0</td></tr>
+            <tr><td>FareDisplayTest</td><td class="num mono">10</td><td class="num mono">0</td><td class="num mono">0</td><td class="num mono">0</td></tr>
+            <tr><td>RouteDeviationManagerTest</td><td class="num mono">8</td><td class="num mono">0</td><td class="num mono">0</td><td class="num mono">0</td></tr>
+            <tr><td>PickupOrdinalTest</td><td class="num mono">7</td><td class="num mono">0</td><td class="num mono">0</td><td class="num mono">0</td></tr>
+            <tr><td>Total</td><td class="num mono">65</td><td class="num mono">0</td><td class="num mono">0</td><td class="num mono">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Manual versus automated</h2>
+      <p class="sub">The automated column is the headline change of this pass, read from the Gradle report.</p>
+      <div class="scroll">
+        <table>
+          <caption class="visually-hidden">Before and after for the test and build method</caption>
+          <thead><tr><th>Method</th><th>Before</th><th>After</th></tr></thead>
+          <tbody>
+            <tr><td>Automated tests</td><td>0</td><td>65 passing, 0 failures, 0 errors, 0 skipped</td></tr>
+            <tr><td>Test suites</td><td>0</td><td>6</td></tr>
+            <tr><td>Test source lines</td><td>0</td><td>1,258</td></tr>
+            <tr><td>Builds</td><td>Would not build</td><td>2 of 2 successful, debug and release</td></tr>
+            <tr><td>Device or emulator run</td><td>None</td><td>None, still not run</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>What would move each level up</h2>
+      <p class="sub tight">A pure-logic test for the wallet commission path would lift unit. A run against the live
+        backend would lift integration. A first device run would lift system and acceptance together. Deploying and
+        executing the rules, and moving the remaining image blobs out of the database, would lift production. None of
+        those steps has been taken, which is why every level still reads partial.</p>
+    </section>
+
+    <section>
+      <div class="callout">
+        <h3>What has not been proven</h3>
+        <ul>
+          <li>Nothing has been run on a device or emulator. An attempt is impossible on this machine: the only emulator profile points at an empty system image, and no hypervisor driver is installed.</li>
+          <li>The database rules have never been executed. They are authored, not deployed and not tested.</li>
+          <li>The minified release build has never been run, because it is unsigned and cannot be installed as produced.</li>
+        </ul>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Sources: suite totals and percentages measured from the Gradle build and test reports for the current tree.
+      Level statuses are a reviewer judgement backed by the facts shown, not a percentage. Nothing on this page has
+      been run on a device or against a live Firebase project, and the database rules have never been executed.</p>
+  </div>
+</footer>
+</body>
+</html>

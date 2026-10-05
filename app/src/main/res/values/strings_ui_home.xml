@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Strings extracted from fragment_home.xml, fragment_profile.xml,
+         fragment_promos.xml and fragment_settings.xml.
+         All entries are new; existing ids in strings.xml are reused where the
+         literal matched exactly (see fragment_profile.xml "Full Name"). -->
+
+    <!-- fragment_home.xml -->
+    <string name="h_loading_user">Loading user...</string>
+    <string name="h_lets_find_you_a_ride">Let\'s find you a ride</string>
+    <string name="h_notifications_content_desc">Notifications</string>
+    <string name="h_search_destination">Where to?</string>
+    <string name="h_search_content_desc">Search</string>
+    <string name="h_recent_bookings">RECENT BOOKINGS</string>
+    <string name="h_driver_en_route">Driver en route</string>
+    <string name="h_driver_loading">Driver: Loading...</string>
+    <string name="h_active_trip_eta_placeholder">5 mins • 1.2 km</string>
+
+    <!-- fragment_profile.xml -->
+    <string name="h_profile_title">My Profile &amp; Safety</string>
+    <string name="h_emergency_qr_title">Emergency Safety QR</string>
+    <string name="h_emergency_qr_subtitle">Let your contact scan this code to link accounts</string>
+    <string name="h_linked_contact_none">Linked Contact: None</string>
+    <string name="h_scan_contact_qr">Scan Contact\'s QR</string>
+    <string name="h_view_trusted_contacts">View Trusted Contacts</string>
+    <string name="h_passenger_name_hint">Passenger Name</string>
+    <string name="h_mobile_number_label">Mobile Number</string>
+    <string name="h_email_address_label">Email Address</string>
+    <string name="h_email_example_hint">passenger@gmail.com</string>
+    <string name="h_save_changes">Save Changes</string>
+    <string name="h_logout">Logout</string>
+
+    <!-- fragment_promos.xml -->
+    <string name="h_promos_title">Promos &amp; Discounts</string>
+    <string name="h_promos_subtitle">Apply verified discounts to your RUTA rides</string>
+    <string name="h_discount_student" formatted="false">Student (20%)</string>
+    <string name="h_discount_senior_pwd" formatted="false">Senior / PWD (20%)</string>
+    <string name="h_upload_id_title">Upload Identification Card</string>
+    <string name="h_upload_id_instructions">Please capture or select clear images of the front and back of your ID for verification.</string>
+    <string name="h_id_front_label">ID Front Image</string>
+    <string name="h_upload_id_front_button">Upload Front of ID</string>
+    <string name="h_id_back_label">ID Back Image</string>
+    <string name="h_upload_id_back_button">Upload Back of ID</string>
+    <string name="h_submit_verification">Submit Verification Request</string>
+
+    <!-- fragment_settings.xml -->
+    <string name="h_settings_title">App Settings</string>
+    <string name="h_settings_subtitle">Preferences &amp; Account Control</string>
+    <string name="h_preferences_header">PREFERENCES</string>
+    <string name="h_push_notifications">Push Notifications</string>
+    <string name="h_always_share_location">Always Share GPS Location</string>
+    <string name="h_verification_header">VERIFICATION &amp; DISCOUNTS</string>
+    <string name="h_senior_id_label">Senior Citizen / PWD / Student ID</string>
+    <string name="h_status_not_verified">Status: Not Verified</string>
+    <string name="h_settings_log_out">Log Out</string>
+</resources>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- item_booking_history.xml -->
+    <string name="i_history_date_placeholder">MMM dd, yyyy • hh:mm a</string>
+    <string name="i_history_status_completed">COMPLETED</string>
+    <string name="i_history_from_placeholder">From: Pickup Address</string>
+    <string name="i_history_to_placeholder">To: Destination Address</string>
+    <string name="i_history_service_type">RUTA Standard</string>
+
+    <!-- item_location_suggestion.xml -->
+    <string name="i_location_name_placeholder">Location Name</string>
+    <string name="i_location_address_placeholder">Address details</string>
+
+    <!-- item_recent_place.xml -->
+    <string name="i_recent_place_name_placeholder">TSU San Isidro Campus</string>
+    <string name="i_recent_place_address_placeholder">San Isidro, Tarlac City</string>
+    <string name="i_book_again">Book Again</string>
+
+    <!-- item_trusted_contact.xml -->
+    <string name="i_contact_name_placeholder">Contact Name</string>
+    <string name="i_remove">Remove</string>
+
+    <!-- item_wallet_request.xml -->
+    <string name="i_wallet_driver_name_placeholder">Driver Name</string>
+    <string name="i_wallet_requested_just_now">Requested: Just now</string>
+    <string name="i_wallet_receipt_content_desc">Payment Receipt Proof</string>
+    <string name="i_reject">Reject</string>
+    <string name="i_approve">Approve</string>
+
+    <!-- nav_header_admin.xml -->
+    <string name="i_admin_avatar_initials">AD</string>
+    <string name="i_admin_account">Admin account</string>
+    <string name="i_admin_super_administrator">Super administrator</string>
+</resources>

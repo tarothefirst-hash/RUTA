@@ -16,6 +16,7 @@ import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.Query
 import com.ruta.app.R
 import com.ruta.app.util.keepClearOfKeyboard
 class ChatActivity : AppCompatActivity() {
@@ -26,6 +27,9 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var recyclerChat: RecyclerView
     private lateinit var chatAdapter: ChatAdapter
     private val messageList = mutableListOf<ChatMessage>()
+
+    private var messagesQuery: Query? = null
+    private var messagesListener: ChildEventListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,7 +93,7 @@ class ChatActivity : AppCompatActivity() {
         btnSendChat.setOnClickListener {
             val text = etChatMessage.text.toString().trim()
             if (text.isNotEmpty()) {
-                sendMessage(text)
+                sendMessage(text, etChatMessage)
                 etChatMessage.setText("")
             }
         }
@@ -97,7 +101,7 @@ class ChatActivity : AppCompatActivity() {
         listenForMessages()
     }
 
-    private fun sendMessage(messageText: String) {
+    private fun sendMessage(messageText: String, input: EditText) {
         val messageMap = hashMapOf<String, Any>(
             "senderId" to currentUserId,
             "message" to messageText,
@@ -105,25 +109,47 @@ class ChatActivity : AppCompatActivity() {
         )
         FirebaseDatabase.getInstance().reference
             .child("chats").child(bookingId).push().setValue(messageMap)
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to send message. Please try again.", Toast.LENGTH_SHORT).show()
+                input.setText(messageText)
+            }
     }
 
     private fun listenForMessages() {
-        FirebaseDatabase.getInstance().reference
+        val query = FirebaseDatabase.getInstance().reference
             .child("chats").child(bookingId)
-            .addChildEventListener(object : ChildEventListener {
-                override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                    val chatMessage = snapshot.getValue(ChatMessage::class.java)
-                    if (chatMessage != null) {
-                        messageList.add(chatMessage)
-                        chatAdapter.notifyItemInserted(messageList.size - 1)
-                        recyclerChat.scrollToPosition(messageList.size - 1)
-                    }
-                }
+            .limitToLast(MAX_HISTORY)
+        messagesQuery = query
 
-                override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
-                override fun onChildRemoved(snapshot: DataSnapshot) {}
-                override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
-                override fun onCancelled(error: DatabaseError) {}
-            })
+        val listener = object : ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                val chatMessage = snapshot.getValue(ChatMessage::class.java)
+                if (chatMessage != null) {
+                    messageList.add(chatMessage)
+                    chatAdapter.notifyItemInserted(messageList.size - 1)
+                    recyclerChat.scrollToPosition(messageList.size - 1)
+                }
+            }
+
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {
+                Toast.makeText(this@ChatActivity, "Failed to load messages. Please check your connection.", Toast.LENGTH_SHORT).show()
+            }
+        }
+        messagesListener = listener
+        query.addChildEventListener(listener)
+    }
+
+    override fun onDestroy() {
+        messagesListener?.let { messagesQuery?.removeEventListener(it) }
+        messagesListener = null
+        messagesQuery = null
+        super.onDestroy()
+    }
+
+    private companion object {
+        const val MAX_HISTORY = 50
     }
 }

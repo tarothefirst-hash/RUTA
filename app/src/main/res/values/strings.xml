@@ -3,7 +3,6 @@
     <string name="app_name">RUTA</string>
     <string name="tagline">Your ride, your route.</string>
     <string name="start_now">Start now</string>
-    <string name="google_maps_key">AIzaSyD_CZcqO8veYRbJxyD9EPNBcmGK3IoeDMQ</string>
     <string name="login_title">Welcome Back</string>
     <string name="login_subtitle">Log in to continue</string>
     <string name="email_hint">Email</string>
@@ -12,7 +11,7 @@
     <string name="no_account">Don\'t have an account?</string>
     <string name="signup_link">Sign up</string>
     <string name="login_as">Log in as</string>
-
+    <string name="default_web_client_id">550811486087-k39pl03j6vunujpc47nbr7fpgv6ppa50.apps.googleusercontent.com</string>
     <string name="signup_title">Create Account</string>
     <string name="signup_subtitle">Join RUTA today</string>
     <string name="full_name_hint">Full Name</string>
@@ -21,8 +20,27 @@
     <string name="have_account">Already have an account?</string>
     <string name="login_link">Log in</string>
     <string name="signup_as">Sign up as</string>
-
+    <string name="fare_detail_discount">Student/Senior discount (20%%): -%s</string>
     <string name="role_passenger">Passenger</string>
     <string name="role_driver">Driver</string>
     <string name="role_admin">Admin</string>
+
+    <!-- Ride options dialog -->
+    <string name="ride_options_split_caption">Split 50/50 with your co-passenger</string>
+
+    <!-- Home screen rideshare promo banner -->
+    <string name="home_rideshare_promo_title">Split the ride and the fare</string>
+    <string name="home_rideshare_promo_subtitle">Share the shared part of the trip with a co-passenger heading your way.</string>
+
+    <!-- Passenger fare card, rendered by util/FareDisplay -->
+    <string name="fare_money_format">₱%1$.2f</string>
+    <string name="fare_headline_final">Final Fare: %1$s</string>
+    <string name="fare_detail_base">Base %1$s</string>
+    <string name="fare_detail_your_ride">Your ride %1$s</string>
+    <string name="fare_detail_shared">Shared %1$s</string>
+    <string name="fare_detail_detour">Detour %1$s</string>
+    <string name="fare_detail_credit">Credit %1$s</string>
+    <string name="fare_detail_adjusted_from">Adjusted from earlier estimate %1$s</string>
+    <string name="fare_detail_finalising">Final fare is being finalised…</string>
+    <string name="fare_detail_awaiting_final_share">Final share is set when the trip ends • estimated %1$s</string>
 </resources>

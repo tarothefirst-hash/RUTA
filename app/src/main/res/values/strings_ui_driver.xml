@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- fragment_driver_home.xml -->
+    <string name="dr_status_offline">Status: Offline</string>
+    <string name="dr_chat_with_passenger">Chat with Passenger</string>
+    <string name="dr_new_ride_request_shared">New Ride Request! (SHARED 2-PAX)</string>
+    <string name="dr_pickup_location_default">Pickup: Macabulos, Tarlac City</string>
+    <string name="dr_dropoff_location_default">Dropoff: SM City Tarlac</string>
+    <string name="dr_estimated_fare_default">Estimated Fare: ₱120.00</string>
+    <string name="dr_wallet_balance_default">Wallet: ₱0.00</string>
+    <string name="dr_decline">Decline</string>
+    <string name="dr_accept_ride">Accept Ride</string>
+    <string name="dr_confirm_passenger_pickup">Confirm Passenger Pickup</string>
+    <string name="dr_complete_ride">Complete Ride</string>
+
+    <!-- fragment_driver_profile.xml -->
+    <string name="dr_driver_profile_title">Driver Profile</string>
+    <string name="dr_change_photo">Change Photo</string>
+    <string name="dr_rating">Rating</string>
+    <string name="dr_rides_completed">Rides Completed</string>
+    <string name="dr_vehicle_license_plate_hint">Vehicle / License Plate No.</string>
+    <string name="dr_save_profile">Save Profile</string>
+
+    <!-- fragment_driver_rides.xml -->
+    <string name="dr_trip_history">Trip History</string>
+
+    <!-- fragment_driver_wallet.xml -->
+    <string name="dr_driver_wallet_title">Driver Wallet</string>
+    <string name="dr_current_balance">Current Balance</string>
+    <string name="dr_platform_fee_note">10% platform fee is deducted per completed trip (4% for PWD/Student rides).</string>
+    <string name="dr_cash_in_via_gcash">Cash In via GCash</string>
+    <string name="dr_gcash_scan_instructions">Scan the QR, send your chosen amount, then tap the matching button below.</string>
+    <string name="dr_gcash_qr_content_desc">GCash QR Code</string>
+    <string name="dr_attach_proof_of_payment">Attach Proof of Payment (Image)</string>
+    <string name="dr_no_receipt_selected">No receipt image selected</string>
+    <string name="dr_receipt_preview_content_desc">Receipt Preview</string>
+    <string name="dr_selected_amount_none">Selected amount: none</string>
+    <string name="dr_ive_sent_payment">I\'ve Sent Payment</string>
+</resources>

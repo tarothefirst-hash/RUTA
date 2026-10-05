@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Admin Home (activity_admin_home.xml) -->
+    <string name="a_admin_open_menu">Open menu</string>
+    <string name="a_admin_all_systems_operational">● ALL SYSTEMS OPERATIONAL</string>
+    <string name="a_admin_overview">Overview</string>
+    <string name="a_admin_network_at_a_glance">Network at a glance</string>
+    <string name="a_admin_current_date">FRIDAY, 21 AUGUST 2026</string>
+    <string name="a_admin_greeting">Good morning, Admin.</string>
+    <string name="a_admin_today_summary">Here is what is happening across RUTA today.</string>
+    <string name="a_admin_total_riders">TOTAL RIDERS</string>
+    <string name="a_admin_live">LIVE</string>
+    <string name="a_admin_active_drivers">ACTIVE DRIVERS</string>
+    <string name="a_admin_active">ACTIVE</string>
+    <string name="a_admin_pending_review">PENDING REVIEW</string>
+    <string name="a_admin_trips_today">TRIPS TODAY</string>
+    <string name="a_admin_total_driver_fees_collected">TOTAL DRIVER FEES COLLECTED</string>
+    <string name="a_admin_total_service_commissions">TOTAL SERVICE COMMISSIONS</string>
+    <string name="a_admin_driver_verification_queue">Driver verification queue</string>
+    <string name="a_admin_view_all">VIEW ALL →</string>
+    <string name="a_admin_review_identity_documents">Review identity documents before granting booking access.</string>
+    <string name="a_admin_no_driver_applications">No driver applications found.</string>
+    <string name="a_admin_workspace">WORKSPACE</string>
+    <string name="a_admin_id_confirmation">ID Confirmation</string>
+    <string name="a_admin_verify_rider_identities">Verify rider identities and registered accounts across RUTA.</string>
+    <string name="a_admin_verified_accounts">Verified Accounts</string>
+    <string name="a_admin_manage_identity_statuses">Manage identity statuses for passengers.</string>
+    <string name="a_admin_driver_approvals">Driver approvals</string>
+    <string name="a_admin_all_driver_applications">All driver applications</string>
+    <string name="a_admin_add_driver">+ Add Driver</string>
+    <string name="a_admin_pending_and_approved_driver_accounts">Pending and approved driver accounts.</string>
+    <string name="a_admin_trips_activity">Trips &amp; activity</string>
+    <string name="a_admin_latest_movement">Keep an eye on the latest movement across the network.</string>
+    <string name="a_admin_recent_trips">Recent Trips</string>
+    <string name="a_admin_driver_wallet_cash_ins">Driver Wallet Cash-ins</string>
+    <string name="a_admin_review_wallet_topups">Review and approve wallet top-up requests from drivers.</string>
+    <string name="a_admin_pending_cashin_requests">Pending Cash-in Requests</string>
+    <string name="a_admin_system">SYSTEM</string>
+    <string name="a_admin_settings">Settings</string>
+    <string name="a_admin_logout_admin">LOGOUT ADMIN</string>
+
+    <!-- Driver document upload (activity_driver_document_upload.xml) -->
+    <string name="a_doc_upload_return">Return</string>
+    <string name="a_doc_upload_driver_registration">Driver Registration</string>
+    <string name="a_doc_upload_vehicle_model_hint">Car Model / Type (e.g. Toyota Vios)</string>
+    <string name="a_doc_upload_plate_hint">Plate Number (e.g. ABC 1234)</string>
+    <string name="a_doc_upload_vehicle_color_hint">Vehicle Color (e.g. Silver)</string>
+    <string name="a_doc_upload_required_documents">Required Documents</string>
+    <string name="a_doc_upload_license_button">Upload Driver\'s License</string>
+    <string name="a_doc_upload_no_file_selected">No file selected</string>
+    <string name="a_doc_upload_registration_button">Upload Vehicle OR/CR</string>
+    <string name="a_doc_upload_nbi_button">Upload NBI Clearance</string>
+    <string name="a_doc_upload_submit">Submit Credentials</string>
+
+    <!-- Location selection (activity_location_selection.xml) -->
+    <string name="a_loc_return">‹ Return</string>
+    <string name="a_loc_search_hint">Search your Location...</string>
+    <string name="a_loc_finding_drivers">Finding nearby drivers...</string>
+    <string name="a_loc_cancel_ride_request">Cancel Ride Request</string>
+    <string name="a_loc_pick_up">Pick Up</string>
+    <string name="a_loc_detecting_location">Detecting location...</string>
+    <string name="a_loc_to">To</string>
+    <string name="a_loc_add_location">Add Location</string>
+    <string name="a_loc_your_fare">Your Fare: ₱0.00</string>
+    <string name="a_loc_trip_total">Trip Total: ₱0.00</string>
+    <string name="a_loc_driver_on_the_way">Driver is on the way to pick you up!</string>
+    <string name="a_loc_vehicle_plate">Vehicle • Plate Number</string>
+    <string name="a_loc_chat_with_driver">Chat with Driver</string>
+    <string name="a_loc_confirm_pickup">Confirm Pickup</string>
+    <string name="a_loc_cancel_ride">Cancel Ride</string>
+
+    <!-- Profile (activity_profile.xml) -->
+    <string name="a_profile_user_profile">User Profile</string>
+    <string name="a_profile_phone_hint">Add phone number (+63...)</string>
+
+    <!-- Signup (activity_signup.xml) -->
+    <string name="a_signup_phone_hint">Phone Number (e.g., 09123456789)</string>
+    <string name="a_signup_birth_date_hint">Tap to select birth date</string>
+    <string name="a_signup_or">OR</string>
+    <string name="a_signup_google">Sign up with Google</string>
+</resources>

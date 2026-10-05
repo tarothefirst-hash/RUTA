@@ -60,15 +60,25 @@ object EmergencyContactManager {
                     return@addOnSuccessListener
                 }
 
-                val updates = mapOf(
-                    "users/$myUid/trustedContacts/$requesterUid" to true,
-                    "users/$requesterUid/trustedContacts/$myUid" to true,
-                    "pairRequests/$myUid/$requesterUid" to null
-                )
+                // The requester's own list must obey the same cap, otherwise it
+                // can be exceeded by having multiple outbound requests accepted.
+                database.child("users").child(requesterUid).child("trustedContacts").get()
+                    .addOnSuccessListener { requesterSnap ->
+                        if (requesterSnap.childrenCount.toInt() >= MAX_TRUSTED_CONTACTS) {
+                            onComplete(false, "Their trusted list is full ($MAX_TRUSTED_CONTACTS max) — they need to remove someone first.")
+                        } else {
+                            val updates = mapOf(
+                                "users/$myUid/trustedContacts/$requesterUid" to true,
+                                "users/$requesterUid/trustedContacts/$myUid" to true,
+                                "pairRequests/$myUid/$requesterUid" to null
+                            )
 
-                database.updateChildren(updates)
-                    .addOnSuccessListener { onComplete(true, "Added to your trusted list.") }
-                    .addOnFailureListener { onComplete(false, "Failed to accept. Try again.") }
+                            database.updateChildren(updates)
+                                .addOnSuccessListener { onComplete(true, "Added to your trusted list.") }
+                                .addOnFailureListener { onComplete(false, "Failed to accept. Try again.") }
+                        }
+                    }
+                    .addOnFailureListener { onComplete(false, "Failed to check their trusted list. Try again.") }
             }
             .addOnFailureListener { onComplete(false, "Failed to check your trusted list. Try again.") }
     }

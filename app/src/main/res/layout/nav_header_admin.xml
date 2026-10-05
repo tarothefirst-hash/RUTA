@@ -10,13 +10,13 @@
     <ImageView
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:src="@drawable/ruta_logo" />
+        android:src="@drawable/ruta_transparent" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="RUTA"
+        android:text="@string/app_name"
         android:textColor="@color/ruta_black"
         android:textSize="20sp"
         android:textStyle="bold" />
@@ -46,7 +46,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:text="AD"
+                android:text="@string/i_admin_avatar_initials"
                 android:textColor="#9A3412"
                 android:textStyle="bold" />
         </com.google.android.material.card.MaterialCardView>
@@ -61,7 +61,7 @@
                 android:id="@+id/txtAdminName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Admin account"
+                android:text="@string/i_admin_account"
                 android:textColor="@color/ruta_black"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -69,7 +69,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Super administrator"
+                android:text="@string/i_admin_super_administrator"
                 android:textColor="@color/ruta_text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>

@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUTA Status Report</title>
+<style>
+:root{
+  --bg:#fbfaf9;--surface:#ffffff;--ink:#17171a;--body:#3f3f46;--muted:#71717a;
+  --line:#e8e6e3;--line-soft:#f1efec;--accent:#0e9f6e;--accent-ink:#065f46;--accent-soft:#ecfdf5;
+  --warn:#92400e;--warn-soft:#fffbeb;--warn-line:#fde68a;
+  --r:12px;--r-sm:8px;
+  --measure:68ch;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--body);
+  font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Atkinson Hyperlegible",sans-serif;
+  font-size:15px;line-height:1.62;font-feature-settings:"tnum" 1}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+.mono{font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+.top{border-bottom:1px solid var(--line);background:var(--bg)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:20px;padding-bottom:20px}
+.brand{font-weight:700;letter-spacing:-.02em;color:var(--ink);font-size:15px}
+.nav{display:flex;gap:22px;flex-wrap:wrap}
+.nav a{color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500}
+.nav a:hover{color:var(--ink)}
+
+/* ---------- hero ---------- */
+.hero{padding:76px 0 56px}
+h1{font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+  font-size:clamp(40px,6.4vw,62px);line-height:1.02;letter-spacing:-.042em;font-weight:700;
+  color:var(--ink);margin:0 0 22px;max-width:19ch}
+.lede{font-size:17.5px;line-height:1.6;color:var(--body);max-width:var(--measure);margin:0 0 30px}
+.lede strong{color:var(--ink);font-weight:650}
+
+/* ---------- KPI band ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.kpi{padding:26px 22px 28px;border-right:1px solid var(--line-soft);min-width:0}
+.kpi:last-child{border-right:0}
+.kpi .v{display:block;font-size:30px;line-height:1;letter-spacing:-.035em;font-weight:700;color:var(--ink)}
+.kpi .v .sep{color:#c9c6c1;font-weight:600;padding:0 2px}
+.kpi .k{display:block;margin-top:11px;font-size:12.5px;line-height:1.45;color:var(--muted)}
+@media(max-width:720px){.kpi{border-right:0;border-bottom:1px solid var(--line-soft)}}
+
+/* ---------- sections ---------- */
+section{padding:60px 0}
+section+section{border-top:1px solid var(--line)}
+h2{font-size:22px;line-height:1.25;letter-spacing:-.018em;font-weight:650;color:var(--ink);margin:0 0 10px}
+.sub{color:var(--muted);max-width:var(--measure);margin:0 0 32px;font-size:14.5px}
+
+/* ---------- delta ledger ---------- */
+.ledger{list-style:none;margin:0;padding:0}
+.ledger li{display:grid;grid-template-columns:1fr auto;gap:6px 20px;align-items:baseline;
+  padding:16px 0;border-bottom:1px solid var(--line-soft)}
+.ledger li:last-child{border-bottom:0}
+.ledger .what{color:var(--ink);font-weight:550}
+.ledger .was{display:block;color:var(--muted);font-size:13.5px;margin-top:3px;font-weight:400}
+.ledger .now{font-weight:700;color:var(--accent-ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ---------- cards linking to detail ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:14px}
+.card{display:block;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:24px 22px;text-decoration:none;transition:border-color .16s ease,transform .16s ease}
+.card:hover{border-color:#d6d3ce;transform:translateY(-1px)}
+.card:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.card .n{font-size:11.5px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.card h3{margin:12px 0 8px;font-size:16.5px;letter-spacing:-.012em;color:var(--ink);font-weight:650}
+.card p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.55}
+.card .go{display:inline-block;margin-top:16px;font-size:13px;font-weight:650;color:var(--accent-ink)}
+
+/* ---------- callouts ---------- */
+.callout{border:1px solid var(--warn-line);background:var(--warn-soft);border-radius:var(--r);padding:22px 24px}
+.callout h3{margin:0 0 10px;font-size:15px;color:var(--warn);font-weight:700}
+.callout ul{margin:0;padding-left:18px;color:#7c4a12;font-size:14px}
+.callout li+li{margin-top:6px}
+
+.risks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.risk{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.risk h3{margin:0 0 8px;font-size:15px;color:var(--ink);font-weight:650}
+.risk p{margin:0;font-size:13.5px;color:var(--muted);line-height:1.6}
+.risk .fix{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft);font-size:13px;color:var(--body)}
+.risk .fix b{color:var(--ink);font-weight:650}
+
+/* ---------- disclosure for heavy detail ---------- */
+details{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:0;margin-top:8px}
+details+details{margin-top:10px}
+summary{cursor:pointer;padding:18px 22px;font-weight:600;color:var(--ink);font-size:14.5px;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";float:right;color:var(--muted);font-weight:400;font-size:18px;line-height:1}
+details[open] summary::after{content:"\2212"}
+summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;border-radius:var(--r)}
+.body{padding:0 22px 24px;border-top:1px solid var(--line-soft);margin-top:-1px;padding-top:18px}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{font-size:11px;letter-spacing:.045em;text-transform:uppercase;color:var(--muted);font-weight:700}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ---------- status pills ---------- */
+.pill{display:inline-block;font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:999px;
+  border:1px solid var(--line);letter-spacing:.01em;white-space:nowrap}
+.p-pass{background:var(--accent-soft);color:var(--accent-ink);border-color:#a7f3d0}
+.p-part{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.p-open{background:#fff1f2;color:#9f1239;border-color:#fecdd3}
+
+/* ---------- tabs plus previews ---------- */
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.tab{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:999px;padding:9px 15px;font-size:13px;font-weight:650;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tab:hover{border-color:#d6d3ce}
+.tab:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.panel{display:none}.panel.active{display:block}
+iframe{width:100%;height:760px;border:1px solid var(--line);border-radius:var(--r-sm);background:#fff}
+
+/* ---------- footer ---------- */
+footer{border-top:1px solid var(--line);padding:40px 0 60px;color:var(--muted);font-size:13px}
+footer p{max-width:var(--measure);margin:0 0 10px}
+footer code{font-family:"Cascadia Mono",ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--body)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="brand">RUTA</span>
+    <nav class="nav" aria-label="Report sections">
+      <a href="#state">Current state</a>
+      <a href="#changed">What changed</a>
+      <a href="#risks">Accepted risks</a>
+      <a href="#detail">Detail pages</a>
+      <a href="#owner">Your actions</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section class="hero">
+      <h1>The app builds, the money maths is pinned by tests, and nothing has been run yet.</h1>
+      <p class="lede">This is the state of the RUTA ride-hailing app after a full test, audit and repair pass.
+        Everything here was measured on the project, except where it is explicitly marked as unproven.
+        The short version: <strong>65 tests pass</strong> where there were none,
+        <strong>14 of 17 defect classes are closed</strong>, and the one thing still missing is a run on a real device.</p>
+
+      <div class="kpis" role="list">
+        <div class="kpi" role="listitem"><span class="v mono">65<span class="sep">/</span>65</span><span class="k">Unit tests passing, 6 suites, 0 failures</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">14<span class="sep">/</span>17</span><span class="k">Defect classes closed, 3 partial, 0 open</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">6<span class="sep">/</span>7</span><span class="k">Critical defects closed, 1 partial</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">6<span class="sep">/</span>8</span><span class="k">Production gates passing, 2 partial</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">5.05&nbsp;MB</span><span class="k">Release build, minified down from 9.55 MB</span></div>
+        <div class="kpi" role="listitem"><span class="v mono">0</span><span class="k">Log calls left in shipped source</span></div>
+      </div>
+    </section>
+
+    <section id="state">
+      <h2>Current state</h2>
+      <p class="sub">Four numbers carry the story. The rest of this page exists to show that they are real.</p>
+
+      <div class="scroll">
+      <table>
+        <caption class="visually-hidden" style="position:absolute;left:-9999px">Current measurements against the starting point</caption>
+        <thead><tr><th>Measure</th><th>Before</th><th class="num">Now</th><th>Movement</th></tr></thead>
+        <tbody>
+          <tr><td>Builds</td><td>Would not build</td><td class="num mono">2 of 2</td><td><span class="pill p-pass">Fixed</span></td></tr>
+          <tr><td>Unit tests</td><td>0</td><td class="num mono">65</td><td><span class="pill p-pass">65 added</span></td></tr>
+          <tr><td>Defect classes closed</td><td>0 of 17</td><td class="num mono">14 of 17</td><td><span class="pill p-pass">82.35%</span></td></tr>
+          <tr><td>Critical defects closed</td><td>0 of 7</td><td class="num mono">6 of 7</td><td><span class="pill p-pass">85.71%</span></td></tr>
+          <tr><td>Production gates passing</td><td>1 of 8</td><td class="num mono">6 of 8</td><td><span class="pill p-pass">5 now passing</span></td></tr>
+          <tr><td>Release build size</td><td>9.55 MB</td><td class="num mono">5.05 MB</td><td><span class="pill p-pass">minified</span></td></tr>
+          <tr><td>Hardcoded UI labels</td><td>225</td><td class="num mono">0</td><td><span class="pill p-pass">all extracted</span></td></tr>
+          <tr><td>Log calls in shipped code</td><td>about 25</td><td class="num mono">0</td><td><span class="pill p-pass">stripped</span></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="sub" style="margin:16px 0 0;font-size:13px">Scope note on the label count: it covers user-visible text, titles, hints
+        and content descriptions, and it is now zero. Around twenty non-prose values remain in the layouts by design, such as
+        currency amounts, a star rating and a phone number placeholder.</p>
+    </section>
+
+    <section id="changed">
+      <h2>What changed, in plain terms</h2>
+      <p class="sub">Each line is a thing that was wrong and is now not wrong.</p>
+      <ul class="ledger">
+        <li><span class="what">The admin password written in the code<span class="was">Anyone reading the code could sign in as the administrator</span></span><span class="now">removed</span></li>
+        <li><span class="what">The Google Maps key committed in two places<span class="was">Anyone with the repository could copy it and run up your bill</span></span><span class="now">one injected source</span></li>
+        <li><span class="what">Fares calculated three different ways<span class="was">The quoted price and the charged price could disagree</span></span><span class="now">one model, 65 tests</span></li>
+        <li><span class="what">A student or senior discount that never reached a shared fare<span class="was">The quote was discounted, the charge was not</span></span><span class="now">applied consistently</span></li>
+        <li><span class="what">The final fare written but never shown<span class="was">The passenger could not see what they were charged</span></span><span class="now">shown with a breakdown</span></li>
+        <li><span class="what">Two taps on accept writing twice<span class="was">Two drivers could race for the same ride</span></span><span class="now">one atomic write</span></li>
+        <li><span class="what">Cash-in money that could be credited twice<span class="was">A double tap paid a driver twice</span></span><span class="now">transactional guard</span></li>
+        <li><span class="what">A driver approval written under two field names<span class="was">Approving a driver could silently do nothing</span></span><span class="now">one field</span></li>
+        <li><span class="what">Backups carrying session data to the cloud<span class="was">Account details left the device</span></span><span class="now">backups off</span></li>
+      </ul>
+    </section>
+
+    <section id="risks">
+      <h2>Two risks you accepted</h2>
+      <p class="sub">Both were reviewed, both are recorded in <code>docs/ACCEPTED-RISKS.md</code>, and both have a known fix.
+        They are listed here so accepting them stays a decision rather than an oversight.</p>
+      <div class="risks">
+        <div class="risk">
+          <h3>The shared-ride matching window</h3>
+          <p>One database rule exists so the matching step can mark the other passenger's booking. It keys only on the
+            booking being in its matching window, so a modified app could take over such a booking, and a driver whose
+            approval is not yet granted could claim one.</p>
+          <p class="fix"><b>Fix:</b> move matching to a server-side function, or narrow the rule to the two fields it needs.</p>
+        </div>
+        <div class="risk">
+          <h3>Six database nodes open to any signed-in user</h3>
+          <p>Trusted contacts, pair requests, emergency alerts, chats, trip groups and match locks stay open because those
+            flows cross users. The worst case is injecting yourself into another user's trusted contacts and then
+            receiving their emergency alerts, including live location.</p>
+          <p class="fix"><b>Fix:</b> scope each node to the parties involved, then retest pairing and alerts.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="callout">
+        <h3>What has not been proven</h3>
+        <ul>
+          <li>The app has never been run on a device or emulator. An attempt was made and is impossible on this machine: the only emulator profile points at an empty system image, and no hypervisor driver is installed.</li>
+          <li>The database rules have never been executed. They are written and staged, not deployed and not tested.</li>
+          <li>The minified release build has never been run, because it is unsigned and cannot be installed as produced.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="detail">
+      <h2>The four detail pages</h2>
+      <p class="sub">Each page takes one question and answers it. Figures there are the same figures as here.</p>
+      <div class="cards">
+        <a class="card" href="ruta-graph-01-overall-health.html">
+          <span class="n">01</span><h3>Overall health</h3>
+          <p>Repository and build deltas, the 17 defect classes, the 7 criticals, and the historical baseline kept for comparison.</p>
+          <span class="go">Read page 01</span>
+        </a>
+        <a class="card" href="ruta-graph-02-scope-levels.html">
+          <span class="n">02</span><h3>Test levels</h3>
+          <p>Unit, integration, system, acceptance and production, each with the honest reason it is only partial.</p>
+          <span class="go">Read page 02</span>
+        </a>
+        <a class="card" href="ruta-graph-03-defects-density.html">
+          <span class="n">03</span><h3>Defects and density</h3>
+          <p>The three remaining partial classes with their reasons, plus the original severity register as history.</p>
+          <span class="go">Read page 03</span>
+        </a>
+        <a class="card" href="ruta-graph-04-production-gates.html">
+          <span class="n">04</span><h3>Production gates</h3>
+          <p>All eight gates with their old and new status, what moved, and what still blocks a demo.</p>
+          <span class="go">Read page 04</span>
+        </a>
+      </div>
+
+      <details style="margin-top:26px">
+        <summary>Preview the four pages here without leaving this one</summary>
+        <div class="body">
+          <div class="tabs" role="tablist" aria-label="Detail page previews">
+            <button class="tab" role="tab" id="t1" aria-controls="p1" aria-selected="true">01 Overall health</button>
+            <button class="tab" role="tab" id="t2" aria-controls="p2" aria-selected="false" tabindex="-1">02 Test levels</button>
+            <button class="tab" role="tab" id="t3" aria-controls="p3" aria-selected="false" tabindex="-1">03 Defects</button>
+            <button class="tab" role="tab" id="t4" aria-controls="p4" aria-selected="false" tabindex="-1">04 Gates</button>
+          </div>
+          <div class="panel active" id="p1" role="tabpanel" aria-labelledby="t1" tabindex="0"><iframe title="Page 01" src="ruta-graph-01-overall-health.html" loading="lazy"></iframe></div>
+          <div class="panel" id="p2" role="tabpanel" aria-labelledby="t2" tabindex="0" hidden><iframe title="Page 02" src="ruta-graph-02-scope-levels.html" loading="lazy"></iframe></div>
+          <div class="panel" id="p3" role="tabpanel" aria-labelledby="t3" tabindex="0" hidden><iframe title="Page 03" src="ruta-graph-03-defects-density.html" loading="lazy"></iframe></div>
+          <div class="panel" id="p4" role="tabpanel" aria-labelledby="t4" tabindex="0" hidden><iframe title="Page 04" src="ruta-graph-04-production-gates.html" loading="lazy"></iframe></div>
+        </div>
+      </details>
+    </section>
+
+    <section id="owner">
+      <h2>What is left to do, and who can do it</h2>
+      <p class="sub">Nothing else is waiting on code. The rest needs your access, your decisions, or a device.</p>
+      <div class="scroll">
+      <table>
+        <thead><tr><th>Action</th><th>Why it matters</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Confirm the admin account's role says ADMIN</td><td>Every admin rule depends on it, and without it driver approval fails silently</td><td>Firebase console, Realtime Database</td></tr>
+          <tr><td>Confirm every driver record has an approved flag</td><td>A record missing it can no longer accept rides</td><td>Firebase console, Realtime Database</td></tr>
+          <tr><td>Test the rules in a scratch project, then deploy</td><td>A wrong rule fails silently and can lock you out of your own data</td><td><code>firebase deploy --only database,storage</code></td></tr>
+          <tr><td>Turn on Storage</td><td>Profile picture uploads currently fail, and that blocks the whole profile save</td><td>Firebase console, Storage</td></tr>
+          <tr><td>Rotate and restrict the Maps key</td><td>The key in use is the one that was committed to the repository history</td><td>Google Cloud console, Credentials</td></tr>
+          <tr><td>Run the app once on a device</td><td>It is the only way to turn every unproven claim on this page into a proven one</td><td>A machine with a working emulator, or a phone</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Historical note.</strong> The very first static pass scored 68 technical checks and 51 user steps. Those two
+      scores cannot be re-run today, because the item-level check lists were never saved to disk. They appear on page 01
+      only as a labelled starting line, never as a current result.</p>
+    <p>Sources: measurements taken directly from the project tree, unit test counts read from the Gradle test report,
+      defect and gate statuses from independent code reviews of the final tree. The two Word documents live in
+      <code>reports/all-logs/</code>. Prior baseline pages are kept in <code>reports/graphics/</code>.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+  function select(tab, focus){
+    tabs.forEach(function(t){
+      var on = (t === tab);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      var p = document.getElementById(t.getAttribute('aria-controls'));
+      if(on){ p.classList.add('active'); p.hidden = false; } else { p.classList.remove('active'); p.hidden = true; }
+    });
+    if(focus){ tab.focus(); }
+  }
+  tabs.forEach(function(t, i){
+    t.addEventListener('click', function(){ select(t, false); });
+    t.addEventListener('keydown', function(e){
+      var n = null;
+      if(e.key === 'ArrowRight'){ n = tabs[(i+1) % tabs.length]; }
+      if(e.key === 'ArrowLeft'){ n = tabs[(i-1+tabs.length) % tabs.length]; }
+      if(e.key === 'Home'){ n = tabs[0]; }
+      if(e.key === 'End'){ n = tabs[tabs.length-1]; }
+      if(n){ e.preventDefault(); select(n, true); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

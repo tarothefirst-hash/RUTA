@@ -123,7 +123,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="Route Deviation Detected"
+                    android:text="@string/d_route_deviation_title"
                     android:textColor="#4C1D95"
                     android:textSize="18sp"
                     android:textStyle="bold" />
@@ -134,7 +134,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:gravity="center"
-                    android:text="Your driver has moved off the designated path. Please check your location and verify your safety."
+                    android:text="@string/d_route_deviation_message"
                     android:textColor="#6B21A8"
                     android:textSize="13sp" />
 
@@ -149,7 +149,7 @@
                         android:id="@+id/btnDismissWarning"
                         android:layout_width="match_parent"
                         android:layout_height="50dp"
-                        android:text="I'M SAFE"
+                        android:text="@string/d_im_safe"
                         android:textColor="@color/white"
                         android:textSize="14sp"
                         android:textStyle="bold"
@@ -163,7 +163,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="EMERGENCY / CALL SOS"
+                        android:text="@string/d_emergency_call_sos"
                         android:textColor="#BE185D"
                         android:textSize="12sp"
                         android:textStyle="bold" />

@@ -16,7 +16,7 @@
 
     <application
         android:name=".MainApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:forceDarkAllowed="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -27,12 +27,16 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
-
+        <activity
+            android:name=".ui.TermsActivity"
+            android:exported="false" />
         <activity
             android:name=".ui.LocationSelectionActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
-
+        <activity
+            android:name=".ui.OtpActivity"
+            android:exported="false" />
         <activity
             android:name=".ui.SplashActivity"
             android:exported="true"
@@ -52,7 +56,6 @@
             android:exported="false" />
 
         <activity android:name=".ui.PassengerHomeActivity" android:exported="false" />
-        <activity android:name=".ui.DriverHomeActivity" android:exported="false" />
         <activity android:name=".ui.AdminHomeActivity" android:exported="false" />
         <activity
             android:name=".ui.LoginActivity"

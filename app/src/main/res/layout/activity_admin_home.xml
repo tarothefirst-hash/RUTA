@@ -34,7 +34,7 @@
                         android:id="@+id/btnMenu"
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="Open menu"
+                        android:contentDescription="@string/a_admin_open_menu"
                         android:src="@drawable/ic_menu"
                         app:tint="@color/ruta_black" />
 
@@ -43,7 +43,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
-                        android:text="RUTA"
+                        android:text="@string/app_name"
                         android:textColor="@color/ruta_black"
                         android:textSize="18sp"
                         android:textStyle="bold" />
@@ -57,7 +57,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginEnd="16dp"
-                        android:text="● ALL SYSTEMS OPERATIONAL"
+                        android:text="@string/a_admin_all_systems_operational"
                         android:textColor="#10B981"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -86,14 +86,14 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Overview"
+                        android:text="@string/a_admin_overview"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Network at a glance"
+                        android:text="@string/a_admin_network_at_a_glance"
                         android:textColor="@color/ruta_text_muted"
                         android:textSize="12sp" />
 
@@ -102,7 +102,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="24dp"
-                        android:text="FRIDAY, 21 AUGUST 2026"
+                        android:text="@string/a_admin_current_date"
                         android:textColor="#EF4444"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -111,7 +111,7 @@
                         android:id="@+id/txtGreeting"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Good morning, Admin."
+                        android:text="@string/a_admin_greeting"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -119,7 +119,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Here is what is happening across RUTA today."
+                        android:text="@string/a_admin_today_summary"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -155,7 +155,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="TOTAL RIDERS"
+                                        android:text="@string/a_admin_total_riders"
                                         android:textColor="@color/ruta_text_muted"
                                         android:textSize="10sp"
                                         android:textStyle="bold" />
@@ -182,7 +182,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="LIVE"
+                                    android:text="@string/a_admin_live"
                                     android:textColor="#EF4444"
                                     android:textSize="10sp"
                                     android:textStyle="bold" />
@@ -214,7 +214,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="ACTIVE DRIVERS"
+                                        android:text="@string/a_admin_active_drivers"
                                         android:textColor="@color/ruta_text_muted"
                                         android:textSize="10sp"
                                         android:textStyle="bold" />
@@ -241,7 +241,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="ACTIVE"
+                                    android:text="@string/a_admin_active"
                                     android:textColor="#EF4444"
                                     android:textSize="10sp"
                                     android:textStyle="bold" />
@@ -273,7 +273,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="PENDING REVIEW"
+                                        android:text="@string/a_admin_pending_review"
                                         android:textColor="@color/ruta_text_muted"
                                         android:textSize="10sp"
                                         android:textStyle="bold" />
@@ -324,7 +324,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="TRIPS TODAY"
+                                        android:text="@string/a_admin_trips_today"
                                         android:textColor="@color/ruta_text_muted"
                                         android:textSize="10sp"
                                         android:textStyle="bold" />
@@ -351,7 +351,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="LIVE"
+                                    android:text="@string/a_admin_live"
                                     android:textColor="#EF4444"
                                     android:textSize="10sp"
                                     android:textStyle="bold" />
@@ -383,7 +383,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="TOTAL DRIVER FEES COLLECTED"
+                                        android:text="@string/a_admin_total_driver_fees_collected"
                                         android:textColor="@color/ruta_text_muted"
                                         android:textSize="10sp"
                                         android:textStyle="bold" />
@@ -410,7 +410,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="TOTAL SERVICE COMMISSIONS"
+                                    android:text="@string/a_admin_total_service_commissions"
                                     android:textColor="@color/ruta_text_muted"
                                     android:textSize="10sp" />
                             </LinearLayout>
@@ -440,7 +440,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Driver verification queue"
+                                    android:text="@string/a_admin_driver_verification_queue"
                                     android:textColor="@color/ruta_black"
                                     android:textSize="14sp"
                                     android:textStyle="bold" />
@@ -450,7 +450,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_alignParentEnd="true"
-                                    android:text="VIEW ALL →"
+                                    android:text="@string/a_admin_view_all"
                                     android:textColor="#EF4444"
                                     android:textSize="10sp"
                                     android:textStyle="bold" />
@@ -460,7 +460,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="Review identity documents before granting booking access."
+                                android:text="@string/a_admin_review_identity_documents"
                                 android:textColor="@color/ruta_text_secondary"
                                 android:textSize="12sp" />
 
@@ -475,7 +475,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="100dp"
                                 android:gravity="center"
-                                android:text="No driver applications found."
+                                android:text="@string/a_admin_no_driver_applications"
                                 android:textColor="@color/ruta_text_muted"
                                 android:textSize="12sp" />
                         </LinearLayout>
@@ -494,7 +494,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="WORKSPACE"
+                        android:text="@string/a_admin_workspace"
                         android:textColor="#10B981"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -502,7 +502,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="ID Confirmation"
+                        android:text="@string/a_admin_id_confirmation"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -510,7 +510,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Verify rider identities and registered accounts across RUTA."
+                        android:text="@string/a_admin_verify_rider_identities"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -532,7 +532,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Verified Accounts"
+                                android:text="@string/a_admin_verified_accounts"
                                 android:textColor="@color/ruta_black"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
@@ -540,7 +540,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Manage identity statuses for passengers."
+                                android:text="@string/a_admin_manage_identity_statuses"
                                 android:textColor="@color/ruta_text_secondary"
                                 android:textSize="12sp" />
 
@@ -566,7 +566,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="WORKSPACE"
+                        android:text="@string/a_admin_workspace"
                         android:textColor="#10B981"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -574,7 +574,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Driver approvals"
+                        android:text="@string/a_admin_driver_approvals"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -582,7 +582,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Review identity documents before granting booking access."
+                        android:text="@string/a_admin_review_identity_documents"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -609,7 +609,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_centerVertical="true"
-                                    android:text="All driver applications"
+                                    android:text="@string/a_admin_all_driver_applications"
                                     android:textColor="@color/ruta_black"
                                     android:textSize="14sp"
                                     android:textStyle="bold" />
@@ -621,14 +621,14 @@
                                     android:layout_alignParentEnd="true"
                                     android:backgroundTint="@color/ruta_primary"
                                     android:paddingHorizontal="12dp"
-                                    android:text="+ Add Driver"
+                                    android:text="@string/a_admin_add_driver"
                                     android:textSize="11sp" />
                             </RelativeLayout>
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Pending and approved driver accounts."
+                                android:text="@string/a_admin_pending_and_approved_driver_accounts"
                                 android:textColor="@color/ruta_text_secondary"
                                 android:textSize="12sp" />
 
@@ -654,7 +654,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="WORKSPACE"
+                        android:text="@string/a_admin_workspace"
                         android:textColor="#10B981"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -662,7 +662,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Trips &amp; activity"
+                        android:text="@string/a_admin_trips_activity"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -670,7 +670,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Keep an eye on the latest movement across the network."
+                        android:text="@string/a_admin_latest_movement"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -692,7 +692,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Recent Trips"
+                                android:text="@string/a_admin_recent_trips"
                                 android:textColor="@color/ruta_black"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
@@ -719,7 +719,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="WORKSPACE"
+                        android:text="@string/a_admin_workspace"
                         android:textColor="#10B981"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -727,7 +727,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Driver Wallet Cash-ins"
+                        android:text="@string/a_admin_driver_wallet_cash_ins"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -735,7 +735,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Review and approve wallet top-up requests from drivers."
+                        android:text="@string/a_admin_review_wallet_topups"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="14sp" />
 
@@ -757,7 +757,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Pending Cash-in Requests"
+                                android:text="@string/a_admin_pending_cashin_requests"
                                 android:textColor="@color/ruta_black"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
@@ -784,7 +784,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="SYSTEM"
+                        android:text="@string/a_admin_system"
                         android:textColor="@color/ruta_text_muted"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -792,7 +792,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Settings"
+                        android:text="@string/a_admin_settings"
                         android:textColor="@color/ruta_black"
                         android:textSize="24sp"
                         android:textStyle="bold" />
@@ -803,7 +803,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="24dp"
                         android:backgroundTint="#EF4444"
-                        android:text="LOGOUT ADMIN" />
+                        android:text="@string/a_admin_logout_admin" />
                 </LinearLayout>
 
             </FrameLayout>

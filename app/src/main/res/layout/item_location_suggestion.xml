@@ -26,7 +26,7 @@
             android:id="@+id/txtName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Location Name"
+            android:text="@string/i_location_name_placeholder"
             android:textColor="@color/ruta_text_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
@@ -35,7 +35,7 @@
             android:id="@+id/txtAddress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Address details"
+            android:text="@string/i_location_address_placeholder"
             android:textColor="@color/ruta_text_secondary"
             android:textSize="12sp" />
     </LinearLayout>

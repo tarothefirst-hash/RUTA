@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUTA 04: Production Gates</title>
+<style>
+:root{--bg:#fafaf9;--surface:#fff;--ink:#18181b;--muted:#52525b;--line:#e4e4e7;--emerald:#0e9f6e;--rose:#e11d48;--amber:#b45309;--radius:14px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Atkinson Hyperlegible","Segoe UI",system-ui,-apple-system,Arial,sans-serif;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 40px}
+.kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:700}
+h1{font-size:38px;letter-spacing:-.03em;line-height:1.05;margin:8px 0 6px}
+.sub{color:var(--muted);max-width:72ch;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+.gate{padding:12px 0;border-top:1px solid var(--line)}
+.gate:first-of-type{border-top:0}
+.top{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+.top b{font-size:14px}.top span{font-size:12px;color:var(--muted)}
+.track{height:10px;background:#f4f4f5;border-radius:999px;overflow:hidden;margin-top:8px}
+.track i{display:block;height:100%}
+.badge{font-size:11px;font-weight:800;letter-spacing:.04em;border-radius:999px;padding:4px 10px;border:1px solid var(--line);white-space:nowrap}
+.fail{background:#fff1f2;color:#9f1239;border-color:#fecdd3}.warn{background:#fffbeb;color:#92400e;border-color:#fde68a}.pass{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+.verdict{margin-top:16px;background:#18181b;color:#fafaf9;border-radius:12px;padding:16px 18px;font-size:14px}
+.verdict strong{color:#fff}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:12px}
+th,td{padding:10px;border-top:1px solid var(--line);text-align:left}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.foot{font-size:12px;color:var(--muted);margin-top:12px}
+:focus-visible{outline:3px solid var(--emerald);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="kicker">RUTA test graphics · 04 / 04</div>
+<h1>Can we ship? Eight gates.</h1>
+<p class="sub">2 PASS-worthy · 2 WARN · 4 FAIL. Ship rule: all P0 gates must be PASS. Today: NO-SHIP to Play Store, CONDITIONAL YES to capstone demo with guardrails.</p>
+<div class="card" role="list" aria-label="Production readiness gates">
+<div class="gate" role="listitem"><div class="top"><b>1. Login + roles without hardcode</b><span class="badge fail">FAIL: LoginActivity.kt:148-153</span></div><div class="track"><i style="width:10%;background:#e11d48"></i></div><span style="font-size:12px;color:#52525b">Admin password in code. Fix: delete block, check role from DB only.</span></div>
+<div class="gate" role="listitem"><div class="top"><b>2. Secrets out of git (Maps key)</b><span class="badge fail">FAIL: strings.xml:6</span></div><div class="track"><i style="width:10%;background:#e11d48"></i></div><span style="font-size:12px;color:#52525b">Key public. Fix: rotate, restrict, move to local.properties.</span></div>
+<div class="gate" role="listitem"><div class="top"><b>3. Database rules block strangers</b><span class="badge fail">FAIL: no rules file</span></div><div class="track"><i style="width:5%;background:#e11d48"></i></div><span style="font-size:12px;color:#52525b">Open-access assumption. Fix: ship database.rules.json + simulator test.</span></div>
+<div class="gate" role="listitem"><div class="top"><b>4. Money math single + tested</b><span class="badge fail">FAIL: 3 fare forks</span></div><div class="track"><i style="width:20%;background:#e11d48"></i></div><span style="font-size:12px;color:#52525b">0.70 vs 0.75 vs 50/50. Fix: one formula + show finalFare both sides.</span></div>
+<div class="gate" role="listitem"><div class="top"><b>5. Approve / deviation per-trip</b><span class="badge warn">WARN: field split</span></div><div class="track"><i style="width:50%;background:#b45309"></i></div><span style="font-size:12px;color:#52525b">isApproved vs isDriverApproved + global counter. Fix: unify + scope per bookingId.</span></div>
+<div class="gate" role="listitem"><div class="top"><b>6. Happy-path booking</b><span class="badge pass">PASS: 64.7% checklist</span></div><div class="track"><i style="width:65%;background:#0e9f6e"></i></div><span style="font-size:12px;color:#52525b">33/51 steps pass. Demoable on rehearsed path.</span></div>
+<div class="gate" role="listitem"><div class="top"><b>7. Crash-free on 2 phones + rotation</b><span class="badge warn">WARN: 22 warns</span></div><div class="track"><i style="width:45%;background:#b45309"></i></div><span style="font-size:12px;color:#52525b">Listener leaks + rotation dup. Fix: LeakCanary + detach.</span></div>
+<div class="gate" role="listitem"><div class="top"><b>8. Privacy (no leak in code/logs)</b><span class="badge fail">FAIL: password + logs</span></div><div class="track"><i style="width:15%;background:#e11d48"></i></div><span style="font-size:12px;color:#52525b">~20 RUTA_MATCH logs + allowBackup true. Fix: strip logs, backup false.</span></div>
+<div class="verdict"><strong>Verdict: NO-SHIP production · CONDITIONAL YES demo.</strong> Fix 7 P0s (~3–5 days) → retest on real phones → then launch talk. Demo: pre-seed accounts, hide admin typing, avoid M-20/M-21 + 5-min wait.</div>
+<table><tr><th>Gate</th><th>Status</th><th>Action owner</th></tr><tr><td>1–4, 8</td><td>FAIL</td><td>Dev now (P0)</td></tr><tr><td>5, 7</td><td>WARN</td><td>Dev + device retest</td></tr><tr><td>6</td><td>PASS</td><td>Demo captain</td></tr></table>
+</div>
+<p class="foot">Source: tester Layer 3E + researcher criticals. Bars are readiness, not percentages.</p>
+</div>
+</body>
+</html>

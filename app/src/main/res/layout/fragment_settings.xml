@@ -15,7 +15,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="App Settings"
+            android:text="@string/h_settings_title"
             android:textColor="@color/ruta_red"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -25,7 +25,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="20dp"
-            android:text="Preferences &amp; Account Control"
+            android:text="@string/h_settings_subtitle"
             android:textColor="@color/text_gray"
             android:textSize="13sp" />
 
@@ -33,7 +33,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="PREFERENCES"
+            android:text="@string/h_preferences_header"
             android:textColor="@color/ruta_red"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -45,7 +45,7 @@
             android:layout_marginTop="12dp"
             android:checked="true"
             android:paddingVertical="8dp"
-            android:text="Push Notifications"
+            android:text="@string/h_push_notifications"
             android:textColor="#333333"
             android:textSize="14sp" />
 
@@ -55,7 +55,7 @@
             android:layout_height="wrap_content"
             android:checked="true"
             android:paddingVertical="8dp"
-            android:text="Always Share GPS Location"
+            android:text="@string/h_always_share_location"
             android:textColor="#333333"
             android:textSize="14sp" />
 
@@ -69,7 +69,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="VERIFICATION &amp; DISCOUNTS"
+            android:text="@string/h_verification_header"
             android:textColor="@color/ruta_red"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -95,7 +95,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Senior Citizen / PWD / Student ID"
+                    android:text="@string/h_senior_id_label"
                     android:textColor="#333333"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -103,7 +103,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Status: Not Verified"
+                    android:text="@string/h_status_not_verified"
                     android:textColor="@color/ruta_red"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -127,7 +127,7 @@
             android:layout_height="50dp"
             android:layout_marginTop="20dp"
             android:backgroundTint="#D32F2F"
-            android:text="Log Out"
+            android:text="@string/h_settings_log_out"
             android:textColor="@color/white"
             android:textStyle="bold" />
 

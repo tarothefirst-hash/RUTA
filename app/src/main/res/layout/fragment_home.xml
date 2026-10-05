@@ -35,7 +35,7 @@
                     android:id="@+id/txtGreeting"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Loading user..."
+                    android:text="@string/h_loading_user"
                     android:textColor="@color/white"
                     android:textSize="24sp"
                     android:textStyle="bold" />
@@ -45,7 +45,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="Let's find you a ride"
+                    android:text="@string/h_lets_find_you_a_ride"
                     android:textColor="@color/ruta_primary_light"
                     android:textSize="15sp" />
             </LinearLayout>
@@ -56,7 +56,7 @@
                 android:layout_height="40dp"
                 android:layout_alignParentEnd="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Notifications"
+                android:contentDescription="@string/h_notifications_content_desc"
                 android:padding="8dp"
                 android:src="@drawable/ic_notification"
                 app:tint="@color/white" />
@@ -82,7 +82,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Where to?"
+                    android:text="@string/h_search_destination"
                     android:textColor="@color/ruta_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -92,7 +92,7 @@
                     android:layout_height="40dp"
                     android:background="@drawable/circle_search"
                     android:backgroundTint="@color/ruta_primary"
-                    android:contentDescription="Search"
+                    android:contentDescription="@string/h_search_content_desc"
                     android:padding="9dp"
                     android:src="@drawable/ic_search"
                     app:tint="@color/white" />
@@ -134,7 +134,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Save more on Rideshare"
+                        android:text="@string/home_rideshare_promo_title"
                         android:textColor="@color/ruta_primary"
                         android:textSize="15sp"
                         android:textStyle="bold" />
@@ -143,7 +143,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Split fares when matched with riders heading your way."
+                        android:text="@string/home_rideshare_promo_subtitle"
                         android:textColor="@color/ruta_text_secondary"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -157,7 +157,7 @@
             android:layout_marginStart="24dp"
             android:layout_marginTop="24dp"
             android:letterSpacing="0.03"
-            android:text="RECENT BOOKINGS"
+            android:text="@string/h_recent_bookings"
             android:textColor="@color/ruta_primary"
             android:textSize="13sp"
             android:textStyle="bold" />
@@ -212,7 +212,7 @@
                         android:id="@+id/txtActiveTripStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Driver en route"
+                        android:text="@string/h_driver_en_route"
                         android:textColor="#FFFFFF"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -221,7 +221,7 @@
                         android:id="@+id/txtDriverInfoHome"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Driver: Loading..."
+                        android:text="@string/h_driver_loading"
                         android:textColor="#E0E7FF"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -233,7 +233,7 @@
                     android:background="@drawable/bg_rounded_white_chip"
                     android:paddingHorizontal="10dp"
                     android:paddingVertical="4dp"
-                    android:text="5 mins • 1.2 km"
+                    android:text="@string/h_active_trip_eta_placeholder"
                     android:textColor="#6366F1"
                     android:textSize="12sp"
                     android:textStyle="bold" />

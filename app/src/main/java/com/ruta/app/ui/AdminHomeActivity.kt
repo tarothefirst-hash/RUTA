@@ -37,6 +37,10 @@ class AdminHomeActivity : AppCompatActivity() {
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
     private val dbRef by lazy { FirebaseDatabase.getInstance().reference }
+    private var usersListener: ValueEventListener? = null
+    private var bookingsListener: ValueEventListener? = null
+    private var discountRequestsListener: ValueEventListener? = null
+    private var walletRequestsListener: ValueEventListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -174,20 +178,6 @@ class AdminHomeActivity : AppCompatActivity() {
             true
         }
     }
-    fun approveDriver(driverUid: String, vehicleModel: String, plateNumber: String, vehicleColor: String) {
-        val driverData = hashMapOf<String, Any>(
-            "isDriverApproved" to true,
-            "role" to "DRIVER",
-            "vehicleModel" to vehicleModel,
-            "plateNumber" to plateNumber,
-            "vehicleColor" to vehicleColor,
-            "vehicleDetails" to "$vehicleColor $vehicleModel ($plateNumber)".trim()
-        )
-
-        // Save to both nodes to ensure data consistency
-        database.child("users").child(driverUid).updateChildren(driverData)
-        database.child("drivers").child(driverUid).updateChildren(driverData)
-    }
     private fun showSection(id: Int) {
         binding.layoutDashboard.visibility = View.GONE
         binding.layoutRiders.visibility = View.GONE
@@ -226,158 +216,217 @@ class AdminHomeActivity : AppCompatActivity() {
         }
     }
     private fun loadPendingDiscountRequests() {
+        // Attach this listener once — the query never changes, so re-attaching on every
+        // section switch would just stack up listeners that are never removed.
+        if (discountRequestsListener != null) return
         binding.layoutFullRiderList.removeAllViews()
 
-        database.child("discount_requests").orderByChild("status").equalTo("PENDING")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (isFinishing || isDestroyed) return
-                    binding.layoutFullRiderList.removeAllViews()
-                    val inflater = LayoutInflater.from(this@AdminHomeActivity)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (isFinishing || isDestroyed) return
+                binding.layoutFullRiderList.removeAllViews()
+                val inflater = LayoutInflater.from(this@AdminHomeActivity)
 
-                    if (!snapshot.exists()) {
-                        val empty = TextView(this@AdminHomeActivity).apply {
-                            text = "No pending ID submissions."
-                            setTextColor(Color.GRAY)
-                            setPadding(0, 32, 0, 32)
-                        }
-                        binding.layoutFullRiderList.addView(empty)
-                        return
+                if (!snapshot.exists()) {
+                    val empty = TextView(this@AdminHomeActivity).apply {
+                        text = "No pending ID submissions."
+                        setTextColor(Color.GRAY)
+                        setPadding(0, 32, 0, 32)
                     }
-
-                    for (reqSnap in snapshot.children) {
-                        val requestId = reqSnap.key ?: continue
-                        val userId = reqSnap.child("userId").getValue(String::class.java) ?: continue
-                        val userName = reqSnap.child("userName").getValue(String::class.java) ?: "Passenger"
-                        val discountType = reqSnap.child("discountType").getValue(String::class.java) ?: "N/A"
-                        val frontUrl = reqSnap.child("idFrontUrl").getValue(String::class.java)
-                        val backUrl = reqSnap.child("idBackUrl").getValue(String::class.java)
-
-                        val view = inflater.inflate(R.layout.item_booking_history, binding.layoutFullRiderList, false)
-                        view.findViewById<TextView>(R.id.txtHistoryPickup).text = "Applicant: $userName"
-                        view.findViewById<TextView>(R.id.txtHistoryDropoff).text = "Discount Type: $discountType"
-                        view.findViewById<TextView>(R.id.txtHistoryFare).visibility = View.GONE
-                        view.findViewById<TextView>(R.id.txtHistoryServiceType).visibility = View.GONE
-                        view.findViewById<TextView>(R.id.txtHistoryDate).text = "Pending Review"
-                        view.findViewById<TextView>(R.id.txtHistoryDate).setTextColor(Color.parseColor("#EF4444"))
-
-                        val innerLayout = view.findViewById<TextView>(R.id.txtHistoryPickup).parent as LinearLayout
-
-                        addDocumentReviewButton(innerLayout, "View Front ID", frontUrl)
-                        addDocumentReviewButton(innerLayout, "View Back ID", backUrl)
-
-                        val btnApprove = Button(this@AdminHomeActivity).apply {
-                            text = "APPROVE DISCOUNT"
-                            setBackgroundColor(Color.parseColor("#10B981"))
-                            setTextColor(Color.WHITE)
-                            textSize = 12f
-                            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120)
-                            params.setMargins(0, 12, 0, 0)
-                            layoutParams = params
-                        }
-                        btnApprove.setOnClickListener { approveDiscountRequest(requestId, userId) }
-
-                        val btnReject = Button(this@AdminHomeActivity).apply {
-                            text = "REJECT"
-                            setBackgroundColor(Color.parseColor("#F3F4F6"))
-                            setTextColor(Color.parseColor("#EF4444"))
-                            textSize = 12f
-                            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                            params.setMargins(0, 8, 0, 0)
-                            layoutParams = params
-                        }
-                        btnReject.setOnClickListener { rejectDiscountRequest(requestId) }
-
-                        innerLayout.addView(btnApprove)
-                        innerLayout.addView(btnReject)
-
-                        binding.layoutFullRiderList.addView(view)
-                        addDivider(binding.layoutFullRiderList)
-                    }
+                    binding.layoutFullRiderList.addView(empty)
+                    return
                 }
-                override fun onCancelled(error: DatabaseError) {}
-            })
+
+                for (reqSnap in snapshot.children) {
+                    val requestId = reqSnap.key ?: continue
+                    val userId = reqSnap.child("userId").getValue(String::class.java) ?: continue
+                    val userName = reqSnap.child("userName").getValue(String::class.java) ?: "Passenger"
+                    val discountType = reqSnap.child("discountType").getValue(String::class.java) ?: "N/A"
+                    val frontUrl = reqSnap.child("idFrontUrl").getValue(String::class.java)
+                    val backUrl = reqSnap.child("idBackUrl").getValue(String::class.java)
+
+                    val view = inflater.inflate(R.layout.item_booking_history, binding.layoutFullRiderList, false)
+                    view.findViewById<TextView>(R.id.txtHistoryPickup).text = "Applicant: $userName"
+                    view.findViewById<TextView>(R.id.txtHistoryDropoff).text = "Discount Type: $discountType"
+                    view.findViewById<TextView>(R.id.txtHistoryFare).visibility = View.GONE
+                    view.findViewById<TextView>(R.id.txtHistoryServiceType).visibility = View.GONE
+                    view.findViewById<TextView>(R.id.txtHistoryDate).text = "Pending Review"
+                    view.findViewById<TextView>(R.id.txtHistoryDate).setTextColor(Color.parseColor("#EF4444"))
+
+                    val innerLayout = view.findViewById<TextView>(R.id.txtHistoryPickup).parent as LinearLayout
+
+                    addDocumentReviewButton(innerLayout, "View Front ID", frontUrl)
+                    addDocumentReviewButton(innerLayout, "View Back ID", backUrl)
+
+                    val btnApprove = Button(this@AdminHomeActivity).apply {
+                        text = "APPROVE DISCOUNT"
+                        setBackgroundColor(Color.parseColor("#10B981"))
+                        setTextColor(Color.WHITE)
+                        textSize = 12f
+                        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120)
+                        params.setMargins(0, 12, 0, 0)
+                        layoutParams = params
+                    }
+                    btnApprove.setOnClickListener { approveDiscountRequest(requestId, userId) }
+
+                    val btnReject = Button(this@AdminHomeActivity).apply {
+                        text = "REJECT"
+                        setBackgroundColor(Color.parseColor("#F3F4F6"))
+                        setTextColor(Color.parseColor("#EF4444"))
+                        textSize = 12f
+                        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                        params.setMargins(0, 8, 0, 0)
+                        layoutParams = params
+                    }
+                    btnReject.setOnClickListener { rejectDiscountRequest(requestId) }
+
+                    innerLayout.addView(btnApprove)
+                    innerLayout.addView(btnReject)
+
+                    binding.layoutFullRiderList.addView(view)
+                    addDivider(binding.layoutFullRiderList)
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        discountRequestsListener = listener
+        database.child("discount_requests").orderByChild("status").equalTo("PENDING")
+            .addValueEventListener(listener)
     }
 
     private fun approveDiscountRequest(requestId: String, userId: String) {
-        val updates = mapOf<String, Any>(
-            "discount_requests/$requestId/status" to "APPROVED",
-            "users/$userId/hasDiscount" to true
-        )
-        database.updateChildren(updates)
-            .addOnSuccessListener { Toast.makeText(this, "Discount approved.", Toast.LENGTH_SHORT).show() }
-            .addOnFailureListener { e -> Toast.makeText(this, "Failed: ${e.message}", Toast.LENGTH_SHORT).show() }
+        // Claim the request atomically. Only a request still in PENDING may be approved —
+        // if it is already APPROVED (discount granted) or already REJECTED this aborts, so a
+        // rejected request can never be flipped back to APPROVED and re-grant the discount.
+        val requestStatusRef = database.child("discount_requests").child(requestId).child("status")
+        requestStatusRef.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(mutableData: MutableData): Transaction.Result {
+                if (mutableData.getValue(String::class.java) != "PENDING") {
+                    return Transaction.abort()
+                }
+                mutableData.value = "APPROVED"
+                return Transaction.success(mutableData)
+            }
+
+            override fun onComplete(error: DatabaseError?, committed: Boolean, currentData: DataSnapshot?) {
+                if (!committed) {
+                    if (error != null) {
+                        Toast.makeText(this@AdminHomeActivity, "Failed to approve request: ${error.message}", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+
+                // 2. Grant the discount now that the request is locked in, writing the request
+                //    status and the user flag together so they can never disagree.
+                val updates = mapOf<String, Any>(
+                    "discount_requests/$requestId/status" to "APPROVED",
+                    "users/$userId/hasDiscount" to true
+                )
+                database.updateChildren(updates)
+                    .addOnSuccessListener { Toast.makeText(this@AdminHomeActivity, "Discount approved.", Toast.LENGTH_SHORT).show() }
+                    .addOnFailureListener { e ->
+                        // Grant never landed — release the claim so the request is not left
+                        // APPROVED with no discount applied.
+                        requestStatusRef.setValue("PENDING")
+                        Toast.makeText(this@AdminHomeActivity, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+        })
     }
 
     private fun rejectDiscountRequest(requestId: String) {
-        database.child("discount_requests").child(requestId).child("status").setValue("REJECTED")
-            .addOnSuccessListener { Toast.makeText(this, "Application rejected.", Toast.LENGTH_SHORT).show() }
+        // Claim the request atomically. Only a request still in PENDING may be rejected —
+        // if it is already APPROVED (discount granted) or already REJECTED this aborts, so a
+        // reject can never flip an approved request to REJECTED while the discount stays on.
+        val requestStatusRef = database.child("discount_requests").child(requestId).child("status")
+        requestStatusRef.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(mutableData: MutableData): Transaction.Result {
+                if (mutableData.getValue(String::class.java) != "PENDING") {
+                    return Transaction.abort()
+                }
+                mutableData.value = "REJECTED"
+                return Transaction.success(mutableData)
+            }
+
+            override fun onComplete(error: DatabaseError?, committed: Boolean, currentData: DataSnapshot?) {
+                if (committed) {
+                    Toast.makeText(this@AdminHomeActivity, "Application rejected.", Toast.LENGTH_SHORT).show()
+                } else if (error != null) {
+                    Toast.makeText(this@AdminHomeActivity, "Failed to reject request: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
     }
     private fun loadPendingWalletRequests() {
+        // Attach this listener once — the query never changes, so re-attaching on every
+        // section switch would just stack up listeners that are never removed.
+        if (walletRequestsListener != null) return
         val container = findViewById<LinearLayout>(R.id.layoutWalletRequestsList) ?: return
         container.removeAllViews()
 
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (isFinishing || isDestroyed) return
+                container.removeAllViews()
+
+                if (!snapshot.exists()) {
+                    val emptyTv = TextView(this@AdminHomeActivity).apply {
+                        text = "No pending cash-in requests."
+                        setTextColor(Color.GRAY)
+                        setPadding(16, 32, 16, 32)
+                    }
+                    container.addView(emptyTv)
+                    return
+                }
+
+                for (reqSnap in snapshot.children) {
+                    val requestId = reqSnap.key ?: reqSnap.child("requestId").value?.toString() ?: continue
+                    val driverUid = reqSnap.child("driverUid").value?.toString()
+                        ?: reqSnap.child("driverId").value?.toString() ?: ""
+                    val driverName = reqSnap.child("driverName").value?.toString() ?: "Driver"
+                    val amount = reqSnap.child("amount").value?.toString()?.toDoubleOrNull() ?: 0.0
+                    val receiptUrl = reqSnap.child("receiptUrl").value?.toString() ?: ""
+
+                    val itemView = layoutInflater.inflate(R.layout.item_wallet_request, container, false)
+
+                    val txtDriverName = itemView.findViewById<TextView>(R.id.txtDriverName)
+                    val txtAmount = itemView.findViewById<TextView>(R.id.txtAmount)
+                    val imgReceipt = itemView.findViewById<ImageView>(R.id.imgReceiptThumbnail)
+                    val btnApprove = itemView.findViewById<Button>(R.id.btnApprove)
+                    val btnReject = itemView.findViewById<Button>(R.id.btnReject)
+
+                    txtDriverName.text = driverName
+                    txtAmount.text = "₱%.2f".format(amount)
+
+                    if (receiptUrl.isNotEmpty()) {
+                        imgReceipt.visibility = View.VISIBLE
+                        loadReceiptImage(imgReceipt, receiptUrl)
+                        imgReceipt.setOnClickListener {
+                            showFullReceiptDialog(receiptUrl)
+                        }
+                    } else {
+                        imgReceipt.visibility = View.GONE
+                    }
+
+                    btnApprove.setOnClickListener {
+                        approveCashIn(requestId, driverUid, amount)
+                    }
+
+                    btnReject.setOnClickListener {
+                        rejectCashIn(requestId)
+                    }
+
+                    container.addView(itemView)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Toast.makeText(this@AdminHomeActivity, "Failed to load requests: ${error.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        walletRequestsListener = listener
         dbRef.child("wallet_requests").orderByChild("status").equalTo("PENDING")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (isFinishing || isDestroyed) return
-                    container.removeAllViews()
-
-                    if (!snapshot.exists()) {
-                        val emptyTv = TextView(this@AdminHomeActivity).apply {
-                            text = "No pending cash-in requests."
-                            setTextColor(Color.GRAY)
-                            setPadding(16, 32, 16, 32)
-                        }
-                        container.addView(emptyTv)
-                        return
-                    }
-
-                    for (reqSnap in snapshot.children) {
-                        val requestId = reqSnap.child("requestId").value?.toString() ?: reqSnap.key ?: continue
-                        val driverUid = reqSnap.child("driverUid").value?.toString()
-                            ?: reqSnap.child("driverId").value?.toString() ?: ""
-                        val driverName = reqSnap.child("driverName").value?.toString() ?: "Driver"
-                        val amount = reqSnap.child("amount").value?.toString()?.toDoubleOrNull() ?: 0.0
-                        val receiptUrl = reqSnap.child("receiptUrl").value?.toString() ?: ""
-
-                        val itemView = layoutInflater.inflate(R.layout.item_wallet_request, container, false)
-
-                        val txtDriverName = itemView.findViewById<TextView>(R.id.txtDriverName)
-                        val txtAmount = itemView.findViewById<TextView>(R.id.txtAmount)
-                        val imgReceipt = itemView.findViewById<ImageView>(R.id.imgReceiptThumbnail)
-                        val btnApprove = itemView.findViewById<Button>(R.id.btnApprove)
-                        val btnReject = itemView.findViewById<Button>(R.id.btnReject)
-
-                        txtDriverName.text = driverName
-                        txtAmount.text = "₱%.2f".format(amount)
-
-                        if (receiptUrl.isNotEmpty()) {
-                            imgReceipt.visibility = View.VISIBLE
-                            Glide.with(this@AdminHomeActivity).load(receiptUrl).into(imgReceipt)
-                            imgReceipt.setOnClickListener {
-                                showFullReceiptDialog(receiptUrl)
-                            }
-                        } else {
-                            imgReceipt.visibility = View.GONE
-                        }
-
-                        btnApprove.setOnClickListener {
-                            approveCashIn(requestId, driverUid, amount)
-                        }
-
-                        btnReject.setOnClickListener {
-                            dbRef.child("wallet_requests").child(requestId).child("status").setValue("REJECTED")
-                        }
-
-                        container.addView(itemView)
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Toast.makeText(this@AdminHomeActivity, "Failed to load requests: ${error.message}", Toast.LENGTH_SHORT).show()
-                }
-            })
+            .addValueEventListener(listener)
     }
 
     private fun showFullReceiptDialog(imageUrl: String) {
@@ -386,10 +435,33 @@ class AdminHomeActivity : AppCompatActivity() {
             adjustViewBounds = true
             setPadding(16, 16, 16, 16)
         }
-        Glide.with(this).load(imageUrl).into(imageView)
+        loadReceiptImage(imageView, imageUrl)
         builder.setView(imageView)
         builder.setPositiveButton("Close") { dialog, _ -> dialog.dismiss() }
         builder.show()
+    }
+
+    // Receipts arrive as a real URL, a data-URI, or raw base64 (no prefix). Decode the
+    // base64 shapes in-process and let Glide handle only real URLs.
+    private fun loadReceiptImage(imageView: ImageView, value: String) {
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            Glide.with(this).load(value).into(imageView)
+            return
+        }
+
+        try {
+            val cleanBase64 = value.substringAfter("base64,")
+            val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.NO_WRAP)
+            val bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+
+            if (bitmap != null) {
+                imageView.setImageBitmap(bitmap)
+            } else {
+                Toast.makeText(this, "Could not render image bytes.", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error decoding image: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun approveCashIn(requestId: String, driverUid: String, amount: Double) {
@@ -398,30 +470,78 @@ class AdminHomeActivity : AppCompatActivity() {
             return
         }
 
-        // 1. Mark request as APPROVED
-        dbRef.child("wallet_requests").child(requestId).child("status").setValue("APPROVED")
-
-        // 2. Increment driver's wallet balance transactionally
-        val driverWalletRef = dbRef.child("users").child(driverUid).child("walletBalance")
-        driverWalletRef.runTransaction(object : Transaction.Handler {
+        // 1. Claim the request atomically. Only a request still in PENDING may be approved —
+        //    if it is already APPROVED (credited) or already REJECTED this aborts, so a
+        //    double tap, a replay, or an approve after a reject can never credit the request.
+        val requestStatusRef = dbRef.child("wallet_requests").child(requestId).child("status")
+        requestStatusRef.runTransaction(object : Transaction.Handler {
             override fun doTransaction(mutableData: MutableData): Transaction.Result {
-                val currentBalance = mutableData.getValue(Double::class.java) ?: 0.0
-                mutableData.value = currentBalance + amount
+                if (mutableData.getValue(String::class.java) != "PENDING") {
+                    return Transaction.abort()
+                }
+                mutableData.value = "APPROVED"
+                return Transaction.success(mutableData)
+            }
+
+            override fun onComplete(error: DatabaseError?, committed: Boolean, currentData: DataSnapshot?) {
+                if (!committed) {
+                    // Aborted because it was not PENDING (no-op), or the claim failed.
+                    if (error != null) {
+                        Toast.makeText(this@AdminHomeActivity, "Failed to claim request: ${error.message}", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+
+                // 2. Credit the driver's wallet exactly once, now that the request is locked in.
+                val driverWalletRef = dbRef.child("users").child(driverUid).child("walletBalance")
+                driverWalletRef.runTransaction(object : Transaction.Handler {
+                    override fun doTransaction(mutableData: MutableData): Transaction.Result {
+                        val currentBalance = mutableData.getValue(Double::class.java) ?: 0.0
+                        mutableData.value = currentBalance + amount
+                        return Transaction.success(mutableData)
+                    }
+
+                    override fun onComplete(error: DatabaseError?, committed: Boolean, currentData: DataSnapshot?) {
+                        if (committed) {
+                            Toast.makeText(this@AdminHomeActivity, "Cash-in approved! Added ₱$amount to balance.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            // Balance never moved — release the claim so the request is not left
+                            // APPROVED with no money credited.
+                            requestStatusRef.setValue("PENDING")
+                            Toast.makeText(this@AdminHomeActivity, "Failed to update balance: ${error?.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                })
+            }
+        })
+    }
+
+    private fun rejectCashIn(requestId: String) {
+        // Claim the request atomically. Only a request still in PENDING may be rejected —
+        // if it is already APPROVED (credited) or already REJECTED this aborts, so a double
+        // tap (or a second admin device) can never overwrite an approved request.
+        val requestStatusRef = dbRef.child("wallet_requests").child(requestId).child("status")
+        requestStatusRef.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(mutableData: MutableData): Transaction.Result {
+                if (mutableData.getValue(String::class.java) != "PENDING") {
+                    return Transaction.abort()
+                }
+                mutableData.value = "REJECTED"
                 return Transaction.success(mutableData)
             }
 
             override fun onComplete(error: DatabaseError?, committed: Boolean, currentData: DataSnapshot?) {
                 if (committed) {
-                    Toast.makeText(this@AdminHomeActivity, "Cash-in approved! Added ₱$amount to balance.", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@AdminHomeActivity, "Failed to update balance: ${error?.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@AdminHomeActivity, "Cash-in rejected.", Toast.LENGTH_SHORT).show()
+                } else if (error != null) {
+                    Toast.makeText(this@AdminHomeActivity, "Failed to reject request: ${error.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         })
     }
 
     private fun startDataListeners() {
-        database.child("users").addValueEventListener(object : ValueEventListener {
+        val usersListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 var totalRiders = 0
                 var activeDrivers = 0
@@ -459,12 +579,14 @@ class AdminHomeActivity : AppCompatActivity() {
             }
 
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        this.usersListener = usersListener
+        database.child("users").addValueEventListener(usersListener)
 
-        database.child("bookings").addValueEventListener(object : ValueEventListener {
+        val bookingsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 var tripsToday = 0
-                val bookings = mutableListOf<BookingModel>()
+                val bookings = mutableListOf<Pair<Long, BookingModel>>()
                 val todayStart = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, 0)
                     set(Calendar.MINUTE, 0)
@@ -474,34 +596,27 @@ class AdminHomeActivity : AppCompatActivity() {
                 for (bookingSnap in snapshot.children) {
                     val booking = bookingSnap.getValue(BookingModel::class.java)
                     if (booking != null) {
-                        bookings.add(booking)
-                        if (booking.createdAt >= todayStart) tripsToday++
+                        val bookedAt = bookingTime(bookingSnap)
+                        bookings.add(bookedAt to booking)
+                        if (bookedAt >= todayStart) tripsToday++
                     }
                 }
                 binding.txtTripsToday.text = tripsToday.toString()
-                updateTripFeed(bookings.sortedByDescending { it.createdAt }.take(15))
+                updateTripFeed(bookings.sortedByDescending { it.first }.take(15).map { it.second })
             }
 
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        this.bookingsListener = bookingsListener
+        database.child("bookings").addValueEventListener(bookingsListener)
     }
 
-    private fun updateRiderList(riders: List<User>) {
-        binding.layoutFullRiderList.removeAllViews()
-        val inflater = LayoutInflater.from(this)
-
-        for (rider in riders) {
-            val itemView = inflater.inflate(android.R.layout.simple_list_item_2, binding.layoutFullRiderList, false)
-            val text1 = itemView.findViewById<TextView>(android.R.id.text1)
-            val text2 = itemView.findViewById<TextView>(android.R.id.text2)
-
-            text1.text = "${rider.firstName} ${rider.lastName}"
-            text1.setTypeface(null, android.graphics.Typeface.BOLD)
-            text2.text = "${rider.email} • Joined: ${formatDate(rider.createdAt)}"
-
-            binding.layoutFullRiderList.addView(itemView)
-            addDivider(binding.layoutFullRiderList)
-        }
+    // Every booking writer now sets "createdAt". The "timestamp" fallback is kept only so
+    // records created before that unification still show the right date.
+    private fun bookingTime(snapshot: DataSnapshot): Long {
+        return snapshot.child("createdAt").getValue(Long::class.java)
+            ?: snapshot.child("timestamp").getValue(Long::class.java)
+            ?: 0L
     }
 
     private fun updateApprovalList(drivers: List<DataSnapshot>) {
@@ -619,7 +734,7 @@ class AdminHomeActivity : AppCompatActivity() {
 
             view.findViewById<TextView>(R.id.txtHistoryPickup).text = "From: ${booking.pickupAddress}"
             view.findViewById<TextView>(R.id.txtHistoryDropoff).text = "To: ${booking.dropoffAddress}"
-            view.findViewById<TextView>(R.id.txtHistoryFare).text = "₱${booking.fare}"
+            view.findViewById<TextView>(R.id.txtHistoryFare).text = "₱${if (booking.finalFare > 0.0) booking.finalFare else booking.fare}"
 
             binding.layoutTripFeed.addView(view)
             addDivider(binding.layoutTripFeed)
@@ -641,6 +756,18 @@ class AdminHomeActivity : AppCompatActivity() {
             }
     }
 
+    override fun onDestroy() {
+        usersListener?.let { database.child("users").removeEventListener(it) }
+        bookingsListener?.let { database.child("bookings").removeEventListener(it) }
+        discountRequestsListener?.let {
+            database.child("discount_requests").orderByChild("status").equalTo("PENDING").removeEventListener(it)
+        }
+        walletRequestsListener?.let {
+            dbRef.child("wallet_requests").orderByChild("status").equalTo("PENDING").removeEventListener(it)
+        }
+        super.onDestroy()
+    }
+
     private fun performLogout() {
         auth.signOut()
         startActivity(Intent(this, LoginActivity::class.java))
@@ -653,9 +780,5 @@ class AdminHomeActivity : AppCompatActivity() {
             setBackgroundColor(Color.parseColor("#F3F4F6"))
         }
         parent.addView(divider)
-    }
-
-    private fun formatDate(time: Long): String {
-        return SimpleDateFormat("MMM dd, yyyy", Locale.US).format(java.util.Date(time))
     }
 }

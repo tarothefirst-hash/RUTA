@@ -1,0 +1,80 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'ADMIN')",
+
+        "trustedContacts": {
+          ".write": "auth != null"
+        },
+
+        "role": {
+          ".validate": "newData.val() == data.val() || root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || !data.exists()"
+        },
+
+        "status": {
+          ".validate": "auth != null"
+        }
+      }
+    },
+
+    "drivers": {
+      ".read": "auth != null",
+      "$driverId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || auth.uid == $driverId)"
+      }
+    },
+
+    "driver_applications": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "wallet_requests": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "reports": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "bookings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["status", "passengerId", "driverId"]
+    },
+
+    "matchLocks": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "tripGroups": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "pairRequests": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "emergencyAlerts": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "discount_requests": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "chats": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

@@ -1,7 +1,6 @@
 package com.ruta.app.util
 
 import android.content.Context
-import android.widget.Toast
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
@@ -54,23 +53,5 @@ class RouteDeviationWatcher(
     fun stop() {
         listener?.let { bookingRef.removeEventListener(it) }
         listener = null
-    }
-
-    fun markSafe() {
-        bookingRef.child("routeStatus").setValue("NORMAL")
-    }
-
-    /**
-     * Optional helper in case you want to trigger the emergency alert programmatically.
-     */
-    fun triggerEmergencyAlert() {
-        EmergencyContactManager.sendEmergencyAlertForBooking(database, bookingId) { notified ->
-            val message = if (notified > 0) {
-                "Alert sent to $notified trusted contact${if (notified == 1) "" else "s"}."
-            } else {
-                "No trusted contacts set up yet — add one from your Profile."
-            }
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-        }
     }
 }

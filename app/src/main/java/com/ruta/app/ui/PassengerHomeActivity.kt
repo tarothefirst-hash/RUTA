@@ -19,12 +19,11 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.Query
 import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
 import com.ruta.app.util.EmergencyContactManager
-import com.ruta.app.util.FareCalculator
 import com.ruta.app.util.RouteDeviationManager
-import com.ruta.app.util.VehicleType
 
 class PassengerHomeActivity : AppCompatActivity() {
 
@@ -42,8 +41,11 @@ class PassengerHomeActivity : AppCompatActivity() {
 
     private var activeBookingListener: ValueEventListener? = null
     private var sequenceListener: ValueEventListener? = null
+    private var allBookingsListener: ValueEventListener? = null
+    private var allBookingsQuery: Query? = null
     private var activeBookingId: String? = null
     private var activeTripGroupId: String? = null
+    private var lastShownPickupOrdinal: Int? = null
     private var hasFiredNotification = false
 
     // Incoming pairing / emergency listeners
@@ -149,151 +151,10 @@ class PassengerHomeActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Calculates estimated fare using exact passenger segment duration/distance + student discount.
-     */
-    fun calculateAndDisplayFare(
-        distanceKm: Double,
-        durationMin: Double,
-        vehicleType: VehicleType,
-        isShared: Boolean,
-        onFareCalculated: (Double) -> Unit
-    ) {
-        val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-
-        database.child("users").child(currentUid).get().addOnSuccessListener { snapshot ->
-            val hasDiscount = snapshot.child("hasDiscount").getValue(Boolean::class.java) ?: false
-
-            val calculatedFare = if (isShared) {
-                FareCalculator.calculateRideshareSegmentFare(
-                    passengerSegmentDistanceKm = distanceKm,
-                    passengerSegmentDurationMin = durationMin,
-                    vehicleType = vehicleType,
-                    hasDiscount = hasDiscount
-                )
-            } else {
-                FareCalculator.calculateFare(
-                    distanceKm = distanceKm,
-                    durationMin = durationMin,
-                    vehicleType = vehicleType,
-                    isShared = false,
-                    hasDiscount = hasDiscount
-                )
-            }
-
-            onFareCalculated(calculatedFare)
-        }.addOnFailureListener {
-            val fallbackFare = FareCalculator.calculateFare(
-                distanceKm = distanceKm,
-                durationMin = durationMin,
-                vehicleType = vehicleType,
-                isShared = isShared,
-                hasDiscount = false
-            )
-            onFareCalculated(fallbackFare)
-        }
-    }
-
-    /**
-     * Creates a new booking request in Firebase using segment-based rideshare calculation.
-     */
-    fun createBookingRequest(
-        pickupAddress: String,
-        pickupLat: Double,
-        pickupLng: Double,
-        dropoffAddress: String,
-        dropoffLat: Double,
-        dropoffLng: Double,
-        distanceKm: Double,
-        durationMin: Double,
-        vehicleType: VehicleType,
-        isShared: Boolean
-    ) {
-        val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val bookingId = database.child("bookings").push().key ?: return
-
-        database.child("users").child(currentUid).get().addOnSuccessListener { userSnap ->
-            val hasDiscount = userSnap.child("hasDiscount").getValue(Boolean::class.java) ?: false
-            val passengerName = "${userSnap.child("firstName").value ?: ""} ${userSnap.child("lastName").value ?: ""}".trim()
-
-            val fare = if (isShared) {
-                FareCalculator.calculateRideshareSegmentFare(
-                    passengerSegmentDistanceKm = distanceKm,
-                    passengerSegmentDurationMin = durationMin,
-                    vehicleType = vehicleType,
-                    hasDiscount = hasDiscount
-                )
-            } else {
-                FareCalculator.calculateFare(
-                    distanceKm = distanceKm,
-                    durationMin = durationMin,
-                    vehicleType = vehicleType,
-                    isShared = false,
-                    hasDiscount = hasDiscount
-                )
-            }
-
-            val bookingMap = hashMapOf<String, Any?>(
-                "bookingId" to bookingId,
-                "passengerId" to currentUid,
-                "passengerName" to passengerName,
-                "pickupAddress" to pickupAddress,
-                "pickupLat" to pickupLat,
-                "pickupLng" to pickupLng,
-                "dropoffAddress" to dropoffAddress,
-                "dropoffLat" to dropoffLat,
-                "dropoffLng" to dropoffLng,
-                "distanceKm" to distanceKm,
-                "durationMin" to durationMin,
-                "fare" to fare,
-                "hasDiscount" to hasDiscount,
-                "isShared" to isShared,
-                "vehicleType" to vehicleType.name,
-                "status" to "PENDING",
-                "createdAt" to System.currentTimeMillis()
-            )
-
-            database.child("bookings").child(bookingId).setValue(bookingMap)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Searching for nearby drivers...", Toast.LENGTH_SHORT).show()
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Failed to place booking: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-        }
-    }
-
-    /**
-     * Public method to cancel an ongoing ride search or active booking.
-     */
-    fun cancelActiveRide(rideId: String, onComplete: (() -> Unit)? = null) {
-        val updates = mapOf<String, Any>(
-            "status" to "CANCELLED",
-            "cancelledAt" to System.currentTimeMillis(),
-            "cancelledBy" to "PASSENGER"
-        )
-
-        database.child("ride_requests").child(rideId).updateChildren(updates)
-        database.child("bookings").child(rideId).updateChildren(updates)
-            .addOnSuccessListener {
-                if (activeBookingId == rideId) {
-                    detachRouteDeviationListener()
-                    detachSequenceListener()
-                    activeBookingId = null
-                    cardRouteDeviationWarning.visibility = View.GONE
-                }
-                Toast.makeText(this, "Ride request cancelled.", Toast.LENGTH_SHORT).show()
-                onComplete?.invoke()
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Failed to cancel: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-    }
-
     private fun listenForActivePassengerTrip() {
         val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
-        database.child("bookings").addValueEventListener(object : ValueEventListener {
+        allBookingsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 var foundActiveTrip = false
                 var newActiveBookingId: String? = null
@@ -304,7 +165,7 @@ class PassengerHomeActivity : AppCompatActivity() {
                     val status = child.child("status").getValue(String::class.java)
 
                     if (passengerId == currentUserId &&
-                        (status == "PENDING" || status == "MATCHING" || status == "ACCEPTED" || status == "IN_PROGRESS")) {
+                        (status == "MATCHING" || status == "MATCHED" || status == "ACCEPTED" || status == "IN_PROGRESS")) {
 
                         newActiveBookingId = child.key
                         tripGroupId = child.child("tripGroupId").getValue(String::class.java)
@@ -317,55 +178,61 @@ class PassengerHomeActivity : AppCompatActivity() {
                     if (activeBookingId != newActiveBookingId) {
                         detachRouteDeviationListener()
                         activeBookingId = newActiveBookingId
-                        activeTripGroupId = tripGroupId
                         monitorRouteDeviationForBooking(newActiveBookingId)
+                    }
 
-                        if (!tripGroupId.isNullOrEmpty()) {
+                    // Pairing sets status MATCHED and tripGroupId on the same booking, so
+                    // the booking id does not change when the trip group first appears.
+                    // activeTripGroupId tracks the group the sequence listener is attached
+                    // for, so attach / re-attach / detach on every sync instead.
+                    if (!tripGroupId.isNullOrEmpty()) {
+                        if (activeTripGroupId != tripGroupId) {
                             listenForTripSequence(tripGroupId, currentUserId)
                         }
+                    } else {
+                        detachSequenceListener()
                     }
                 } else {
                     detachRouteDeviationListener()
                     detachSequenceListener()
                     activeBookingId = null
-                    activeTripGroupId = null
                     cardRouteDeviationWarning.visibility = View.GONE
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {}
-        })
-    }
-
-    private fun listenForTripSequence(tripGroupId: String, currentPassengerId: String) {
-        detachSequenceListener()
-
-        sequenceListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val sequence = snapshot.children.mapNotNull { it.value as? Map<*, *> }
-                if (sequence.isEmpty()) return
-
-                for (item in sequence) {
-                    val pId = item["passengerId"] as? String
-                    val label = item["label"] as? String ?: ""
-                    val orderNum = (item["sequenceOrder"] as? Long)?.toInt() ?: 0
-                    val isPickup = item["isPickup"] as? Boolean ?: true
-
-                    if (pId == currentPassengerId && isPickup) {
-                        Toast.makeText(
-                            this@PassengerHomeActivity,
-                            "You are Stop #$orderNum ($label) in the pickup queue.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        break
-                    }
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {}
         }
 
-        database.child("tripGroups").child(tripGroupId).child("pickupSequence")
+        allBookingsQuery = database.child("bookings")
+            .orderByChild("passengerId")
+            .equalTo(currentUserId)
+        allBookingsQuery?.addValueEventListener(allBookingsListener!!)
+    }
+
+    private fun listenForTripSequence(tripGroupId: String, currentPassengerId: String) {
+        detachSequenceListener()
+        lastShownPickupOrdinal = null
+        activeTripGroupId = tripGroupId
+
+        sequenceListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val sequence = snapshot.children.mapNotNull { it.value as? Map<*, *> }
+                val position = pickupPositionOf(sequence, currentPassengerId) ?: return
+
+                if (lastShownPickupOrdinal != position.ordinal) {
+                    lastShownPickupOrdinal = position.ordinal
+                    Toast.makeText(
+                        this@PassengerHomeActivity,
+                        "You are Stop #${position.ordinal} (${position.label}) in the pickup queue.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        }
+
+        database.child("tripGroups").child(tripGroupId).child("stops")
             .addValueEventListener(sequenceListener!!)
     }
 
@@ -415,10 +282,11 @@ class PassengerHomeActivity : AppCompatActivity() {
     private fun detachSequenceListener() {
         activeTripGroupId?.let { groupId ->
             sequenceListener?.let { listener ->
-                database.child("tripGroups").child(groupId).child("pickupSequence").removeEventListener(listener)
+                database.child("tripGroups").child(groupId).child("stops").removeEventListener(listener)
             }
         }
         sequenceListener = null
+        activeTripGroupId = null
     }
 
     private fun startIncomingPairRequestListener() {
@@ -477,9 +345,47 @@ class PassengerHomeActivity : AppCompatActivity() {
         super.onDestroy()
         detachRouteDeviationListener()
         detachSequenceListener()
+        allBookingsListener?.let { listener -> allBookingsQuery?.removeEventListener(listener) }
+        allBookingsListener = null
+        allBookingsQuery = null
         FirebaseAuth.getInstance().currentUser?.uid?.let { myUid ->
             pairRequestListener?.let { database.child("pairRequests").child(myUid).removeEventListener(it) }
             alertListener?.let { database.child("emergencyAlerts").child(myUid).removeEventListener(it) }
         }
     }
+}
+
+/**
+ * Result of locating a passenger's pickup within a trip group's stop list.
+ *
+ * [ordinal] is the position among PICKUP stops only (drop-off entries are skipped and
+ * must not advance the number); [label] is the stop's stored label (e.g. "P1").
+ */
+internal data class PickupPosition(val ordinal: Int, val label: String)
+
+/**
+ * Walks [sequence] (each entry a stop record carrying `passengerId`, `label` and
+ * `isPickup`) and returns the pickup position of [passengerId], or null when that
+ * passenger has no pickup entry or the list is empty.
+ *
+ * Pure Kotlin — no Android or Firebase types — so it is unit-testable on the local JVM.
+ * The passenger's FIRST pickup entry wins (the walk stops as soon as it matches),
+ * mirroring the production once-guard contract.
+ */
+internal fun pickupPositionOf(sequence: List<Map<*, *>>, passengerId: String): PickupPosition? {
+    var pickupCount = 0
+    for (item in sequence) {
+        val isPickup = item["isPickup"] as? Boolean ?: true
+        if (!isPickup) continue
+
+        // Drop-offs above were skipped, so this counts pickups only.
+        pickupCount++
+
+        val pId = item["passengerId"] as? String
+        if (pId == passengerId) {
+            val label = item["label"] as? String ?: ""
+            return PickupPosition(pickupCount, label)
+        }
+    }
+    return null
 }

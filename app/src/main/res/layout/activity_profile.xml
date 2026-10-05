@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="User Profile"
+            android:text="@string/a_profile_user_profile"
             android:textSize="24sp"
             android:textStyle="bold"
             android:textColor="#000000"
@@ -23,7 +23,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="First Name"
+            android:text="@string/d_first_name_hint"
             android:textSize="14sp"
             android:textColor="#666666" />
 
@@ -31,7 +31,7 @@
             android:id="@+id/edtProfileFirstName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="First Name"
+            android:hint="@string/d_first_name_hint"
             android:inputType="textPersonName"
             android:layout_marginBottom="16dp" />
 
@@ -39,7 +39,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Last Name"
+            android:text="@string/d_last_name_hint"
             android:textSize="14sp"
             android:textColor="#666666" />
 
@@ -47,7 +47,7 @@
             android:id="@+id/edtProfileLastName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Last Name"
+            android:hint="@string/d_last_name_hint"
             android:inputType="textPersonName"
             android:layout_marginBottom="16dp" />
 
@@ -55,7 +55,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Phone Number"
+            android:text="@string/d_phone_number_hint"
             android:textSize="14sp"
             android:textColor="#666666" />
 
@@ -63,7 +63,7 @@
             android:id="@+id/edtProfilePhone"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Add phone number (+63...)"
+            android:hint="@string/a_profile_phone_hint"
             android:inputType="phone"
             android:layout_marginBottom="24dp" />
 
@@ -72,7 +72,7 @@
             android:id="@+id/btnSaveProfile"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Save Changes"
+            android:text="@string/h_save_changes"
             android:backgroundTint="#4CAF50"
             android:textColor="#FFFFFF"
             android:layout_marginBottom="12dp" />
@@ -82,7 +82,7 @@
             android:id="@+id/btnLogout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Log Out"
+            android:text="@string/h_settings_log_out"
             android:backgroundTint="#E53935"
             android:textColor="#FFFFFF" />
 

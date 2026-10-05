@@ -20,8 +20,12 @@ import kotlin.math.*
 object RouteDeviationManager {
 
     private const val CHANNEL_ID = "ruta_route_alerts"
-    private const val BASE_CORRIDOR_BUFFER_METERS = 50.0
-    private var consecutiveDeviations = 0
+    // Internal so JVM unit tests can assert the dynamic threshold against the real
+    // corridor size rather than a hardcoded copy.
+    internal const val BASE_CORRIDOR_BUFFER_METERS = 50.0
+    // Consecutive off-track pings keyed by trip (bookingId), so two trips
+    // (or a finished trip followed by a new one) can't pollute each other.
+    private val consecutiveDeviationCounts = mutableMapOf<String, Int>()
 
     /**
      * Evaluates route deviation offline using Speed-Scaled Buffer + Heading Vector matching.
@@ -29,10 +33,9 @@ object RouteDeviationManager {
      */
     fun isDriverDeviated(
         driverLocation: Location,
-        routePolylinePoints: List<LatLng>
+        routePolylinePoints: List<LatLng>,
+        bookingId: String = ""
     ): Boolean {
-        if (routePolylinePoints.isEmpty()) return false
-
         val driverLatLng = LatLng(driverLocation.latitude, driverLocation.longitude)
 
         // 1. Measure shortest perpendicular distance to nearest polyline SEGMENT
@@ -40,7 +43,7 @@ object RouteDeviationManager {
 
         // 2. Dynamic threshold calculation (Base Buffer + GPS Accuracy + Speed scaling)
         val speedMps = if (driverLocation.hasSpeed()) driverLocation.speed else 0f
-        val dynamicThreshold = driverLocation.accuracy + BASE_CORRIDOR_BUFFER_METERS + (speedMps * 2.0)
+        val dynamicThreshold = deviationThresholdMeters(driverLocation.accuracy, speedMps)
 
         // 3. Heading Angle Delta Check — only enforced when a real bearing is available.
         //    A single teleport/mock-location update (Extended Controls, one-shot setValue,
@@ -53,18 +56,71 @@ object RouteDeviationManager {
             true
         }
 
-        // 4. Persistence Check (k >= 3 consecutive pings off-track)
-        if (minDistance > dynamicThreshold && headingConfirmsDeviation) {
-            consecutiveDeviations++
-            if (consecutiveDeviations >= 3) {
+        // 4. Persistence Check (k >= 3 consecutive pings off-track, per trip)
+        return evaluateDeviationReading(
+            routeIsEmpty = routePolylinePoints.isEmpty(),
+            minDistanceMeters = minDistance,
+            dynamicThresholdMeters = dynamicThreshold,
+            headingConfirmsDeviation = headingConfirmsDeviation,
+            bookingId = bookingId
+        )
+    }
+
+    /**
+     * Dynamic corridor width: base buffer + the reported GPS accuracy + twice the
+     * reported speed, free of the Android [Location] type so it can be pinned on the
+     * JVM. [isDriverDeviated] reads the values off the fix and delegates here.
+     */
+    internal fun deviationThresholdMeters(accuracyMeters: Float, speedMps: Float): Double =
+        accuracyMeters + BASE_CORRIDOR_BUFFER_METERS + (speedMps * 2.0)
+
+    /**
+     * The per-trip persistence rule, decoupled from [Location] (and from any route
+     * geometry) so it can be exercised on the JVM. Given an already-measured reading,
+     * it advances or decays the trip's consecutive-deviation counter and reports
+     * whether this reading is considered a deviation (3+ consecutive off-track pings).
+     *
+     * Kept byte-for-byte identical to the previous inline logic: the counter is keyed by
+     * `bookingId` so two trips cannot pollute each other; an off-track reading increments
+     * the count (returning true at >= 3); an on-track reading *decays* the count by one
+     * (floor 0) rather than resetting it. An empty route short-circuits to false without
+     * touching the counter.
+     */
+    internal fun evaluateDeviationReading(
+        routeIsEmpty: Boolean,
+        minDistanceMeters: Double,
+        dynamicThresholdMeters: Double,
+        headingConfirmsDeviation: Boolean,
+        bookingId: String
+    ): Boolean {
+        if (routeIsEmpty) return false
+
+        val currentCount = consecutiveDeviationCounts[bookingId] ?: 0
+        if (minDistanceMeters > dynamicThresholdMeters && headingConfirmsDeviation) {
+            val nextCount = currentCount + 1
+            consecutiveDeviationCounts[bookingId] = nextCount
+            if (nextCount >= 3) {
                 return true
             }
         } else {
-            // Driver is back within bounds: Decay/reset the counter
-            consecutiveDeviations = max(0, consecutiveDeviations - 1)
+            // Driver is back within bounds: Decay/reset this trip's counter
+            val decayedCount = max(0, currentCount - 1)
+            if (decayedCount == 0) {
+                consecutiveDeviationCounts.remove(bookingId)
+            } else {
+                consecutiveDeviationCounts[bookingId] = decayedCount
+            }
         }
 
         return false
+    }
+
+    /**
+     * Drops a finished trip's deviation streak. Keying already isolates trips,
+     * but this lets a caller clear the entry explicitly once the ride completes.
+     */
+    fun clearTripDeviationState(bookingId: String) {
+        consecutiveDeviationCounts.remove(bookingId)
     }
 
     private fun calculateMinDistanceToPolyline(point: LatLng, polyline: List<LatLng>): Pair<Double, Int> {
