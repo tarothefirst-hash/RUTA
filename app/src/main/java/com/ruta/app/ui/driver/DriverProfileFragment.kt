@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -12,11 +14,16 @@ import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.bumptech.glide.Glide
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -24,10 +31,17 @@ import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.storage.FirebaseStorage
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+import com.journeyapps.barcodescanner.CaptureActivity
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.ruta.app.R
 import com.ruta.app.databinding.FragmentDriverProfileBinding
 import com.ruta.app.ui.LoginActivity
-
+import com.ruta.app.util.EmergencyContactManager
+import java.util.UUID
+import com.ruta.app.ui.PortraitCaptureActivity
 class DriverProfileFragment : Fragment() {
 
     private var _binding: FragmentDriverProfileBinding? = null
@@ -38,8 +52,12 @@ class DriverProfileFragment : Fragment() {
     private val storage by lazy { FirebaseStorage.getInstance().reference }
 
     private var selectedImageUri: Uri? = null
+    private var activeQrToken: String? = null
 
-    // Photo picker launcher
+    private var trustedContactsListener: ValueEventListener? = null
+    private var pairRequestListener: ValueEventListener? = null
+    private val shownPairRequestUids = mutableSetOf<String>()
+
     private val profilePhotoLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -52,7 +70,6 @@ class DriverProfileFragment : Fragment() {
         }
     }
 
-    // Permission launcher
     private val requestStoragePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -62,6 +79,12 @@ class DriverProfileFragment : Fragment() {
             context?.let {
                 Toast.makeText(it, "Storage permission required to select photo", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
+        if (result.contents != null) {
+            processScannedQrCode(result.contents)
         }
     }
 
@@ -77,27 +100,86 @@ class DriverProfileFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // 1. Fetch Existing Driver Data
+        val myUid = auth.currentUser?.uid ?: return
+
+        generateAndDisplayDynamicQr(myUid)
         loadDriverProfile()
+        setupTrustedContacts(myUid)
 
-        // 2. Photo Pickers
-        binding.imgDriverProfile.setOnClickListener {
-            openImagePickerWithPermissionCheck()
+        binding.imgDriverProfile.setOnClickListener { openImagePickerWithPermissionCheck() }
+        binding.btnChangeDriverPhoto.setOnClickListener { openImagePickerWithPermissionCheck() }
+        binding.btnSaveDriverProfile.setOnClickListener { saveDriverProfile() }
+        binding.btnDriverLogoutProfile.setOnClickListener { checkTripStatusBeforeLogout() }
+    }
+
+    private fun generateAndDisplayDynamicQr(uid: String) {
+        val newToken = UUID.randomUUID().toString().take(8)
+        activeQrToken = newToken
+
+        val qrPayload = "RUTA_PAIR:$uid:$newToken"
+
+        val tokenData = hashMapOf<String, Any>(
+            "token" to newToken,
+            "status" to "ACTIVE",
+            "createdAt" to System.currentTimeMillis()
+        )
+
+        database.child("users").child(uid).child("activeQr").setValue(tokenData)
+            .addOnSuccessListener {
+                _binding?.imgDriverQrCode?.setImageBitmap(generateQRCodeBitmap(qrPayload))
+            }
+    }
+
+    private fun generateQRCodeBitmap(text: String): Bitmap {
+        val writer = QRCodeWriter()
+        val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, 512, 512)
+        val bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565)
+        for (x in 0 until 512) {
+            for (y in 0 until 512) {
+                bitmap.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
+            }
+        }
+        return bitmap
+    }
+
+    private fun processScannedQrCode(payload: String) {
+        val parts = payload.split(":")
+        if (parts.size != 3 || parts[0] != "RUTA_PAIR") {
+            Toast.makeText(requireContext(), "Invalid RUTA QR Code!", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        binding.btnChangeDriverPhoto.setOnClickListener {
-            openImagePickerWithPermissionCheck()
+        val targetUid = parts[1]
+        val token = parts[2]
+        val myUid = auth.currentUser?.uid ?: return
+
+        if (targetUid == myUid) {
+            Toast.makeText(requireContext(), "You cannot link with yourself!", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        // 3. Save Button
-        binding.btnSaveDriverProfile.setOnClickListener {
-            saveDriverProfile()
-        }
+        database.child("users").child(targetUid).child("activeQr").get()
+            .addOnSuccessListener { snapshot ->
+                val activeToken = snapshot.child("token").getValue(String::class.java)
+                val status = snapshot.child("status").getValue(String::class.java)
 
-        // 4. Logout Button
-        binding.btnDriverLogoutProfile.setOnClickListener {
-            checkTripStatusBeforeLogout()
-        }
+                if (activeToken != token || status != "ACTIVE") {
+                    Toast.makeText(requireContext(), "This QR Code has expired or already been used!", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+
+                val myName = _binding?.etDriverName?.text?.toString()?.trim()?.ifEmpty { "A RUTA driver" } ?: "A RUTA driver"
+
+                EmergencyContactManager.sendPairRequest(database, myUid, myName, targetUid) { success, message ->
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                    if (success) {
+                        database.child("users").child(targetUid).child("activeQr").child("status").setValue("EXPIRED")
+                    }
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(requireContext(), "Failed to verify QR code.", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun openImagePickerWithPermissionCheck() {
@@ -126,14 +208,12 @@ class DriverProfileFragment : Fragment() {
     private fun loadDriverProfile() {
         val uid = auth.currentUser?.uid ?: return
 
-        // First attempt: Check 'users' node
         database.child("users").child(uid).get().addOnSuccessListener { snapshot ->
             if (_binding == null || !isAdded) return@addOnSuccessListener
 
             if (snapshot.exists() && snapshot.childrenCount > 0) {
                 populateUIFromSnapshot(snapshot)
             } else {
-                // Second attempt: Fallback check 'drivers' node
                 database.child("drivers").child(uid).get().addOnSuccessListener { driverSnap ->
                     if (_binding == null || !isAdded) return@addOnSuccessListener
                     if (driverSnap.exists()) {
@@ -147,9 +227,9 @@ class DriverProfileFragment : Fragment() {
     }
 
     private fun populateUIFromSnapshot(snapshot: DataSnapshot) {
-        if (_binding == null || !isAdded) return
+        val bindingRef = _binding ?: return
+        if (!isAdded) return
 
-        // 1. FULL NAME
         val firstName = snapshot.child("firstName").getValue(String::class.java) ?: ""
         val lastName = snapshot.child("lastName").getValue(String::class.java) ?: ""
         var fullName = "$firstName $lastName".trim()
@@ -158,7 +238,6 @@ class DriverProfileFragment : Fragment() {
                 ?: snapshot.child("fullName").getValue(String::class.java) ?: ""
         }
 
-        // 2. VEHICLE DETAILS (Model, Plate Number, Color)
         val vehicleModel = snapshot.child("vehicleModel").getValue(String::class.java)
             ?: snapshot.child("carModel").getValue(String::class.java) ?: ""
         val plateNumber = snapshot.child("plateNumber").getValue(String::class.java)
@@ -175,7 +254,6 @@ class DriverProfileFragment : Fragment() {
             }.trim()
         }
 
-        // 3. PHONE & EMAIL
         val phone = snapshot.child("phoneNumber").getValue(String::class.java)
             ?: snapshot.child("phone").getValue(String::class.java)
             ?: snapshot.child("contactNumber").getValue(String::class.java) ?: ""
@@ -183,26 +261,19 @@ class DriverProfileFragment : Fragment() {
         val email = snapshot.child("email").getValue(String::class.java)
             ?: auth.currentUser?.email ?: ""
 
-        // 4. METRICS (Rating & Rides)
-        val rating = snapshot.child("rating").getValue(Double::class.java)
-            ?: snapshot.child("rating").getValue(Long::class.java)?.toDouble() ?: 5.0
         val rides = snapshot.child("completedRides").getValue(Int::class.java)
             ?: snapshot.child("ridesCompleted").getValue(Int::class.java)
             ?: snapshot.child("totalRides").getValue(Int::class.java) ?: 0
 
-        // 5. PROFILE PICTURE URL
         val photoUrl = snapshot.child("profilePictureUrl").getValue(String::class.java)
             ?: snapshot.child("profileImageUrl").getValue(String::class.java)
 
-        // Set inputs without risk of NullPointer crashes
-        binding.etDriverName.setText(fullName)
-        binding.etVehicleDetails.setText(vehicleDisplay)
-        binding.etDriverPhone.setText(phone)
-        binding.etDriverEmail.setText(email)
-        binding.txtDriverRating.text = String.format("%.1f ★", rating)
-        binding.txtCompletedRides.text = rides.toString()
+        bindingRef.etDriverName.setText(fullName)
+        bindingRef.etVehicleDetails.setText(vehicleDisplay)
+        bindingRef.etDriverPhone.setText(phone)
+        bindingRef.etDriverEmail.setText(email)
+        bindingRef.txtCompletedRides.text = rides.toString()
 
-        // Load profile picture with Glide
         if (!photoUrl.isNullOrEmpty() && isAdded) {
             try {
                 Glide.with(this)
@@ -210,11 +281,122 @@ class DriverProfileFragment : Fragment() {
                     .placeholder(R.drawable.carpin)
                     .error(R.drawable.carpin)
                     .circleCrop()
-                    .into(binding.imgDriverProfile)
+                    .into(bindingRef.imgDriverProfile)
             } catch (_: Exception) {
                 context?.let { Toast.makeText(it, "Failed to load profile photo.", Toast.LENGTH_SHORT).show() }
             }
         }
+    }
+
+    private fun setupTrustedContacts(myUid: String) {
+        trustedContactsListener = EmergencyContactManager.listenForTrustedContacts(database, myUid) { contactUids ->
+            val bindingRef = _binding ?: return@listenForTrustedContacts
+            if (!isAdded) return@listenForTrustedContacts
+            bindingRef.txtTrustedContactsSummary.text = "Trusted Contacts: ${contactUids.size}/${EmergencyContactManager.MAX_TRUSTED_CONTACTS}"
+            bindingRef.txtTrustedContactsSummary.setTextColor(
+                if (contactUids.isNotEmpty()) Color.parseColor("#388E3C") else Color.parseColor("#D32F2F")
+            )
+        }
+
+        pairRequestListener = EmergencyContactManager.listenForIncomingPairRequests(database, myUid) { requesterUid, requesterName ->
+            if (_binding == null || !isAdded || shownPairRequestUids.contains(requesterUid)) return@listenForIncomingPairRequests
+            shownPairRequestUids.add(requesterUid)
+
+            AlertDialog.Builder(requireContext())
+                .setTitle("Trusted Contact Request")
+                .setMessage("$requesterName wants to add you as a trusted emergency contact.")
+                .setCancelable(false)
+                .setPositiveButton("Accept") { dialog, _ ->
+                    EmergencyContactManager.acceptPairRequest(database, myUid, requesterUid) { _, message ->
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
+                    shownPairRequestUids.remove(requesterUid)
+                    dialog.dismiss()
+                }
+                .setNegativeButton("Decline") { dialog, _ ->
+                    EmergencyContactManager.declinePairRequest(database, myUid, requesterUid)
+                    shownPairRequestUids.remove(requesterUid)
+                    dialog.dismiss()
+                }
+                .show()
+        }
+
+        binding.btnScanContactQr.setOnClickListener {
+            val options = ScanOptions().apply {
+                setPrompt("Scan a contact's RUTA Safety QR Code")
+                setBeepEnabled(true)
+                setOrientationLocked(true)
+                setCaptureActivity(PortraitCaptureActivity::class.java)
+            }
+            qrScannerLauncher.launch(options)
+        }
+
+        binding.btnViewTrustedContacts.setOnClickListener {
+            showTrustedListSheet(myUid)
+        }
+    }
+
+    private fun showTrustedListSheet(myUid: String) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_trusted_list, null)
+
+        val alertDialog = AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create()
+
+        alertDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val container = dialogView.findViewById<LinearLayout>(R.id.llTrustedContactsContainer)
+        val txtEmpty = dialogView.findViewById<TextView>(R.id.txtNoTrustedContacts)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnCloseDialog)
+
+        btnClose.setOnClickListener { alertDialog.dismiss() }
+
+        database.child("users").child(myUid).child("trustedContacts").get()
+            .addOnSuccessListener { snapshot ->
+                container.removeAllViews()
+                val contactUids = snapshot.children.mapNotNull { it.key }
+
+                if (contactUids.isEmpty()) {
+                    txtEmpty.visibility = View.VISIBLE
+                    alertDialog.show()
+                    return@addOnSuccessListener
+                }
+                txtEmpty.visibility = View.GONE
+
+                contactUids.forEach { contactUid ->
+                    val contactRef = database.child("users").child(myUid).child("trustedContacts").child(contactUid)
+
+                    contactRef.get().addOnSuccessListener { contactSnap ->
+                        val isDeviationEnabled = contactSnap.child("receiveDeviationAlerts").getValue(Boolean::class.java) ?: true
+
+                        database.child("users").child(contactUid).child("name").get()
+                            .addOnSuccessListener { nameSnap ->
+                                val name = nameSnap.getValue(String::class.java)?.ifEmpty { null } ?: "RUTA User"
+                                val row = layoutInflater.inflate(R.layout.item_trusted_contact, container, false)
+
+                                row.findViewById<TextView>(R.id.txtContactName).text = name
+
+                                val switchDeviation = row.findViewById<SwitchMaterial>(R.id.switchRouteDeviation)
+                                switchDeviation.isChecked = isDeviationEnabled
+
+                                switchDeviation.setOnCheckedChangeListener { _, isChecked ->
+                                    contactRef.child("receiveDeviationAlerts").setValue(isChecked)
+                                }
+
+                                row.findViewById<Button>(R.id.btnRemoveContact).setOnClickListener {
+                                    EmergencyContactManager.removeTrustedContact(database, myUid, contactUid)
+                                    container.removeView(row)
+                                    if (container.childCount == 0) txtEmpty.visibility = View.VISIBLE
+                                }
+                                container.addView(row)
+                            }
+                    }
+                }
+                alertDialog.show()
+            }
+            .addOnFailureListener {
+                Toast.makeText(requireContext(), "Failed to load trusted contacts.", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun saveDriverProfile() {
@@ -278,7 +460,7 @@ class DriverProfileFragment : Fragment() {
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     if (_binding == null || !isAdded) return
-                    binding.btnDriverLogoutProfile.isEnabled = true
+                    _binding?.btnDriverLogoutProfile?.isEnabled = true
 
                     var hasActiveTrip = false
                     for (child in snapshot.children) {
@@ -298,7 +480,7 @@ class DriverProfileFragment : Fragment() {
 
                 override fun onCancelled(error: DatabaseError) {
                     if (_binding == null || !isAdded) return
-                    binding.btnDriverLogoutProfile.isEnabled = true
+                    _binding?.btnDriverLogoutProfile?.isEnabled = true
                     context?.let { Toast.makeText(it, "Network error.", Toast.LENGTH_SHORT).show() }
                 }
             })
@@ -320,6 +502,12 @@ class DriverProfileFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        val uid = auth.currentUser?.uid
+        if (uid != null) {
+            trustedContactsListener?.let { database.child("users").child(uid).child("trustedContacts").removeEventListener(it) }
+            pairRequestListener?.let { database.child("pairRequests").child(uid).removeEventListener(it) }
+        }
         _binding = null
     }
 }
+

@@ -10,7 +10,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="20dp"
+        android:paddingBottom="40dp"
+        android:clipToPadding="false">
 
         <TextView
             android:layout_width="wrap_content"
@@ -25,17 +27,30 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:layout_marginBottom="20dp"
+            android:layout_marginBottom="16dp"
             android:text="@string/h_promos_subtitle"
             android:textColor="@color/ruta_primary_dark"
             android:textSize="13sp" />
+
+        <!-- Verification Status Indicator -->
+        <TextView
+            android:id="@+id/txtVerificationStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:background="#FFF8E1"
+            android:padding="12dp"
+            android:text="Status: Not Submitted"
+            android:textColor="#F57F17"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <!-- Discount Type Selection -->
         <RadioGroup
             android:id="@+id/radioGroupDiscount"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
             android:orientation="horizontal">
 
             <RadioButton
@@ -57,6 +72,18 @@
                 android:textColor="@color/ruta_black"
                 android:textSize="14sp" />
         </RadioGroup>
+
+        <!-- 5MB FILE SIZE LIMIT NOTICE -->
+        <TextView
+            android:id="@+id/txtLimitNotice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="16dp"
+            android:text="Note: Upload clear ID photos up to 5MB max per file."
+            android:textColor="@color/ruta_primary_dark"
+            android:textSize="12sp"
+            android:textStyle="italic" />
 
         <!-- ID Document Upload Section -->
         <androidx.cardview.widget.CardView
@@ -91,7 +118,7 @@
                     android:textColor="@color/ruta_primary_dark"
                     android:textSize="12sp" />
 
-                <!-- Front ID Preview & Upload Button -->
+                <!-- Front ID Preview & Button -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -103,7 +130,7 @@
                 <ImageView
                     android:id="@+id/imgFrontPreview"
                     android:layout_width="match_parent"
-                    android:layout_height="140dp"
+                    android:layout_height="150dp"
                     android:layout_marginTop="8dp"
                     android:background="#F3F4F6"
                     android:scaleType="centerCrop"
@@ -113,14 +140,18 @@
                     android:id="@+id/btnUploadFront"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:minHeight="48dp"
                     android:layout_marginTop="8dp"
                     android:layout_marginBottom="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
                     android:backgroundTint="@color/ruta_red"
                     android:text="@string/h_upload_id_front_button"
                     android:textColor="@color/white"
-                    android:textSize="12sp" />
+                    android:textSize="13sp"
+                    android:textAllCaps="false" />
 
-                <!-- Back ID Preview & Upload Button -->
+                <!-- Back ID Preview & Button -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -132,7 +163,7 @@
                 <ImageView
                     android:id="@+id/imgBackPreview"
                     android:layout_width="match_parent"
-                    android:layout_height="140dp"
+                    android:layout_height="150dp"
                     android:layout_marginTop="8dp"
                     android:background="#F3F4F6"
                     android:scaleType="centerCrop"
@@ -142,11 +173,15 @@
                     android:id="@+id/btnUploadBack"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:minHeight="48dp"
                     android:layout_marginTop="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
                     android:backgroundTint="@color/ruta_red"
                     android:text="@string/h_upload_id_back_button"
                     android:textColor="@color/white"
-                    android:textSize="12sp" />
+                    android:textSize="13sp"
+                    android:textAllCaps="false" />
 
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -164,12 +199,16 @@
         <Button
             android:id="@+id/btnSubmitDiscount"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
             android:backgroundTint="@color/ruta_red"
             android:text="@string/h_submit_verification"
             android:textColor="@color/white"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textAllCaps="false" />
 
     </LinearLayout>
 </ScrollView>

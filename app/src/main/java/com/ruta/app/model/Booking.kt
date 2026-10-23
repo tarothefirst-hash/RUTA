@@ -46,6 +46,14 @@ data class Booking(
     val tripId: String? = null,
     val tripGroupId: String? = null,
     val driverId: String? = null,
+
+    // Driver & Vehicle Details (Populated when accepted by a driver)
+    val driverName: String = "",
+    val driverPhone: String = "",
+    val vehicleModel: String = "",
+    val vehicleColor: String = "",
+    val plateNumber: String = "",
+
     val routeStatus: String = "NORMAL",
 
     val timestamp: Long = System.currentTimeMillis()

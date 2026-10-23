@@ -2,7 +2,6 @@ package com.ruta.app.ui
 
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -23,12 +22,14 @@ import com.google.firebase.database.Query
 import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
 import com.ruta.app.util.EmergencyContactManager
+import com.ruta.app.util.RouteDeviationDialogHelper
 import com.ruta.app.util.RouteDeviationManager
 
 class PassengerHomeActivity : AppCompatActivity() {
 
     private lateinit var viewPager: ViewPager2
     private lateinit var navHome: ImageView
+    private lateinit var navLiveTrack: ImageView
     private lateinit var navPromos: ImageView
     private lateinit var navSettings: ImageView
     private lateinit var btnProfile: ImageView
@@ -48,7 +49,6 @@ class PassengerHomeActivity : AppCompatActivity() {
     private var lastShownPickupOrdinal: Int? = null
     private var hasFiredNotification = false
 
-    // Incoming pairing / emergency listeners
     private var pairRequestListener: ValueEventListener? = null
     private var alertListener: ValueEventListener? = null
     private val shownPairRequestUids = mutableSetOf<String>()
@@ -65,8 +65,21 @@ class PassengerHomeActivity : AppCompatActivity() {
         startIncomingPairRequestListener()
         startIncomingEmergencyAlertListener()
 
-        intent?.getStringExtra("BOOKING_ID")?.let {
-            cardRouteDeviationWarning.visibility = View.VISIBLE
+        handleIncomingNotificationIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingNotificationIntent(intent)
+    }
+
+    private fun handleIncomingNotificationIntent(intent: Intent?) {
+        val navigateTo = intent?.getStringExtra("NAVIGATE_TO")
+        val bookingId = intent?.getStringExtra("BOOKING_ID")
+
+        if (navigateTo == "LIVE_TRACKING" || !bookingId.isNullOrEmpty()) {
+            viewPager.setCurrentItem(1, true)
         }
     }
 
@@ -84,6 +97,7 @@ class PassengerHomeActivity : AppCompatActivity() {
     private fun initViews() {
         viewPager = findViewById(R.id.viewPager)
         navHome = findViewById(R.id.navHome)
+        navLiveTrack = findViewById(R.id.navLiveTrack)
         navPromos = findViewById(R.id.navPromos)
         navSettings = findViewById(R.id.navSettings)
         btnProfile = findViewById(R.id.btnProfile)
@@ -102,9 +116,10 @@ class PassengerHomeActivity : AppCompatActivity() {
                 super.onPageSelected(position)
                 when (position) {
                     0 -> updateActiveTab(navHome)
-                    1 -> updateActiveTab(navPromos)
-                    2 -> updateActiveTab(navSettings)
-                    3 -> updateActiveTab(btnProfile)
+                    1 -> updateActiveTab(navLiveTrack)
+                    2 -> updateActiveTab(navPromos)
+                    3 -> updateActiveTab(navSettings)
+                    4 -> updateActiveTab(btnProfile)
                 }
             }
         })
@@ -112,16 +127,22 @@ class PassengerHomeActivity : AppCompatActivity() {
 
     private fun setupClickListeners() {
         navHome.setOnClickListener { viewPager.setCurrentItem(0, true) }
-        navPromos.setOnClickListener { viewPager.setCurrentItem(1, true) }
-        navSettings.setOnClickListener { viewPager.setCurrentItem(2, true) }
-        btnProfile.setOnClickListener { viewPager.setCurrentItem(3, true) }
+        navLiveTrack.setOnClickListener { viewPager.setCurrentItem(1, true) }
+        navPromos.setOnClickListener { viewPager.setCurrentItem(2, true) }
+        navSettings.setOnClickListener { viewPager.setCurrentItem(3, true) }
+        btnProfile.setOnClickListener { viewPager.setCurrentItem(4, true) }
 
         btnDismissWarning.setOnClickListener {
-            activeBookingId?.let { id ->
-                database.child("bookings").child(id).child("routeStatus").setValue("NORMAL")
-            }
-            cardRouteDeviationWarning.visibility = View.GONE
-            hasFiredNotification = false
+            val bookingId = activeBookingId ?: return@setOnClickListener
+            RouteDeviationDialogHelper.showDeviationAlert(
+                context = this,
+                database = database,
+                bookingId = bookingId,
+                onRerouteValidated = {
+                    cardRouteDeviationWarning.visibility = View.GONE
+                    hasFiredNotification = false
+                }
+            )
         }
 
         btnSosEmergency.setOnClickListener {
@@ -131,19 +152,26 @@ class PassengerHomeActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            EmergencyContactManager.sendEmergencyAlertForBooking(database, bookingId) { notified ->
-                val message = if (notified > 0) {
-                    "Alert sent to $notified trusted contact${if (notified == 1) "" else "s"}."
-                } else {
-                    "No trusted contacts set up yet — add one from your Profile."
+            AlertDialog.Builder(this)
+                .setTitle("Emergency Alert")
+                .setMessage("Want to notify your Contacts?")
+                .setPositiveButton("Yes") { _, _ ->
+                    EmergencyContactManager.sendEmergencyAlertForBooking(database, bookingId, isDriver = false) { notified ->
+                        val message = if (notified > 0) {
+                            "Alert sent to $notified trusted contact${if (notified == 1) "" else "s"}."
+                        } else {
+                            "No trusted contacts set up yet — add one from your Profile."
+                        }
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    }
                 }
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-            }
+                .setNegativeButton("No", null)
+                .show()
         }
     }
 
     private fun updateActiveTab(selectedTab: ImageView) {
-        val navTabs = listOf(navHome, navPromos, navSettings, btnProfile)
+        val navTabs = listOf(navHome, navLiveTrack, navPromos, navSettings, btnProfile)
         for (tab in navTabs) {
             tab.setColorFilter(
                 ContextCompat.getColor(this, if (tab == selectedTab) R.color.ruta_primary else R.color.ruta_text_muted)
@@ -181,10 +209,6 @@ class PassengerHomeActivity : AppCompatActivity() {
                         monitorRouteDeviationForBooking(newActiveBookingId)
                     }
 
-                    // Pairing sets status MATCHED and tripGroupId on the same booking, so
-                    // the booking id does not change when the trip group first appears.
-                    // activeTripGroupId tracks the group the sequence listener is attached
-                    // for, so attach / re-attach / detach on every sync instead.
                     if (!tripGroupId.isNullOrEmpty()) {
                         if (activeTripGroupId != tripGroupId) {
                             listenForTripSequence(tripGroupId, currentUserId)
@@ -257,6 +281,18 @@ class PassengerHomeActivity : AppCompatActivity() {
                     if (!hasFiredNotification) {
                         hasFiredNotification = true
                         RouteDeviationManager.sendDeviationNotification(this@PassengerHomeActivity, bookingId)
+
+                        viewPager.setCurrentItem(1, true)
+
+                        RouteDeviationDialogHelper.showDeviationAlert(
+                            context = this@PassengerHomeActivity,
+                            database = database,
+                            bookingId = bookingId,
+                            onRerouteValidated = {
+                                cardRouteDeviationWarning.visibility = View.GONE
+                                hasFiredNotification = false
+                            }
+                        )
                     }
                 } else {
                     cardRouteDeviationWarning.visibility = View.GONE
@@ -298,7 +334,7 @@ class PassengerHomeActivity : AppCompatActivity() {
 
             AlertDialog.Builder(this)
                 .setTitle("Trusted Contact Request")
-                .setMessage("$requesterName wants to add you as a trusted emergency contact. If your ride shows a route deviation, they'll be notified with your driver's info.")
+                .setMessage("$requesterName wants to add you as a trusted emergency contact.")
                 .setCancelable(false)
                 .setPositiveButton("Accept") { dialog, _ ->
                     EmergencyContactManager.acceptPairRequest(database, myUid, requesterUid) { _, message ->
@@ -319,9 +355,9 @@ class PassengerHomeActivity : AppCompatActivity() {
     private fun startIncomingEmergencyAlertListener() {
         val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
-        alertListener = EmergencyContactManager.listenForIncomingAlerts(database, myUid) { senderName, driverName, vehicleInfo, pickupAddress, dropoffAddress, lat, lng ->
+        alertListener = EmergencyContactManager.listenForIncomingAlerts(database, myUid) { senderName, driverName, vehicleInfo, pickupAddress, dropoffAddress, _, _ ->
             AlertDialog.Builder(this)
-                .setTitle("\u26A0\uFE0F Emergency Alert")
+                .setTitle("⚠️ Emergency Alert")
                 .setMessage(
                     "$senderName's ride showed a route deviation.\n\n" +
                             "Driver: $driverName\n" +
@@ -330,11 +366,9 @@ class PassengerHomeActivity : AppCompatActivity() {
                             "Dropoff: $dropoffAddress"
                 )
                 .setCancelable(false)
-                .setPositiveButton("View on Map") { dialog, _ ->
+                .setPositiveButton("View Live Map") { dialog, _ ->
                     dialog.dismiss()
-                    if (lat != 0.0 || lng != 0.0) {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng")))
-                    }
+                    viewPager.setCurrentItem(1, true)
                 }
                 .setNegativeButton("Dismiss") { dialog, _ -> dialog.dismiss() }
                 .show()
@@ -355,30 +389,14 @@ class PassengerHomeActivity : AppCompatActivity() {
     }
 }
 
-/**
- * Result of locating a passenger's pickup within a trip group's stop list.
- *
- * [ordinal] is the position among PICKUP stops only (drop-off entries are skipped and
- * must not advance the number); [label] is the stop's stored label (e.g. "P1").
- */
 internal data class PickupPosition(val ordinal: Int, val label: String)
 
-/**
- * Walks [sequence] (each entry a stop record carrying `passengerId`, `label` and
- * `isPickup`) and returns the pickup position of [passengerId], or null when that
- * passenger has no pickup entry or the list is empty.
- *
- * Pure Kotlin — no Android or Firebase types — so it is unit-testable on the local JVM.
- * The passenger's FIRST pickup entry wins (the walk stops as soon as it matches),
- * mirroring the production once-guard contract.
- */
 internal fun pickupPositionOf(sequence: List<Map<*, *>>, passengerId: String): PickupPosition? {
     var pickupCount = 0
     for (item in sequence) {
         val isPickup = item["isPickup"] as? Boolean ?: true
         if (!isPickup) continue
 
-        // Drop-offs above were skipped, so this counts pickups only.
         pickupCount++
 
         val pId = item["passengerId"] as? String

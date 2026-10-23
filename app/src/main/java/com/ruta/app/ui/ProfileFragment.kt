@@ -21,9 +21,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
@@ -35,9 +36,10 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.ruta.app.R
 import com.ruta.app.util.EmergencyContactManager
-import java.util.UUID
-import androidx.core.view.WindowCompat
 import com.ruta.app.util.keepClearOfKeyboard
+import java.util.UUID
+import com.ruta.app.ui.driver.DriverProfileFragment
+import com.ruta.app.ui.PortraitCaptureActivity
 class ProfileFragment : Fragment() {
 
     // Views
@@ -92,13 +94,11 @@ class ProfileFragment : Fragment() {
     }
 
     override fun onCreateView(
-
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.fragment_profile, container, false)
-
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -115,7 +115,9 @@ class ProfileFragment : Fragment() {
         btnSaveProfile = view.findViewById(R.id.btnSaveProfile)
         btnLogout = view.findViewById(R.id.btnLogout)
         btnViewTrustedList = view.findViewById(R.id.btnViewTrustedList)
+
         requireActivity().keepClearOfKeyboard(view)
+
         if (currentUid != null) {
             generateAndDisplayDynamicQr()
             loadUserProfile()
@@ -129,10 +131,10 @@ class ProfileFragment : Fragment() {
                 setPrompt("Scan a contact's RUTA Safety QR Code")
                 setBeepEnabled(true)
                 setOrientationLocked(true)
+                setCaptureActivity(PortraitCaptureActivity::class.java)
             }
             qrScannerLauncher.launch(options)
         }
-
         btnViewTrustedList.setOnClickListener { showTrustedListSheet() }
 
         btnSaveProfile.setOnClickListener { saveUserProfile() }
@@ -293,12 +295,19 @@ class ProfileFragment : Fragment() {
 
     private fun showTrustedListSheet() {
         val myUid = currentUid ?: return
-        val dialog = BottomSheetDialog(requireContext())
-        val sheetView = layoutInflater.inflate(R.layout.dialog_trusted_list, null)
-        dialog.setContentView(sheetView)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_trusted_list, null)
 
-        val container = sheetView.findViewById<LinearLayout>(R.id.llTrustedContactsContainer)
-        val txtEmpty = sheetView.findViewById<TextView>(R.id.txtNoTrustedContacts)
+        val alertDialog = AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create()
+
+        alertDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val container = dialogView.findViewById<LinearLayout>(R.id.llTrustedContactsContainer)
+        val txtEmpty = dialogView.findViewById<TextView>(R.id.txtNoTrustedContacts)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnCloseDialog)
+
+        btnClose.setOnClickListener { alertDialog.dismiss() }
 
         database.child("users").child(myUid).child("trustedContacts").get()
             .addOnSuccessListener { snapshot ->
@@ -307,26 +316,41 @@ class ProfileFragment : Fragment() {
 
                 if (contactUids.isEmpty()) {
                     txtEmpty.visibility = View.VISIBLE
-                    dialog.show()
+                    alertDialog.show()
                     return@addOnSuccessListener
                 }
                 txtEmpty.visibility = View.GONE
 
                 contactUids.forEach { contactUid ->
-                    database.child("users").child(contactUid).child("name").get()
-                        .addOnSuccessListener { nameSnap ->
-                            val name = nameSnap.getValue(String::class.java)?.ifEmpty { null } ?: "RUTA User"
-                            val row = layoutInflater.inflate(R.layout.item_trusted_contact, container, false)
-                            row.findViewById<TextView>(R.id.txtContactName).text = name
-                            row.findViewById<Button>(R.id.btnRemoveContact).setOnClickListener {
-                                EmergencyContactManager.removeTrustedContact(database, myUid, contactUid)
-                                container.removeView(row)
-                                if (container.childCount == 0) txtEmpty.visibility = View.VISIBLE
+                    val contactRef = database.child("users").child(myUid).child("trustedContacts").child(contactUid)
+
+                    contactRef.get().addOnSuccessListener { contactSnap ->
+                        val isDeviationEnabled = contactSnap.child("receiveDeviationAlerts").getValue(Boolean::class.java) ?: true
+
+                        database.child("users").child(contactUid).child("name").get()
+                            .addOnSuccessListener { nameSnap ->
+                                val name = nameSnap.getValue(String::class.java)?.ifEmpty { null } ?: "RUTA User"
+                                val row = layoutInflater.inflate(R.layout.item_trusted_contact, container, false)
+
+                                row.findViewById<TextView>(R.id.txtContactName).text = name
+
+                                val switchDeviation = row.findViewById<SwitchMaterial>(R.id.switchRouteDeviation)
+                                switchDeviation.isChecked = isDeviationEnabled
+
+                                switchDeviation.setOnCheckedChangeListener { _, isChecked ->
+                                    contactRef.child("receiveDeviationAlerts").setValue(isChecked)
+                                }
+
+                                row.findViewById<Button>(R.id.btnRemoveContact).setOnClickListener {
+                                    EmergencyContactManager.removeTrustedContact(database, myUid, contactUid)
+                                    container.removeView(row)
+                                    if (container.childCount == 0) txtEmpty.visibility = View.VISIBLE
+                                }
+                                container.addView(row)
                             }
-                            container.addView(row)
-                        }
+                    }
                 }
-                dialog.show()
+                alertDialog.show()
             }
             .addOnFailureListener {
                 Toast.makeText(requireContext(), "Failed to load trusted contacts.", Toast.LENGTH_SHORT).show()

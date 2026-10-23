@@ -11,7 +11,6 @@ import com.google.firebase.database.Transaction
 import com.google.firebase.database.ValueEventListener
 import java.util.concurrent.Executors
 
-
 class RideshareFlowManager(
     private val myBookingId: String,
     private val myPassengerId: String,
@@ -20,7 +19,7 @@ class RideshareFlowManager(
     private val apiKey: String,
     private val maxPickupMinutesApart: Double = 10.0,
     private val maxDropoffMinutesApart: Double = 10.0,
-    private val matchingWindowMillis: Long = 300_000L,
+    private val matchingWindowMillis: Long = 60_000L, // 1-minute matching window
     private val onStateChanged: (RideshareState) -> Unit = {}
 ) {
 
@@ -154,10 +153,6 @@ class RideshareFlowManager(
                     otherBookingId, otherPassengerId, LatLng(otherLatP, otherLngP), LatLng(otherLatD, otherLngD)
                 )
 
-                // THIS is where the network calls actually happen (findOptimalSequence hits
-                // Directions up to 4x) — it MUST be the executor.execute that wraps the call
-                // itself, not something further out. addOnSuccessListener callbacks default
-                // to the main thread regardless of which thread called .get().
                 Executors.newSingleThreadExecutor().execute {
                     val winner = RideshareRouteOptimizer.findOptimalSequence(me, other, apiKey)
                     if (winner == null) {

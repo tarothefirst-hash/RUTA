@@ -6,14 +6,15 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 
 class PassengerPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
-    override fun getItemCount(): Int = 4 // 4 Panels: Home, Promos, Settings, Profile
+    override fun getItemCount(): Int = 5 // 5 Panels: Home, Live Track, Promos, Settings, Profile
 
     override fun createFragment(position: Int): Fragment {
         return when (position) {
             0 -> HomeFragment()
-            1 -> PromosFragment()
-            2 -> SettingsFragment()
-            3 -> ProfileFragment()
+            1 -> LiveTrackingFragment()
+            2 -> PromosFragment()
+            3 -> SettingsFragment()
+            4 -> ProfileFragment()
             else -> HomeFragment()
         }
     }

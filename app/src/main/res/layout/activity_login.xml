@@ -13,12 +13,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="32dp">
+        android:paddingHorizontal="32dp"
+        android:paddingTop="36dp"
+        android:paddingBottom="48dp"
+        android:clipToPadding="false">
 
         <ImageView
             android:layout_width="120dp"
             android:layout_height="120dp"
-            android:layout_marginTop="72dp"
             android:src="@drawable/ruta_transparent"
             android:contentDescription="@string/app_name"
             android:layout_gravity="center_horizontal" />
@@ -42,11 +44,10 @@
             android:textColor="@color/ruta_text_secondary"
             android:textSize="14sp" />
 
-        <!-- Role picker -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="28dp"
+            android:layout_marginTop="24dp"
             android:text="@string/login_as"
             android:textColor="@color/ruta_text_secondary"
             android:textSize="13sp" />
@@ -63,7 +64,7 @@
                 android:id="@+id/roleUser"
                 style="@style/Widget.AppCompat.CompoundButton.RadioButton"
                 android:layout_width="0dp"
-                android:layout_height="40dp"
+                android:layout_height="44dp"
                 android:layout_weight="1"
                 android:layout_marginEnd="6dp"
                 android:button="@null"
@@ -72,13 +73,13 @@
                 android:background="@drawable/bg_role_chip"
                 android:textColor="@color/role_chip_text"
                 android:text="@string/role_passenger"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
 
             <RadioButton
                 android:id="@+id/roleDriver"
                 style="@style/Widget.AppCompat.CompoundButton.RadioButton"
                 android:layout_width="0dp"
-                android:layout_height="40dp"
+                android:layout_height="44dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
                 android:button="@null"
@@ -86,35 +87,52 @@
                 android:background="@drawable/bg_role_chip"
                 android:textColor="@color/role_chip_text"
                 android:text="@string/role_driver"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
 
         </RadioGroup>
 
         <Button
             android:id="@+id/btnGoogle"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/d_sign_in_with_google" />
+            android:minHeight="52dp"
+            android:layout_marginTop="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="@string/d_sign_in_with_google"
+            android:textColor="@color/ruta_primary"
+            android:textAllCaps="false"
+            app:strokeColor="@color/ruta_primary" />
 
         <EditText
             android:id="@+id/edtEmail"
             style="@style/RutaEditText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="16dp"
             android:hint="@string/email_hint"
             android:inputType="textEmailAddress"
             android:autofillHints="emailAddress" />
 
-        <EditText
-            android:id="@+id/edtPassword"
-            style="@style/RutaEditText"
+        <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:hint="@string/password_hint"
-            android:inputType="textPassword"
-            android:autofillHints="password" />
+            android:layout_marginTop="12dp"
+            app:hintEnabled="false"
+            app:passwordToggleEnabled="true"
+            app:passwordToggleTint="@color/ruta_primary">
+
+            <EditText
+                android:id="@+id/edtPassword"
+                style="@style/RutaEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/password_hint"
+                android:inputType="textPassword"
+                android:autofillHints="password" />
+
+        </com.google.android.material.textfield.TextInputLayout>
 
         <TextView
             android:id="@+id/txtError"
@@ -131,17 +149,20 @@
             android:id="@+id/btnLogin"
             style="@style/RutaButton"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="24dp"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:layout_marginTop="20dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
             android:backgroundTint="@color/ruta_primary"
             android:text="@string/login_button"
+            android:textSize="16sp"
             android:textAllCaps="false" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:layout_marginBottom="32dp"
             android:gravity="center"
             android:orientation="horizontal">
 
@@ -157,6 +178,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
+                android:padding="4dp"
                 android:text="@string/signup_link"
                 android:textColor="@color/ruta_primary"
                 android:textStyle="bold"

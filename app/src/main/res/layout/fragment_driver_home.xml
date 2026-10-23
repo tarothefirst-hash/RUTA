@@ -12,8 +12,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Top Bar: Online Status & Verification State + Logout -->
+    <!-- Top Bar: Online Status & Verification State -->
     <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardTopBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
@@ -47,7 +48,83 @@
 
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Compact Chat Button Positioned Right Above the Card -->
+    <!-- Target Selector Bar (Floating Controls) -->
+    <LinearLayout
+        android:id="@+id/layoutTargetSelector"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <!-- Recenter Location Button -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnMyLocation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Recenter Map"
+            app:backgroundTint="@color/ruta_card_bg"
+            app:fabCustomSize="44dp"
+            app:srcCompat="@android:drawable/ic_menu_mylocation"
+            app:tint="@color/ruta_primary" />
+
+        <!-- Target Selector Pill Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            app:cardBackgroundColor="@color/ruta_card_bg"
+            app:cardCornerRadius="22dp"
+            app:cardElevation="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp">
+
+                <ImageButton
+                    android:id="@+id/btnPrevContact"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Previous Pin"
+                    android:src="@android:drawable/ic_media_previous"
+                    app:tint="@color/ruta_primary" />
+
+                <TextView
+                    android:id="@+id/txtCurrentTargetIndicator"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="Pin: Me"
+                    android:textColor="@color/ruta_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnNextContact"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Next Pin"
+                    android:src="@android:drawable/ic_media_next"
+                    app:tint="@color/ruta_primary" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+
+    <!-- Compact Chat Button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnChatWithPassenger"
         android:layout_width="match_parent"
@@ -55,7 +132,7 @@
         android:layout_above="@id/cardIncomingRequest"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="2dp"
+        android:layout_marginBottom="4dp"
         android:backgroundTint="@color/ruta_primary"
         android:insetTop="0dp"
         android:insetBottom="0dp"
@@ -66,13 +143,15 @@
         android:visibility="gone"
         app:cornerRadius="10dp" />
 
-    <!-- Incoming Ride Request Card -->
+    <!-- Incoming Ride Request / Active Trip Card -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardIncomingRequest"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:layout_margin="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
         android:visibility="gone"
         app:cardBackgroundColor="@color/ruta_card_bg"
         app:cardCornerRadius="16dp"
@@ -81,126 +160,163 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="20dp">
+            android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/txtPassengerName"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/h_passenger_name_hint"
-                android:textColor="@color/ruta_text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/txtPickupLocation"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/dr_pickup_location_default"
-                android:textColor="@color/ruta_text_secondary" />
-
-            <TextView
-                android:id="@+id/txtDropoffLocation"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="@string/dr_dropoff_location_default"
-                android:textColor="@color/ruta_text_secondary" />
-
-            <TextView
-                android:id="@+id/txtEstimatedFare"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/dr_estimated_fare_default"
-                android:textColor="@color/ruta_status_success"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/txtWalletBalance"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingEnd="8dp"
-                android:text="@string/dr_wallet_balance_default"
-                android:textColor="@color/ruta_text_primary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <!-- Action Buttons Container -->
-            <LinearLayout
+            <!-- Card Header: Title & Minimize Toggle Button -->
+            <RelativeLayout
+                android:id="@+id/layoutCardHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:orientation="horizontal">
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/txtPassengerName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_toStartOf="@id/btnMinimizeCard"
+                    android:text="@string/h_passenger_name_hint"
+                    android:textColor="@color/ruta_text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnMinimizeCard"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Minimize Card"
+                    android:src="@android:drawable/arrow_down_float"
+                    app:tint="@color/ruta_text_secondary" />
+
+            </RelativeLayout>
+
+            <!-- Collapsible Body Container -->
+            <LinearLayout
+                android:id="@+id/layoutCardContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="16dp"
+                android:visibility="visible">
+
+                <TextView
+                    android:id="@+id/txtPickupLocation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/dr_pickup_location_default"
+                    android:textColor="@color/ruta_text_secondary" />
+
+                <TextView
+                    android:id="@+id/txtDropoffLocation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/dr_dropoff_location_default"
+                    android:textColor="@color/ruta_text_secondary" />
+
+                <TextView
+                    android:id="@+id/txtEstimatedFare"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/dr_estimated_fare_default"
+                    android:textColor="@color/ruta_status_success"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtWalletBalance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingEnd="8dp"
+                    android:text="@string/dr_wallet_balance_default"
+                    android:textColor="@color/ruta_text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Action Buttons Container -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnDeclineRide"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:layout_weight="1"
+                        android:text="@string/dr_decline"
+                        android:textColor="@color/ruta_cancel" />
+
+                    <Button
+                        android:id="@+id/btnAcceptRide"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/ruta_status_success"
+                        android:text="@string/dr_accept_ride" />
+
+                </LinearLayout>
+
+                <!-- Pickup Waiting Timer -->
+                <TextView
+                    android:id="@+id/txtPickupTimer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:padding="8dp"
+                    android:textColor="@color/ruta_text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <!-- Single Full-Width Action Buttons -->
+                <Button
+                    android:id="@+id/btnConfirmPickup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:backgroundTint="@color/ruta_primary"
+                    android:text="@string/dr_confirm_passenger_pickup"
+                    android:visibility="gone" />
 
                 <Button
-                    android:id="@+id/btnDeclineRide"
+                    android:id="@+id/btnReportNoShow"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:layout_weight="1"
-                    android:text="@string/dr_decline"
-                    android:textColor="@color/ruta_cancel" />
+                    android:layout_marginTop="4dp"
+                    android:text="Report No-Show"
+                    android:textColor="@color/ruta_cancel"
+                    android:visibility="gone"
+                    app:strokeColor="@color/ruta_cancel" />
 
                 <Button
-                    android:id="@+id/btnAcceptRide"
-                    android:layout_width="0dp"
+                    android:id="@+id/btnCompleteRide"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
+                    android:layout_marginTop="8dp"
                     android:backgroundTint="@color/ruta_status_success"
-                    android:text="@string/dr_accept_ride" />
+                    android:text="@string/dr_complete_ride"
+                    android:visibility="gone" />
 
             </LinearLayout>
 
-            <!-- Pickup Waiting Timer -->
-            <TextView
-                android:id="@+id/txtPickupTimer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:padding="8dp"
-                android:textColor="@color/ruta_text_primary"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <!-- Single Full-Width Action Buttons -->
-            <Button
-                android:id="@+id/btnConfirmPickup"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:backgroundTint="@color/ruta_primary"
-                android:text="@string/dr_confirm_passenger_pickup"
-                android:visibility="gone" />
-
-            <Button
-                android:id="@+id/btnReportNoShow"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Report No-Show"
-                android:textColor="@color/ruta_cancel"
-                android:visibility="gone"
-                app:strokeColor="@color/ruta_cancel" />
-
-            <Button
-                android:id="@+id/btnCompleteRide"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:backgroundTint="@color/ruta_status_success"
-                android:text="@string/dr_complete_ride"
-                android:visibility="gone" />
-
         </LinearLayout>
+
     </com.google.android.material.card.MaterialCardView>
 
 </RelativeLayout>

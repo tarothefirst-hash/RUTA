@@ -1,6 +1,7 @@
 package com.ruta.app.ui
 
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -16,6 +17,13 @@ class OtpActivity : AppCompatActivity() {
     private lateinit var binding: ActivityOtpBinding
     private var generatedOtp: String = ""
     private var targetEmail: String = ""
+
+    // OTP Security Controls
+    private var countDownTimer: CountDownTimer? = null
+    private var otpSentTimestamp: Long = 0L
+    private var resendAttempts: Int = 0
+    private val MAX_RESEND_ATTEMPTS = 3
+    private val OTP_EXPIRY_MS = 5 * 60_000L // 5 minutes validity
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,7 +49,7 @@ class OtpActivity : AppCompatActivity() {
 
         binding.txtOtpSubtitle.text = "Enter the 6-digit verification code sent to\n$targetEmail"
 
-        // Send initial email via Brevo
+        // Initial email send & timer start
         if (targetEmail.isNotEmpty() && generatedOtp.isNotEmpty()) {
             sendOtpEmail(targetEmail, generatedOtp)
         }
@@ -55,7 +63,14 @@ class OtpActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            // Expiration Guard Check (5 min)
+            if (System.currentTimeMillis() - otpSentTimestamp > OTP_EXPIRY_MS) {
+                showError("This OTP code has expired. Please request a new code.")
+                return@setOnClickListener
+            }
+
             if (inputCode == generatedOtp) {
+                countDownTimer?.cancel()
                 setResult(RESULT_OK)
                 finish()
             } else {
@@ -65,6 +80,13 @@ class OtpActivity : AppCompatActivity() {
 
         binding.btnResendOtp.setOnClickListener {
             hideError()
+
+            if (resendAttempts >= MAX_RESEND_ATTEMPTS) {
+                showError("Maximum resend attempts reached. Please try again later.")
+                return@setOnClickListener
+            }
+
+            resendAttempts++
             generatedOtp = String.format("%06d", Random.nextInt(0, 1000000))
             binding.edtOtpCode.setText("")
             sendOtpEmail(targetEmail, generatedOtp)
@@ -78,6 +100,7 @@ class OtpActivity : AppCompatActivity() {
                 setLoading(false)
                 if (success) {
                     Toast.makeText(this, "Verification code sent to $email", Toast.LENGTH_SHORT).show()
+                    startCountdownTimer()
                 } else {
                     showError(errorMsg ?: "Failed to send email.")
                 }
@@ -85,9 +108,36 @@ class OtpActivity : AppCompatActivity() {
         }
     }
 
+    private fun startCountdownTimer() {
+        otpSentTimestamp = System.currentTimeMillis()
+        binding.btnResendOtp.isEnabled = false
+        binding.btnResendOtp.alpha = 0.5f
+
+        countDownTimer?.cancel()
+        countDownTimer = object : CountDownTimer(60_000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val secondsLeft = millisUntilFinished / 1000
+                binding.txtOtpTimer.text = "Resend code in ${secondsLeft}s"
+            }
+
+            override fun onFinish() {
+                binding.txtOtpTimer.text = if (resendAttempts < MAX_RESEND_ATTEMPTS) {
+                    "Didn't receive code?"
+                } else {
+                    "Resend limit reached (${MAX_RESEND_ATTEMPTS}/${MAX_RESEND_ATTEMPTS})"
+                }
+
+                if (resendAttempts < MAX_RESEND_ATTEMPTS) {
+                    binding.btnResendOtp.isEnabled = true
+                    binding.btnResendOtp.alpha = 1.0f
+                }
+            }
+        }.start()
+    }
+
     private fun setLoading(loading: Boolean) {
         binding.btnVerifyOtp.isEnabled = !loading
-        binding.btnResendOtp.isEnabled = !loading
+        binding.btnResendOtp.isEnabled = !loading && (resendAttempts < MAX_RESEND_ATTEMPTS)
         binding.btnVerifyOtp.text = if (loading) "Sending Code..." else "VERIFY & CONTINUE"
     }
 
@@ -98,5 +148,10 @@ class OtpActivity : AppCompatActivity() {
 
     private fun hideError() {
         binding.txtOtpError.visibility = View.GONE
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        countDownTimer?.cancel()
     }
 }

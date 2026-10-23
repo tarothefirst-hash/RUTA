@@ -6,8 +6,8 @@ import kotlin.math.*
 
 /**
  * RideshareManager
- * -----------------
- * Main utility container for RUTA's rideshare and route management logic.
+ * Handles passenger matching compatibility (strict 6000m gap & bearing threshold)
+ * and global stop sequence optimization.
  */
 object RideshareManager {
 
@@ -27,13 +27,11 @@ object RideshareManager {
     )
 
     // ---------------------------------------------------------------------------
-    // 1. MATCHING
+    // 1. MATCHING LOGIC
     // ---------------------------------------------------------------------------
     object Matcher {
-        // Internal (not private) so JVM unit tests can assert the boundary against
-        // the real thresholds instead of a hardcoded copy.
-        internal const val MAX_PICKUP_DETOUR_METERS = 6000.0
-        internal const val MAX_DROPOFF_DETOUR_METERS = 6000.0
+        internal const val MAX_PICKUP_GAP_METERS = 2000.0
+        internal const val MAX_DROPOFF_GAP_METERS = 2000.0
         internal const val MAX_DIRECTION_ANGLE_DEGREES = 45.0
 
         fun isCompatible(a: RideshareCandidate, b: RideshareCandidate): Boolean {
@@ -48,30 +46,16 @@ object RideshareManager {
             )
         }
 
-        /**
-         * The compatibility arithmetic, free of Android/Google runtime types so the
-         * rules can be pinned on the local JVM. The production [isCompatible] measures
-         * the pair (bearings and geodesic gaps) and delegates here, so this is the
-         * single source of truth for the four rules.
-         */
         internal fun isCompatible(
             samePassenger: Boolean,
             bearingDifferenceDegrees: Double,
             pickupGapMeters: Double,
             dropoffGapMeters: Double
         ): Boolean {
-            if (samePassenger) {
-                return false
-            }
-            if (bearingDifferenceDegrees > MAX_DIRECTION_ANGLE_DEGREES) {
-                return false
-            }
-            if (pickupGapMeters > MAX_PICKUP_DETOUR_METERS) {
-                return false
-            }
-            if (dropoffGapMeters > MAX_DROPOFF_DETOUR_METERS) {
-                return false
-            }
+            if (samePassenger) return false
+            if (bearingDifferenceDegrees > MAX_DIRECTION_ANGLE_DEGREES) return false
+            if (pickupGapMeters > MAX_PICKUP_GAP_METERS) return false
+            if (dropoffGapMeters > MAX_DROPOFF_GAP_METERS) return false
             return true
         }
 
@@ -107,21 +91,13 @@ object RideshareManager {
     }
 
     // ---------------------------------------------------------------------------
-    // 2. STOP SEQUENCING (GLOBAL PATH OPTIMIZATION)
+    // 2. STOP SEQUENCING (OPTIMIZED ROUTE PATH)
     // ---------------------------------------------------------------------------
     object Sequencer {
 
         fun sequenceStops(driverStart: LatLng, candidates: List<RideshareCandidate>): List<RideshareStop> =
             sequenceStopsWithDistance(driverStart, candidates) { a, b -> distanceMeters(a, b) }
 
-        /**
-         * The stop-ordering search, with the geodesic measurement passed in as a plain
-         * `(LatLng, LatLng) -> Double` seam. The production [sequenceStops] supplies the
-         * real Android [Location.distanceBetween]; JVM unit tests supply a deterministic
-         * function (for example Euclidean degrees) so the permutation search can be pinned
-         * without the Android framework. Only the measurement is swapped — the ordering
-         * rules are byte-for-byte the production ones.
-         */
         internal fun sequenceStopsWithDistance(
             driverStart: LatLng,
             candidates: List<RideshareCandidate>,
@@ -129,7 +105,6 @@ object RideshareManager {
         ): List<RideshareStop> {
             if (candidates.isEmpty()) return emptyList()
 
-            // Single candidate fallback
             if (candidates.size == 1) {
                 val c = candidates.first()
                 return listOf(
@@ -138,7 +113,6 @@ object RideshareManager {
                 )
             }
 
-            // 2-Passenger shared ride path evaluation
             if (candidates.size == 2) {
                 val a = candidates[0]
                 val b = candidates[1]
@@ -148,7 +122,6 @@ object RideshareManager {
                 val pB = RideshareStop(b.bookingId, StopType.PICKUP, b.pickup)
                 val dB = RideshareStop(b.bookingId, StopType.DROPOFF, b.dropoff)
 
-                // 4 Valid logical permutations where Pickups precede Dropoffs
                 val validPermutations = listOf(
                     listOf(pA, pB, dA, dB),
                     listOf(pA, pB, dB, dA),
@@ -163,7 +136,6 @@ object RideshareManager {
                 } ?: validPermutations.first()
             }
 
-            // Fallback strategy for 3+ passengers: Global insertion approach
             val stops = mutableListOf<RideshareStop>()
             val remainingPickups = candidates.toMutableList()
             val awaitingDropoff = mutableListOf<RideshareCandidate>()

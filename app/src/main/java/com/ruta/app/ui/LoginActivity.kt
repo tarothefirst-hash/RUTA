@@ -18,6 +18,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.messaging.FirebaseMessaging
 import com.ruta.app.R
 import com.ruta.app.databinding.ActivityLoginBinding
 import com.ruta.app.model.UserRole
@@ -43,6 +44,7 @@ class LoginActivity : AppCompatActivity() {
                     .addOnSuccessListener { authResult ->
                         val uid = authResult.user?.uid
                         if (uid != null) {
+                            saveFcmTokenToDatabase(uid)
                             fetchRoleAndNavigate(uid)
                         } else {
                             setLoading(false)
@@ -112,6 +114,23 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * STEP 1: Save FCM Token to Realtime Database
+     * Allows system tray push notifications to reach the user even when the app is closed.
+     */
+    private fun saveFcmTokenToDatabase(uid: String) {
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful && task.result != null) {
+                val token = task.result
+                database.reference
+                    .child("users")
+                    .child(uid)
+                    .child("fcmToken")
+                    .setValue(token)
+            }
+        }
+    }
+
     private fun setupGoogleSignIn() {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestIdToken(getString(R.string.default_web_client_id))
@@ -126,6 +145,9 @@ class LoginActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
         val cachedUid = prefs.getString("USER_UID", null)
         val cachedRole = prefs.getString("USER_ROLE", null)
+
+        // Ensure token is fresh on auto-login
+        saveFcmTokenToDatabase(currentUser.uid)
 
         if (cachedUid == currentUser.uid && !cachedRole.isNullOrEmpty()) {
             goToHome(parseRole(cachedRole))
@@ -152,6 +174,7 @@ class LoginActivity : AppCompatActivity() {
             .addOnSuccessListener { authResult ->
                 val uid = authResult.user?.uid
                 if (uid != null) {
+                    saveFcmTokenToDatabase(uid)
                     fetchRoleAndNavigate(uid)
                 } else {
                     setLoading(false)
