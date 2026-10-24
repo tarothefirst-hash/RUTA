@@ -60,7 +60,9 @@ import android.os.Handler
 import androidx.appcompat.app.AlertDialog
 import com.google.firebase.database.MutableData
 import com.google.firebase.database.Transaction
+import com.ruta.app.util.BookingClaim
 import com.ruta.app.util.NoShowManager
+import com.ruta.app.util.PendingRequestRanker
 class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
@@ -886,7 +888,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             return
         }
 
-        updateUIForState(DriverRideState.ACCEPTED)
+        // Do NOT switch to ACCEPTED yet: the screen only moves once the claim is won,
+        // so a driver who loses a race never sees a ride that belongs to someone else.
+        binding.btnAcceptRide.isEnabled = false
 
         database.child("users").child(driverId).get().addOnSuccessListener { snapshot ->
             val firstName = snapshot.child("firstName").getValue(String::class.java) ?: ""
@@ -914,39 +918,77 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 "acceptedAt" to System.currentTimeMillis()
             )
 
-            database.child("bookings").child(bookingId).updateChildren(updates)
-                .addOnSuccessListener {
-                    Toast.makeText(context, "Ride accepted!", Toast.LENGTH_SHORT).show()
-                    clearRouteAndMarkers()
-                    arrivalHandledThisStop = false
+            // First driver wins: the claim is a transaction on the booking, so only
+            // one driver can ever get WON for the same booking.
+            BookingClaim.claim(database.child("bookings").child(bookingId), driverId, updates) { outcome ->
+                if (_binding == null) return@claim
+                when (outcome) {
+                    BookingClaim.Outcome.WON -> {
+                        binding.btnAcceptRide.isEnabled = true
+                        updateUIForState(DriverRideState.ACCEPTED)
+                        Toast.makeText(context, "Ride accepted!", Toast.LENGTH_SHORT).show()
+                        clearRouteAndMarkers()
+                        arrivalHandledThisStop = false
 
-                    val booking = currentBooking ?: return@addOnSuccessListener
+                        val booking = currentBooking ?: return@claim
 
-                    if (currentLatLng == null) {
-                        if (ActivityCompat.checkSelfPermission(
-                                requireContext(),
-                                Manifest.permission.ACCESS_FINE_LOCATION
-                            ) == PackageManager.PERMISSION_GRANTED
-                        ) {
-                            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
-                                if (loc != null) {
-                                    currentLatLng = LatLng(loc.latitude, loc.longitude)
-                                    drawDriverToPickupRoute(booking)
+                        if (currentLatLng == null) {
+                            if (ActivityCompat.checkSelfPermission(
+                                    requireContext(),
+                                    Manifest.permission.ACCESS_FINE_LOCATION
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                                    if (loc != null) {
+                                        currentLatLng = LatLng(loc.latitude, loc.longitude)
+                                        drawDriverToPickupRoute(booking)
+                                    }
                                 }
                             }
+                        } else {
+                            drawDriverToPickupRoute(booking)
                         }
-                    } else {
-                        drawDriverToPickupRoute(booking)
                     }
+                    BookingClaim.Outcome.TAKEN -> onRideNoLongerAvailable(bookingId, taken = true)
+                    BookingClaim.Outcome.UNAVAILABLE -> onRideNoLongerAvailable(bookingId, taken = false)
+                    BookingClaim.Outcome.ERROR -> onAcceptFailed("Failed to accept ride. Check your connection and try again.")
                 }
-                .addOnFailureListener { e ->
-                    updateUIForState(DriverRideState.REQUEST_RECEIVED)
-                    Toast.makeText(context, "Failed to accept ride: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+            }
         }.addOnFailureListener { e ->
-            updateUIForState(DriverRideState.REQUEST_RECEIVED)
-            Toast.makeText(context, "Failed to accept ride: ${e.message}", Toast.LENGTH_SHORT).show()
+            onAcceptFailed("Failed to accept ride: ${e.message}")
         }
+    }
+
+    /**
+     * The booking was taken by another driver (or cancelled) before our claim
+     * landed. Nothing was written for this driver, so just drop the request and
+     * move on to the next nearest one.
+     */
+    private fun onRideNoLongerAvailable(bookingId: String, taken: Boolean) {
+        Toast.makeText(
+            context,
+            if (taken) "Ride already taken by another driver." else "This ride is no longer available.",
+            Toast.LENGTH_LONG
+        ).show()
+
+        declinedBookingIds.add(bookingId)
+        currentBooking?.tripGroupId?.takeIf { it.isNotEmpty() }?.let { declinedGroupIds.add(it) }
+
+        stopListeningForRequests()
+        clearRouteAndMarkers()
+        activeBookingId = null
+        currentBooking = null
+        binding.btnAcceptRide.isEnabled = true
+        updateUIForState(DriverRideState.IDLE)
+        listenForPendingRideRequests()
+    }
+
+    /** A real failure (network, permission), not a lost race: keep the request so the driver can retry. */
+    private fun onAcceptFailed(message: String) {
+        if (_binding == null) return
+        binding.btnAcceptRide.isEnabled = true
+        updateUIForState(DriverRideState.REQUEST_RECEIVED)
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun acceptRideGroup(driverId: String) {
@@ -956,6 +998,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         // The only caller routes here after confirming the trip group id is
         // non-empty; this guard just keeps the id non-null below.
         if (tripGroupId.isNullOrEmpty()) return
+
+        // Block double taps while the claim is in flight.
+        binding.btnAcceptRide.isEnabled = false
 
         database.child("users").child(driverId).get().addOnSuccessListener { userSnapshot ->
             val firstName = userSnapshot.child("firstName").getValue(String::class.java) ?: ""
@@ -986,26 +1031,60 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
-                        for (child in snapshot.children) {
-                            child.ref.updateChildren(updates)
+                        if (_binding == null) return
+
+                        val groupRefs = snapshot.children
+                            .mapNotNull { c -> c.key?.let { key -> key to c.ref } }
+                            .toMap()
+                        val leadKey = BookingClaim.leadBookingKey(groupRefs.keys)
+                        val leadRef = leadKey?.let { groupRefs[it] }
+                        if (leadKey == null || leadRef == null) {
+                            onRideNoLongerAvailable(activeBookingId.orEmpty(), taken = false)
+                            return
                         }
 
-                        currentStopIndex = 0
-                        arrivalHandledThisStop = false
-                        updateUIForState(DriverRideState.ACCEPTED)
+                        // Every driver contends on the same lead booking, so exactly one
+                        // driver wins the whole group (never one booking each).
+                        BookingClaim.claim(leadRef, driverId, updates) { outcome ->
+                            if (_binding == null) return@claim
+                            when (outcome) {
+                                BookingClaim.Outcome.WON -> {
+                                    // Won the group: hand the remaining bookings to this driver too.
+                                    for ((key, ref) in groupRefs) {
+                                        if (key == leadKey) continue
+                                        BookingClaim.claim(ref, driverId, updates) { o ->
+                                            // UNAVAILABLE is normal (a co-passenger already cancelled).
+                                            if (o == BookingClaim.Outcome.TAKEN || o == BookingClaim.Outcome.ERROR) {
+                                                context?.let {
+                                                    Toast.makeText(it, "A co-passenger booking could not be assigned.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    }
 
-                        loadGroupStopsLocally(tripGroupId) { stops ->
-                            currentGroupStops = stops
-                            updateCardForCurrentStop()
-                            drawGroupRoutePreviewOnly(stops)
+                                    binding.btnAcceptRide.isEnabled = true
+                                    currentStopIndex = 0
+                                    arrivalHandledThisStop = false
+                                    updateUIForState(DriverRideState.ACCEPTED)
+
+                                    loadGroupStopsLocally(tripGroupId) { stops ->
+                                        currentGroupStops = stops
+                                        updateCardForCurrentStop()
+                                        drawGroupRoutePreviewOnly(stops)
+                                    }
+                                }
+                                BookingClaim.Outcome.TAKEN -> onRideNoLongerAvailable(leadKey, taken = true)
+                                BookingClaim.Outcome.UNAVAILABLE -> onRideNoLongerAvailable(leadKey, taken = false)
+                                BookingClaim.Outcome.ERROR -> onAcceptFailed("Failed to accept trip group. Check your connection and try again.")
+                            }
                         }
                     }
                     override fun onCancelled(error: DatabaseError) {
-                        Toast.makeText(context, "Failed to accept trip group: ${error.message}", Toast.LENGTH_SHORT).show()
+                        onAcceptFailed("Failed to accept trip group: ${error.message}")
                     }
                 })
         }.addOnFailureListener { e ->
-            Toast.makeText(context, "Failed to accept trip group: ${e.message}", Toast.LENGTH_SHORT).show()
+            onAcceptFailed("Failed to accept trip group: ${e.message}")
         }
     }
 
@@ -1516,9 +1595,16 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     }
                 }
 
-                val nearest = eligible.minByOrNull { (_, b) ->
-                    distanceMeters(driverLoc, LatLng(b.pickupLat, b.pickupLng))
-                }
+                // Nearest Neighbor: offer the request whose pickup is closest to this driver.
+                val bookingsByKey = eligible.toMap()
+                val nearestKey = PendingRequestRanker.nearest(
+                    driverLoc,
+                    eligible.map { (key, b) ->
+                        PendingRequestRanker.Candidate(key, LatLng(b.pickupLat, b.pickupLng))
+                    },
+                    { a, b -> distanceMeters(a, b) }
+                )?.bookingKey
+                val nearest = nearestKey?.let { key -> bookingsByKey[key]?.let { key to it } }
 
                 if (nearest != null) {
                     val nearestBookingKey = nearest.first
