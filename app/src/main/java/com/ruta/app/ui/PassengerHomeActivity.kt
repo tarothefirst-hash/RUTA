@@ -23,6 +23,7 @@ import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.RouteDeviationDialogHelper
+import com.ruta.app.util.hideWhileKeyboardOpen
 import com.ruta.app.util.RouteDeviationManager
 
 class PassengerHomeActivity : AppCompatActivity() {
@@ -59,6 +60,7 @@ class PassengerHomeActivity : AppCompatActivity() {
 
         requestNotificationPermission()
         initViews()
+        hideWhileKeyboardOpen(findViewById(android.R.id.content), findViewById(R.id.bottomNav))
         setupViewPager()
         setupClickListeners()
         listenForActivePassengerTrip()

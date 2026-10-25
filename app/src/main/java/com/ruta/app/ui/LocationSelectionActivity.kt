@@ -108,7 +108,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private var pickupAddress: String = "Detecting location..."
     private var dropoffAddress: String = "Add Location"
     private var soloCalculatedFare: Double = 0.0
-    private var sharedCalculatedFare: Double = 0.0
     private var activeBookedFare: Double = 0.0
 
     private var routeDistanceMeters: Int = 0
@@ -135,7 +134,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private var pendingSoloFare = 0.0
     private var pendingSoloBefore = 0.0
     private var groupRouteGroupId: String? = null
-    private var groupRouteShown = false
     private var lastFetchedGroupId: String? = null
     private var lastPartnerName = "your co-passenger"
 
@@ -281,7 +279,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun highlightRideOptionCard(isSoloSelected: Boolean) {
-        txtFareShared.text = "Save up to 50%"
+        txtFareShared.text = "Price shown when matched"
 
         if (isSoloSelected) {
             cardOptionSolo.setCardBackgroundColor(ContextCompat.getColor(this, R.color.ruta_primary_light))
@@ -300,7 +298,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             cardOptionSolo.setCardBackgroundColor(ContextCompat.getColor(this, R.color.ruta_card_bg))
             cardOptionSolo.strokeColor = Color.parseColor("#CBD5E1")
             cardOptionSolo.strokeWidth = 2
-            btnConfirmStage.text = String.format(Locale.getDefault(), "CONFIRM SHARED RIDE - ₱%.2f", sharedCalculatedFare)
+            btnConfirmStage.text = "CONFIRM SHARED RIDE"
         }
     }
 
@@ -405,7 +403,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     if (selectedRideType == "SOLO") {
                         submitRegularBooking(soloCalculatedFare)
                     } else {
-                        submitRideshareBooking(sharedCalculatedFare)
+                        submitRideshareBooking(0.0) // no price until a co-passenger is matched
                     }
                 }
 
@@ -442,7 +440,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 currentSurgeMultiplier = FareCalculator.getSurgeMultiplier(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
 
                 soloCalculatedFare = calculateExactFare(routeDistanceMeters, routeDurationSeconds, currentSurgeMultiplier, currentUserHasDiscount)
-                sharedCalculatedFare = RideshareFareCalculator.quoteSharedFare(routeDistanceMeters, routeDurationSeconds, currentSurgeMultiplier, currentUserHasDiscount)
 
                 withContext(Dispatchers.Main) {
                     currentPolyline?.remove()
@@ -458,7 +455,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     }
 
                     txtFareSolo.text = String.format(Locale.getDefault(), "₱%.2f", soloCalculatedFare)
-                    txtFareShared.text = "Save up to 50%"
+                    txtFareShared.text = "Price shown when matched"
 
                     if (currentStage == SelectionStage.ROUTE_READY) {
                         txtStageHeaderTitle.visibility = View.VISIBLE
@@ -866,12 +863,13 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 withContext(Dispatchers.Main) {
                     driverRoutePolyline?.remove()
 
-                    if (routePoints.isNotEmpty() && !groupRouteShown) {
+                    if (routePoints.isNotEmpty()) {
                         driverRoutePolyline = mMap.addPolyline(
                             PolylineOptions()
                                 .addAll(routePoints)
                                 .width(12f)
                                 .color(Color.parseColor("#16A34A"))
+                                .zIndex(5f) // green driver line stays above the passenger route colours
                                 .geodesic(true)
                         )
                     }
@@ -1002,7 +1000,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                                 currentPolyline = null
                                 routePolyline = null
                                 passengerPolylinePoints = mutableListOf()
-                                groupRouteShown = true
                                 setOwnPinsHidden(true)
                                 rideshareOverlay().showGroupRoute(fullRoute, myBookingId, partnerName)
                             }

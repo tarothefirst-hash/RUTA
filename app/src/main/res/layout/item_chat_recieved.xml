@@ -3,7 +3,19 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="start"
+    android:orientation="vertical"
     android:padding="8dp">
+
+    <TextView
+        android:id="@+id/tvSenderName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="2dp"
+        android:textColor="#6B7280"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/tvMessageText"

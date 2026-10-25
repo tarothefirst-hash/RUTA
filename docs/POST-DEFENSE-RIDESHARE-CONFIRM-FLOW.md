@@ -43,3 +43,19 @@ The first passenger to claim a pair does so with a transaction on each booking's
    Confirm switches to a solo booking.
 5. Driver accepts a matched pair: colours/pins match the passengers' screens;
    on completion each passenger is charged the locked amount.
+
+## Follow-up round
+- **Price timing:** the rideshare card and confirm button show no price. The price
+  appears in the Co-Passenger Found sheet and is then locked.
+- **Rideshare fare:** P35 base per passenger + legs ridden alone at the regular rate
+  (P15/km, P2/min) + legs ridden together at the shared rate (P7.50/km, P1/min). The
+  existing detour surcharge / inconvenience credit rules are unchanged.
+- **Driver:** dropping off one passenger no longer resets the driver screen while the
+  other passenger is still onboard.
+- **Chat:** a matched rideshare uses one chat room for the driver and both passengers
+  (`chats/group_<tripGroupId>`); messages carry the sender's name.
+- **Tracking:** the green driver line is drawn for regular and rideshare bookings.
+- **Profiles (passenger and driver):** name/phone edits write firstName, lastName,
+  name, phoneNumber and phone; email is read-only. Profile pictures are stored as a
+  small Base64 JPEG on the user record (`users/<uid>/profilePhoto`) via ImageUtils.
+  The bottom bar hides while the keyboard is open.

@@ -30,7 +30,6 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import com.google.firebase.storage.FirebaseStorage
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.CaptureActivity
@@ -40,6 +39,8 @@ import com.ruta.app.R
 import com.ruta.app.databinding.FragmentDriverProfileBinding
 import com.ruta.app.ui.LoginActivity
 import com.ruta.app.util.EmergencyContactManager
+import com.ruta.app.util.ImageUtils
+import com.ruta.app.util.ProfileFields
 import java.util.UUID
 import com.ruta.app.ui.PortraitCaptureActivity
 class DriverProfileFragment : Fragment() {
@@ -49,9 +50,9 @@ class DriverProfileFragment : Fragment() {
 
     private val auth by lazy { FirebaseAuth.getInstance() }
     private val database: DatabaseReference by lazy { FirebaseDatabase.getInstance().reference }
-    private val storage by lazy { FirebaseStorage.getInstance().reference }
 
-    private var selectedImageUri: Uri? = null
+    /** A newly picked picture, already shrunk, waiting for Save. */
+    private var pendingPhotoBase64: String? = null
     private var activeQrToken: String? = null
 
     private var trustedContactsListener: ValueEventListener? = null
@@ -63,9 +64,16 @@ class DriverProfileFragment : Fragment() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             val uri = result.data?.data
-            if (uri != null) {
-                selectedImageUri = uri
-                _binding?.imgDriverProfile?.setImageURI(uri)
+            val ctx = context
+            if (uri != null && ctx != null) {
+                val base64 = ImageUtils.uriToAvatarBase64(ctx, uri)
+                val img = _binding?.imgDriverProfile
+                if (base64 != null && img != null && ImageUtils.showAvatar(img, base64)) {
+                    pendingPhotoBase64 = base64
+                    Toast.makeText(ctx, "Photo selected. Tap Save to keep it.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(ctx, "Couldn't read that image. Try another one.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -274,7 +282,10 @@ class DriverProfileFragment : Fragment() {
         bindingRef.etDriverEmail.setText(email)
         bindingRef.txtCompletedRides.text = rides.toString()
 
-        if (!photoUrl.isNullOrEmpty() && isAdded) {
+        val storedPhoto = snapshot.child("profilePhoto").getValue(String::class.java)
+        if (!ImageUtils.showAvatar(bindingRef.imgDriverProfile, storedPhoto) &&
+            !photoUrl.isNullOrEmpty() && isAdded
+        ) {
             try {
                 Glide.with(this)
                     .load(photoUrl)
@@ -405,45 +416,37 @@ class DriverProfileFragment : Fragment() {
         val vehicle = binding.etVehicleDetails.text.toString().trim()
         val phone = binding.etDriverPhone.text.toString().trim()
 
+        if (!ProfileFields.isValidName(name)) {
+            binding.etDriverName.error = "Enter your full name"
+            return
+        }
+        if (!ProfileFields.isValidPhone(phone)) {
+            binding.etDriverPhone.error = "Enter a valid mobile number"
+            return
+        }
+
+        // name + phone go to every field the app reads; the email is never written.
+        val updates = HashMap<String, Any>(ProfileFields.updatesFor(name, phone))
+        updates["vehicleDetails"] = vehicle
+        pendingPhotoBase64?.let { updates["profilePhoto"] = it }
+
         binding.btnSaveDriverProfile.isEnabled = false
 
-        if (selectedImageUri != null) {
-            val photoRef = storage.child("driver_profiles/${uid}.jpg")
-            photoRef.putFile(selectedImageUri!!).addOnSuccessListener {
-                photoRef.downloadUrl.addOnSuccessListener { photoUrl ->
-                    updateDatabaseProfile(uid, name, vehicle, phone, photoUrl.toString())
-                }
-            }.addOnFailureListener { err ->
-                _binding?.btnSaveDriverProfile?.isEnabled = true
-                context?.let { Toast.makeText(it, "Photo upload failed: ${err.message}", Toast.LENGTH_SHORT).show() }
-            }
-        } else {
-            updateDatabaseProfile(uid, name, vehicle, phone, null)
-        }
-    }
-
-    private fun updateDatabaseProfile(
-        uid: String, name: String, vehicle: String, phone: String, photoUrl: String?
-    ) {
-        val updates = hashMapOf<String, Any>(
-            "name" to name,
-            "vehicleDetails" to vehicle,
-            "phone" to phone,
-            "phoneNumber" to phone
-        )
-        if (photoUrl != null) {
-            updates["profilePictureUrl"] = photoUrl
-            updates["profileImageUrl"] = photoUrl
-        }
-
         database.child("users").child(uid).updateChildren(updates)
-        database.child("drivers").child(uid).updateChildren(updates).addOnSuccessListener {
-            _binding?.btnSaveDriverProfile?.isEnabled = true
-            context?.let { Toast.makeText(it, "Profile updated successfully!", Toast.LENGTH_SHORT).show() }
-        }.addOnFailureListener {
-            _binding?.btnSaveDriverProfile?.isEnabled = true
-            context?.let { Toast.makeText(it, "Failed to update profile.", Toast.LENGTH_SHORT).show() }
-        }
+            .addOnSuccessListener {
+                // Keep the driver record in step (it has no photo of its own: users/<uid> is the source).
+                val driverUpdates = HashMap(updates).apply { remove("profilePhoto") }
+                database.child("drivers").child(uid).updateChildren(driverUpdates)
+
+                _binding?.btnSaveDriverProfile?.isEnabled = true
+                pendingPhotoBase64 = null
+                _binding?.etDriverPhone?.setText(ProfileFields.normalizePhone(phone))
+                context?.let { Toast.makeText(it, "Profile updated successfully!", Toast.LENGTH_SHORT).show() }
+            }
+            .addOnFailureListener {
+                _binding?.btnSaveDriverProfile?.isEnabled = true
+                context?.let { Toast.makeText(it, "Failed to update profile. Check your connection.", Toast.LENGTH_SHORT).show() }
+            }
     }
 
     private fun checkTripStatusBeforeLogout() {

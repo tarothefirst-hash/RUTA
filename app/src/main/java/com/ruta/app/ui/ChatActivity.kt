@@ -24,6 +24,15 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var bookingId: String
     private lateinit var currentUserId: String
 
+    /**
+     * Where the messages live. A solo ride chats on the booking. A matched rideshare
+     * chats on the TRIP GROUP, so the driver and both passengers share one room
+     * (before, each booking had its own room and the driver only ever saw one).
+     */
+    private var chatRoomId: String = ""
+    private var myDisplayName: String = ""
+    private var roomReady = false
+
     private lateinit var recyclerChat: RecyclerView
     private lateinit var chatAdapter: ChatAdapter
     private val messageList = mutableListOf<ChatMessage>()
@@ -71,11 +80,32 @@ class ChatActivity : AppCompatActivity() {
 
         setSupportActionBar(toolbar)
 
-        FirebaseDatabase.getInstance().reference.child("users").child(currentUserId).child("role")
-            .get().addOnSuccessListener { snapshot ->
-                val role = snapshot.getValue(String::class.java)
-                toolbar.title = if (role == "DRIVER") "Chat with Passenger" else "Chat with Driver"
-            }
+        val rootRef = FirebaseDatabase.getInstance().reference
+
+        // Who am I (for the name shown to the others), and which room is this ride's?
+        rootRef.child("users").child(currentUserId).get().addOnSuccessListener { userSnap ->
+            val role = userSnap.child("role").getValue(String::class.java)
+            val first = userSnap.child("firstName").getValue(String::class.java).orEmpty()
+            val last = userSnap.child("lastName").getValue(String::class.java).orEmpty()
+            val name = "$first $last".trim().ifEmpty { if (role == "DRIVER") "Driver" else "Passenger" }
+            myDisplayName = if (role == "DRIVER") "$name (Driver)" else name
+
+            rootRef.child("bookings").child(bookingId).child("tripGroupId").get()
+                .addOnSuccessListener { groupSnap ->
+                    val groupId = groupSnap.getValue(String::class.java)
+                    val isGroup = !groupId.isNullOrEmpty()
+                    chatRoomId = if (isGroup) "group_$groupId" else bookingId
+                    toolbar.title = when {
+                        role == "DRIVER" && isGroup -> "Chat with Passengers"
+                        role == "DRIVER" -> "Chat with Passenger"
+                        isGroup -> "Rideshare Chat"
+                        else -> "Chat with Driver"
+                    }
+                    roomReady = true
+                    if (!isDestroyed) listenForMessages()
+                }
+                .addOnFailureListener { showLoadError() }
+        }.addOnFailureListener { showLoadError() }
 
         toolbar.setNavigationOnClickListener {
             finish()
@@ -92,23 +122,26 @@ class ChatActivity : AppCompatActivity() {
 
         btnSendChat.setOnClickListener {
             val text = etChatMessage.text.toString().trim()
-            if (text.isNotEmpty()) {
+            if (text.isNotEmpty() && roomReady) {
                 sendMessage(text, etChatMessage)
                 etChatMessage.setText("")
             }
         }
+    }
 
-        listenForMessages()
+    private fun showLoadError() {
+        Toast.makeText(this, "Failed to open chat. Please check your connection.", Toast.LENGTH_SHORT).show()
     }
 
     private fun sendMessage(messageText: String, input: EditText) {
         val messageMap = hashMapOf<String, Any>(
             "senderId" to currentUserId,
+            "senderName" to myDisplayName,
             "message" to messageText,
             "timestamp" to System.currentTimeMillis()
         )
         FirebaseDatabase.getInstance().reference
-            .child("chats").child(bookingId).push().setValue(messageMap)
+            .child("chats").child(chatRoomId).push().setValue(messageMap)
             .addOnFailureListener {
                 Toast.makeText(this, "Failed to send message. Please try again.", Toast.LENGTH_SHORT).show()
                 input.setText(messageText)
@@ -117,7 +150,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun listenForMessages() {
         val query = FirebaseDatabase.getInstance().reference
-            .child("chats").child(bookingId)
+            .child("chats").child(chatRoomId)
             .limitToLast(MAX_HISTORY)
         messagesQuery = query
 
