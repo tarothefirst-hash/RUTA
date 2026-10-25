@@ -15,7 +15,13 @@ object RideshareRouteOptimizer {
         val legDistancesMeters: List<Int>,
         /** Per-leg durations, aligned 1:1 with orderedStops. */
         val legDurationsSeconds: List<Int>,
-        val polyline: List<LatLng>
+        val polyline: List<LatLng>,
+        /**
+         * Road geometry of each leg, aligned 1:1 with orderedStops (index i is the
+         * travel INTO stop i; index 0 is empty). Lets the map colour each part of a
+         * shared route by who is onboard. Empty when the geometry is unavailable.
+         */
+        val legPolylines: List<List<LatLng>> = emptyList()
     )
 
     /**
@@ -70,6 +76,7 @@ object RideshareRouteOptimizer {
             val legs = routes.getJSONObject(0).getJSONArray("legs")
             val legDistances = mutableListOf<Int>()
             val legDurations = mutableListOf<Int>()
+            val legGeometry = mutableListOf<List<LatLng>>()
             var totalDistance = 0
             var totalDuration = 0
 
@@ -79,6 +86,7 @@ object RideshareRouteOptimizer {
                 val t = leg.getJSONObject("duration").getInt("value")
                 legDistances.add(d)
                 legDurations.add(t)
+                legGeometry.add(decodeLeg(leg))
                 totalDistance += d
                 totalDuration += t
             }
@@ -88,6 +96,7 @@ object RideshareRouteOptimizer {
             // splitter walks stops and legs together and relies on that alignment.
             legDistances.add(0, 0)
             legDurations.add(0, 0)
+            legGeometry.add(0, emptyList())
 
             SequencedRoute(
                 orderedStops = stops,
@@ -95,12 +104,24 @@ object RideshareRouteOptimizer {
                 totalDurationSeconds = totalDuration,
                 legDistancesMeters = legDistances,
                 legDurationsSeconds = legDurations,
-                polyline = DirectionsHelper.parseDirections(json)
+                polyline = DirectionsHelper.parseDirections(json),
+                legPolylines = legGeometry
             )
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
+    }
+
+    /** Joins the step-by-step road geometry of one Directions leg into a single line. */
+    private fun decodeLeg(leg: JSONObject): List<LatLng> {
+        val points = ArrayList<LatLng>()
+        val steps = leg.optJSONArray("steps") ?: return points
+        for (i in 0 until steps.length()) {
+            val encoded = steps.getJSONObject(i).optJSONObject("polyline")?.optString("points").orEmpty()
+            if (encoded.isNotEmpty()) points.addAll(DirectionsHelper.decodePolyline(encoded))
+        }
+        return points
     }
 
     /**

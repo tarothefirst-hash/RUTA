@@ -62,7 +62,7 @@ object DirectionsHelper {
     }
 
     // Decodes Google's encoded polyline string format
-    private fun decodePolyline(encoded: String): List<LatLng> {
+    fun decodePolyline(encoded: String): List<LatLng> {
         val poly = ArrayList<LatLng>()
         var index = 0
         val len = encoded.length

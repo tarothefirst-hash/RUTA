@@ -4,6 +4,9 @@
     <color name="ruta_primary">#6D5EFC</color>
     <color name="ruta_primary_dark">#4B38E0</color>
     <color name="ruta_primary_light">#EEECFF</color>
+    <!-- Rideshare: "you" are ruta_primary (lavender), your co-passenger is blue -->
+    <color name="ruta_copassenger">#1E88E5</color>
+    <color name="ruta_route_idle">#9EA1B0</color>
     <color name="white">#FFFFFF</color>
 
     <!-- Backgrounds & Surfaces -->

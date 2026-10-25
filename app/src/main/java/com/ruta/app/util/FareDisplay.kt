@@ -42,7 +42,9 @@ object FareDisplay {
         val fareInconvenienceCredit: Double,
         val quotedFare: Double,
         val status: String,
-        val isShared: Boolean
+        val isShared: Boolean,
+        /** True once both co-passengers confirmed the match and the quote was locked. */
+        val fareLocked: Boolean = false
     )
 
     /** Display copy supplied by the caller (loaded from strings.xml). */
@@ -57,7 +59,9 @@ object FareDisplay {
         val detailFinalising: String,
         val detailAwaitingFinalShare: String,
         val detailDiscount: String,
-        val moneyFormat: String
+        val moneyFormat: String,
+        /** "Fare locked at %1$s ..." shown once a rideshare match is confirmed. Blank = not used. */
+        val detailLockedFare: String = ""
     )
 
     /**
@@ -84,6 +88,17 @@ object FareDisplay {
         return when {
             snapshot.isShared && snapshot.status == STATUS_COMPLETED ->
                 Rendered(headline = null, detail = labels.detailFinalising)
+
+            snapshot.isShared && !isTerminal && snapshot.fareLocked &&
+                snapshot.quotedFare > 0.0 && labels.detailLockedFare.isNotEmpty() ->
+                Rendered(
+                    headline = null,
+                    detail = String.format(
+                        Locale.US,
+                        labels.detailLockedFare,
+                        money(snapshot.quotedFare, labels.moneyFormat)
+                    )
+                )
 
             snapshot.isShared && !isTerminal ->
                 Rendered(
