@@ -66,12 +66,16 @@
         <activity
             android:name=".ui.driver.DriverMainActivity"
             android:exported="false"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ui.driver.DriverDocumentUploadActivity"
             android:exported="false" />
 
-        <activity android:name=".ui.PassengerHomeActivity" android:exported="false" />
+        <activity
+            android:name=".ui.PassengerHomeActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ui.AdminHomeActivity" android:exported="false" />
         <activity
             android:name=".ui.LoginActivity"

@@ -5,7 +5,15 @@ import kotlin.math.round
 object RideshareFareCalculator {
 
     const val BASE_FARE = 65.0
-    const val SHARED_BASE_FARE = BASE_FARE / 2.0 // ₱32.50 each
+
+    // Rideshare pricing (per passenger):
+    //   ₱35 base
+    //   + the legs ridden ALONE at the regular rate (₱15/km + ₱2/min)
+    //   + the legs ridden TOGETHER at the shared rate (₱7.50/km + ₱1/min)
+    // so the discount applies only to the part of the trip that is actually shared.
+    const val SHARED_BASE_FARE = 35.0
+    const val SHARED_RATE_PER_KM = 7.5
+    const val SHARED_RATE_PER_MIN = 1.0
     const val RATE_PER_KM = 15.0
     const val RATE_PER_MIN = 2.0
     private const val INCONVENIENCE_CREDIT_RATE = 0.30
@@ -29,7 +37,7 @@ object RideshareFareCalculator {
 
     /**
      * Estimates an individual passenger's shared fare before matching.
-     * Uses split Base Fare (₱32.50) + 50% distance/time cost.
+     * Indicative only (the whole trip at the shared rate); the real price is quoted when a co-passenger is matched.
      */
     fun quoteSharedFare(
         distanceMeters: Int,
@@ -37,8 +45,7 @@ object RideshareFareCalculator {
         surgeMultiplier: Double = 1.0,
         hasDiscount: Boolean = false
     ): Double {
-        val distanceAndTimeCost = cost(distanceMeters, durationSeconds)
-        val subtotal = SHARED_BASE_FARE + (distanceAndTimeCost * 0.50)
+        val subtotal = SHARED_BASE_FARE + sharedCost(distanceMeters, durationSeconds)
         var total = max(SHARED_BASE_FARE, subtotal) * surgeMultiplier
         if (hasDiscount) total *= 0.80 // Student/PWD discount if applicable
         return round(total)
@@ -151,7 +158,7 @@ object RideshareFareCalculator {
         val surchargeB = cost(extraForA, extraDurForA)
         val creditA = surchargeB * INCONVENIENCE_CREDIT_RATE
 
-        val sharedHalf = cost(sharedDist, sharedDur) / 2.0
+        val sharedHalf = sharedCost(sharedDist, sharedDur)
 
         val fareA = buildFare(
             bookingIdA,
@@ -185,7 +192,7 @@ object RideshareFareCalculator {
         surge: Double,
         hasDiscount: Boolean = false
     ): PassengerFare {
-        // Base fare is split 50/50 between shared riders
+        // ₱35 base + solo legs at the regular rate + shared legs at the shared rate
         val subtotal = SHARED_BASE_FARE + soloCharge + sharedCharge + surcharge - credit
         var total = max(SHARED_BASE_FARE, subtotal) * surge
         if (hasDiscount) total *= 0.80
@@ -200,6 +207,10 @@ object RideshareFareCalculator {
             total = round2(total)
         )
     }
+
+    /** What each passenger pays for [distanceMeters]/[durationSeconds] ridden together. */
+    fun sharedCost(distanceMeters: Int, durationSeconds: Int): Double =
+        (distanceMeters / 1000.0) * SHARED_RATE_PER_KM + (durationSeconds / 60.0) * SHARED_RATE_PER_MIN
 
     private fun cost(distanceMeters: Int, durationSeconds: Int): Double {
         val km = distanceMeters / 1000.0

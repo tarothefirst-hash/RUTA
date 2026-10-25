@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.ruta.app.R
+import com.ruta.app.util.hideWhileKeyboardOpen
 
 class DriverMainActivity : AppCompatActivity() {
 
@@ -13,6 +14,7 @@ class DriverMainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_driver_main)
 
         val bottomNav = findViewById<BottomNavigationView>(R.id.driverBottomNav)
+        hideWhileKeyboardOpen(findViewById(android.R.id.content), bottomNav)
 
 
         if (savedInstanceState == null) {

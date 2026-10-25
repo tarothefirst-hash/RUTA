@@ -352,7 +352,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:includeFontPadding="false"
-                            android:text="Save up to 50%"
+                            android:text="Price shown when matched"
                             android:textColor="@color/ruta_status_success"
                             android:textSize="16sp"
                             android:textStyle="bold" />

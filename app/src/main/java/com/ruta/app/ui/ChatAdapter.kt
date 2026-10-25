@@ -42,9 +42,19 @@ class ChatAdapter(
 
     class ChatViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvMessageText: TextView = itemView.findViewById(R.id.tvMessageText)
+        // Only the received layout has a name line.
+        private val tvSenderName: TextView? = itemView.findViewById(R.id.tvSenderName)
 
         fun bind(chatMessage: ChatMessage) {
             tvMessageText.text = chatMessage.message
+            tvSenderName?.let {
+                if (chatMessage.senderName.isNotBlank()) {
+                    it.text = chatMessage.senderName
+                    it.visibility = View.VISIBLE
+                } else {
+                    it.visibility = View.GONE
+                }
+            }
         }
     }
 }

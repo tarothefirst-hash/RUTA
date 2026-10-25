@@ -29,14 +29,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import com.google.firebase.storage.FirebaseStorage
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.ruta.app.R
 import com.ruta.app.util.EmergencyContactManager
-import com.ruta.app.util.keepClearOfKeyboard
+import com.ruta.app.util.ImageUtils
+import com.ruta.app.util.ProfileFields
 import java.util.UUID
 import com.ruta.app.ui.driver.DriverProfileFragment
 import com.ruta.app.ui.PortraitCaptureActivity
@@ -57,9 +57,9 @@ class ProfileFragment : Fragment() {
 
     private val currentUid = FirebaseAuth.getInstance().currentUser?.uid
     private val database: DatabaseReference = FirebaseDatabase.getInstance().reference
-    private val storage = FirebaseStorage.getInstance().reference
 
-    private var selectedImageUri: Uri? = null
+    /** A newly picked picture, already shrunk, waiting for Save. */
+    private var pendingPhotoBase64: String? = null
     private var activeQrToken: String? = null
     private var trustedContactsListener: ValueEventListener? = null
 
@@ -70,8 +70,13 @@ class ProfileFragment : Fragment() {
         if (result.resultCode == Activity.RESULT_OK) {
             val uri = result.data?.data
             if (uri != null) {
-                selectedImageUri = uri
-                imgProfile.setImageURI(uri)
+                val base64 = ImageUtils.uriToAvatarBase64(requireContext(), uri)
+                if (base64 != null && ImageUtils.showAvatar(imgProfile, base64)) {
+                    pendingPhotoBase64 = base64
+                    Toast.makeText(requireContext(), "Photo selected. Tap Save to keep it.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(requireContext(), "Couldn't read that image. Try another one.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -116,7 +121,8 @@ class ProfileFragment : Fragment() {
         btnLogout = view.findViewById(R.id.btnLogout)
         btnViewTrustedList = view.findViewById(R.id.btnViewTrustedList)
 
-        requireActivity().keepClearOfKeyboard(view)
+        // The email is the account's identity: shown, never editable.
+        etEmail.isEnabled = false
 
         if (currentUid != null) {
             generateAndDisplayDynamicQr()
@@ -233,53 +239,56 @@ class ProfileFragment : Fragment() {
     private fun loadUserProfile() {
         val uid = currentUid ?: return
         database.child("users").child(uid).get().addOnSuccessListener { snapshot ->
-            if (snapshot.exists()) {
-                etFullName.setText(snapshot.child("name").getValue(String::class.java) ?: "")
-                etPhone.setText(snapshot.child("phone").getValue(String::class.java) ?: "")
-                etEmail.setText(snapshot.child("email").getValue(String::class.java) ?: FirebaseAuth.getInstance().currentUser?.email ?: "")
-            }
+            if (_isGone() || !snapshot.exists()) return@addOnSuccessListener
+
+            // Sign-up stores firstName/lastName and phoneNumber; "name"/"phone" are the older spellings.
+            val first = snapshot.child("firstName").getValue(String::class.java).orEmpty()
+            val last = snapshot.child("lastName").getValue(String::class.java).orEmpty()
+            val fullName = "$first $last".trim()
+                .ifEmpty { snapshot.child("name").getValue(String::class.java).orEmpty() }
+            val phone = snapshot.child("phoneNumber").getValue(String::class.java)
+                ?: snapshot.child("phone").getValue(String::class.java).orEmpty()
+
+            etFullName.setText(fullName)
+            etPhone.setText(phone)
+            etEmail.setText(
+                snapshot.child("email").getValue(String::class.java)
+                    ?: FirebaseAuth.getInstance().currentUser?.email.orEmpty()
+            )
+            ImageUtils.showAvatar(imgProfile, snapshot.child("profilePhoto").getValue(String::class.java))
         }
     }
+
+    private fun _isGone() = !isAdded || view == null
 
     private fun saveUserProfile() {
         val uid = currentUid ?: return
         val name = etFullName.text.toString().trim()
         val phone = etPhone.text.toString().trim()
-        val email = etEmail.text.toString().trim()
+
+        if (!ProfileFields.isValidName(name)) {
+            etFullName.error = "Enter your full name"
+            return
+        }
+        if (!ProfileFields.isValidPhone(phone)) {
+            etPhone.error = "Enter a valid mobile number"
+            return
+        }
+
+        val updates = HashMap<String, Any>(ProfileFields.updatesFor(name, phone))
+        pendingPhotoBase64?.let { updates["profilePhoto"] = it }
 
         btnSaveProfile.isEnabled = false
-
-        if (selectedImageUri != null) {
-            val photoRef = storage.child("profile_pictures/${uid}.jpg")
-            photoRef.putFile(selectedImageUri!!).addOnSuccessListener {
-                photoRef.downloadUrl.addOnSuccessListener { photoUrl ->
-                    updateDatabaseProfile(uid, name, phone, email, photoUrl.toString())
-                }
-            }.addOnFailureListener { err ->
-                btnSaveProfile.isEnabled = true
-                Toast.makeText(requireContext(), "Failed to upload photo: ${err.message}", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            updateDatabaseProfile(uid, name, phone, email, null)
-        }
-    }
-
-    private fun updateDatabaseProfile(
-        uid: String, name: String, phone: String, email: String, photoUrl: String?
-    ) {
-        val updates = hashMapOf<String, Any>(
-            "name" to name,
-            "phone" to phone,
-            "email" to email
-        )
-        if (photoUrl != null) updates["profilePictureUrl"] = photoUrl
-
         database.child("users").child(uid).updateChildren(updates).addOnSuccessListener {
+            if (_isGone()) return@addOnSuccessListener
             btnSaveProfile.isEnabled = true
+            pendingPhotoBase64 = null
+            etPhone.setText(ProfileFields.normalizePhone(phone))
             Toast.makeText(requireContext(), "Profile updated successfully!", Toast.LENGTH_SHORT).show()
         }.addOnFailureListener {
+            if (_isGone()) return@addOnFailureListener
             btnSaveProfile.isEnabled = true
-            Toast.makeText(requireContext(), "Failed to update profile.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Failed to update profile. Check your connection.", Toast.LENGTH_SHORT).show()
         }
     }
 

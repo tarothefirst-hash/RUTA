@@ -68,7 +68,6 @@ import com.ruta.app.util.RideshareMapStyle
 import com.ruta.app.util.RideshareRouteOptimizer
 import com.ruta.app.util.RouteDeviationManager
 import com.ruta.app.util.WalletManager
-import com.ruta.app.util.keepClearOfKeyboard
 import java.util.Locale
 import java.util.concurrent.Executors
 import com.google.firebase.database.MutableData
@@ -192,7 +191,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         auth = FirebaseAuth.getInstance()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
         WindowCompat.setDecorFitsSystemWindows(requireActivity().window, false)
-        requireActivity().keepClearOfKeyboard(view)
 
         val mapFragment = childFragmentManager.findFragmentById(R.id.driverMap) as SupportMapFragment?
         mapFragment?.getMapAsync(this)
@@ -2178,46 +2176,89 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
                     if (noShowHandling && !finishedTripGroupId.isNullOrEmpty()) return
 
-                    if (status == "CANCELLED") {
-                        val reason = snapshot.child("cancelReason").getValue(String::class.java)
-                        val msg = if (reason == NoShowManager.REASON_NO_SHOW) {
-                            "No-show recorded. You'll be credited in your wallet."
-                        } else {
-                            "Passenger cancelled the ride request."
+                    // Dropping off (or losing) ONE passenger of a shared trip must not end the
+                    // whole trip: the other passenger is still in the car. Only reset the screen
+                    // once every booking in the group is finished.
+                    val teardown: () -> Unit = {
+
+                        if (status == "CANCELLED") {
+                            val reason = snapshot.child("cancelReason").getValue(String::class.java)
+                            val msg = if (reason == NoShowManager.REASON_NO_SHOW) {
+                                "No-show recorded. You'll be credited in your wallet."
+                            } else {
+                                "Passenger cancelled the ride request."
+                            }
+                            context?.let { Toast.makeText(it, msg, Toast.LENGTH_LONG).show() }
                         }
-                        context?.let { Toast.makeText(it, msg, Toast.LENGTH_LONG).show() }
+
+                        stopListeningForRequests()
+                        clearRouteAndMarkers()
+                        val finishedBookingId = activeBookingId
+                        activeBookingId = null
+
+                        if (finishedBookingId != null) {
+                            if (finishedTripGroupId.isNullOrEmpty()) {
+                                RouteDeviationManager.clearTripDeviationState(finishedBookingId)
+                            } else {
+                                database.child("bookings").orderByChild("tripGroupId").equalTo(finishedTripGroupId)
+                                    .addListenerForSingleValueEvent(object : ValueEventListener {
+                                        override fun onDataChange(groupSnapshot: DataSnapshot) {
+                                            val activeBookingsExist = groupSnapshot.children.any { child ->
+                                                val childStatus = child.child("status").getValue(String::class.java)
+                                                childStatus != "COMPLETED" && childStatus != "CANCELLED"
+                                            }
+
+                                            if (!activeBookingsExist) {
+                                                RouteDeviationManager.clearTripDeviationState(finishedBookingId)
+                                            }
+                                        }
+
+                                        override fun onCancelled(error: DatabaseError) {}
+                                    })
+                            }
+                        }
+
+                        currentBooking = null
+                        updateUIForState(DriverRideState.IDLE)
+                        listenForPendingRideRequests()
                     }
 
-                    stopListeningForRequests()
-                    clearRouteAndMarkers()
-                    val finishedBookingId = activeBookingId
-                    activeBookingId = null
+                    if (finishedTripGroupId.isNullOrEmpty()) {
+                        teardown()
+                        return
+                    }
 
-                    if (finishedBookingId != null) {
-                        if (finishedTripGroupId.isNullOrEmpty()) {
-                            RouteDeviationManager.clearTripDeviationState(finishedBookingId)
-                        } else {
-                            database.child("bookings").orderByChild("tripGroupId").equalTo(finishedTripGroupId)
-                                .addListenerForSingleValueEvent(object : ValueEventListener {
-                                    override fun onDataChange(groupSnapshot: DataSnapshot) {
-                                        val activeBookingsExist = groupSnapshot.children.any { child ->
-                                            val childStatus = child.child("status").getValue(String::class.java)
-                                            childStatus != "COMPLETED" && childStatus != "CANCELLED"
-                                        }
+                    database.child("bookings").orderByChild("tripGroupId").equalTo(finishedTripGroupId)
+                        .addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(groupSnap: DataSnapshot) {
+                                if (_binding == null || !isAdded) return
+                                val othersStillActive = groupSnap.children.any { child ->
+                                    val childStatus = child.child("status").getValue(String::class.java)
+                                    child.key != bookingId && childStatus != "COMPLETED" && childStatus != "CANCELLED"
+                                }
 
-                                        if (!activeBookingsExist) {
-                                            RouteDeviationManager.clearTripDeviationState(finishedBookingId)
-                                        }
+                                if (!othersStillActive) {
+                                    teardown()
+                                    return
+                                }
+
+                                // Keep going with the remaining passenger(s).
+                                if (status == "CANCELLED") {
+                                    context?.let {
+                                        Toast.makeText(it, "A passenger cancelled. Continuing with the other passenger.", Toast.LENGTH_LONG).show()
                                     }
+                                    loadGroupStopsLocally(finishedTripGroupId) { rebuilt ->
+                                        currentGroupStops = rebuilt
+                                        currentStopIndex = 0
+                                        updateCardForCurrentStop()
+                                        if (rebuilt.isNotEmpty()) drawGroupRoutePreviewOnly(rebuilt)
+                                    }
+                                }
+                                // COMPLETED: the shared-stop flow (advanceToNextStop) carries on by itself.
+                            }
 
-                                    override fun onCancelled(error: DatabaseError) {}
-                                })
-                        }
-                    }
-
-                    currentBooking = null
-                    updateUIForState(DriverRideState.IDLE)
-                    listenForPendingRideRequests()
+                            override fun onCancelled(error: DatabaseError) {}
+                        })
                 }
             }
 
