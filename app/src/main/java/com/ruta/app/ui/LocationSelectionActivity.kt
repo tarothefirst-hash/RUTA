@@ -55,6 +55,7 @@ import com.ruta.app.util.FareDisplay
 import com.ruta.app.util.MapsApi
 import com.ruta.app.util.RideshareFareCalculator
 import com.ruta.app.util.RideshareFlowManager
+import com.ruta.app.util.RideshareNotifier
 import com.ruta.app.util.RideshareManager
 import com.ruta.app.util.RideshareRouteOptimizer
 import com.ruta.app.util.RouteDeviationWatcher
@@ -134,6 +135,11 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private var deviationWatcher: RouteDeviationWatcher? = null
     private var rideshareFlow: RideshareFlowManager? = null
+    private var rideshareUi: RideshareMatchUi? = null
+    private var rideshareOverlay: RideshareMapOverlay? = null
+    private var inForeground = false
+    private var pendingSoloFare = 0.0
+    private var pendingSoloBefore = 0.0
 
     // Ride/location trackers attached for the active booking. Held in fields so
     // they can be detached in onDestroy and stop updating once the screen is gone.
@@ -342,7 +348,6 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             when (status) {
                 "MATCHING" -> {
                     updateSearchingUi(true)
-                    btnConfirmStage.text = "Matching co-passenger..."
 
                     val pLat = snapshot.child("pickupLat").getValue(Double::class.java) ?: 0.0
                     val pLng = snapshot.child("pickupLng").getValue(Double::class.java) ?: 0.0
@@ -350,33 +355,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     val dLng = snapshot.child("dropoffLng").getValue(Double::class.java) ?: 0.0
                     val passengerId = snapshot.child("passengerId").getValue(String::class.java) ?: ""
 
-                    rideshareFlow = RideshareFlowManager(
-                        myBookingId = bookingId,
-                        myPassengerId = passengerId,
-                        myPickup = LatLng(pLat, pLng),
-                        myDropoff = LatLng(dLat, dLng),
-                        apiKey = placesApiKey
-                    ) { state ->
-                        runOnUiThread {
-                            when (state) {
-                                RideshareFlowManager.RideshareState.SEARCHING_FOR_CO_PASSENGER -> {
-                                    updateSearchingUi(true)
-                                    btnConfirmStage.text = "Matching co-passenger..."
-                                }
-                                RideshareFlowManager.RideshareState.MATCHED -> {
-                                    Toast.makeText(this, "Co-passenger found! Searching for driver...", Toast.LENGTH_SHORT).show()
-                                    updateSearchingUi(true)
-                                    btnConfirmStage.text = "Searching for driver..."
-                                }
-                                RideshareFlowManager.RideshareState.NO_MATCH_PROCEEDING_SOLO -> {
-                                    Toast.makeText(this, "No co-passenger found — booking as a solo ride.", Toast.LENGTH_LONG).show()
-                                    updateSearchingUi(true)
-                                    btnConfirmStage.text = "Searching for driver..."
-                                }
-                            }
-                        }
-                    }
-                    rideshareFlow?.start()
+                    startRideshareFlow(bookingId, passengerId, LatLng(pLat, pLng), LatLng(dLat, dLng))
                 }
                 "MATCHED", "REQUESTED", "SEARCHING" -> {
                     updateSearchingUi(true)
@@ -567,10 +546,26 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 quotedFare = snapshot.child("fare").getValue(Double::class.java) ?: 0.0,
                 status = status,
-                isShared = isShared
+                isShared = isShared,
+                fareLocked = snapshot.child("fareLocked").getValue(Boolean::class.java) ?: false
             ),
             fareDisplayLabels()
         )
+
+        // Once the match is confirmed the passenger's price is fixed: say so on the
+        // banner instead of leaving the pre-match estimate there.
+        val lockedFare = snapshot.child("fare").getValue(Double::class.java) ?: 0.0
+        if (isShared && status !in listOf("COMPLETED", "CANCELLED") &&
+            (snapshot.child("fareLocked").getValue(Boolean::class.java) ?: false) &&
+            lockedFare > 0.0 &&
+            (snapshot.child("finalFare").getValue(Double::class.java) ?: 0.0) <= 0.0
+        ) {
+            findViewById<MaterialCardView>(R.id.cardFareDetails)?.visibility = View.VISIBLE
+            findViewById<TextView>(R.id.txtUserFare)?.text =
+                String.format(Locale.getDefault(), "Your Fare: ₱%.2f", lockedFare)
+            findViewById<TextView>(R.id.txtTripCalculation)?.text = getString(R.string.fare_banner_locked_note)
+            settledFinalFareShown = true
+        }
 
         rendered.headline?.let { findViewById<TextView>(R.id.txtUserFare)?.text = it }
         if (rendered.headline != null) settledFinalFareShown = true
@@ -596,7 +591,8 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         detailAdjustedFrom = getString(R.string.fare_detail_adjusted_from),
         detailFinalising = getString(R.string.fare_detail_finalising),
         detailAwaitingFinalShare = getString(R.string.fare_detail_awaiting_final_share),
-        moneyFormat = getString(R.string.fare_money_format)
+        moneyFormat = getString(R.string.fare_money_format),
+        detailLockedFare = getString(R.string.fare_detail_locked)
     )
 
     private fun fetchPlaceSuggestions(query: String) {
@@ -796,7 +792,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                             PolylineOptions()
                                 .addAll(routePoints)
                                 .width(14f)
-                                .color(Color.parseColor("#A855F7"))
+                                .color(ContextCompat.getColor(this@LocationSelectionActivity, R.color.ruta_primary))
                                 .startCap(RoundCap())
                                 .endCap(RoundCap())
                                 .geodesic(true)
@@ -940,37 +936,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             initialStatus = "MATCHING"
         ) { bookingId ->
             updateSearchingUi(true)
-            btnConfirmStage.text = "Matching co-passenger..."
-
-            rideshareFlow = RideshareFlowManager(
-                myBookingId = bookingId,
-                myPassengerId = userId,
-                myPickup = pickup,
-                myDropoff = dropoff,
-                apiKey = placesApiKey,
-                maxPickupMinutesApart = 10.0,
-                maxDropoffMinutesApart = 10.0
-            ) { state ->
-                runOnUiThread {
-                    when (state) {
-                        RideshareFlowManager.RideshareState.SEARCHING_FOR_CO_PASSENGER -> {
-                            updateSearchingUi(true)
-                            btnConfirmStage.text = "Matching co-passenger..."
-                        }
-                        RideshareFlowManager.RideshareState.MATCHED -> {
-                            Toast.makeText(this, "Co-passenger found! Searching for driver...", Toast.LENGTH_SHORT).show()
-                            updateSearchingUi(true)
-                            btnConfirmStage.text = "Searching for driver..."
-                        }
-                        RideshareFlowManager.RideshareState.NO_MATCH_PROCEEDING_SOLO -> {
-                            Toast.makeText(this, "No co-passenger found — booking as a solo ride.", Toast.LENGTH_LONG).show()
-                            updateSearchingUi(true)
-                            btnConfirmStage.text = "Searching for driver..."
-                        }
-                    }
-                }
-            }
-            rideshareFlow?.start()
+            startRideshareFlow(bookingId, userId, pickup, dropoff)
         }
     }
 
@@ -1139,10 +1105,10 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         cardDriverInfo.visibility = View.GONE
                         btnConfirmStage.visibility = View.VISIBLE
                         updateSearchingUi(true)
-                        btnConfirmStage.text = "Matching co-passenger..."
+                        // The text is owned by the rideshare countdown (RideshareMatchUi).
                         btnConfirmStage.setBackgroundColor(Color.parseColor("#9E9E9E"))
                     }
-                    "REQUESTED", "SEARCHING" -> {
+                    "MATCHED", "REQUESTED", "SEARCHING" -> {
                         cardDriverInfo.visibility = View.GONE
                         btnConfirmStage.visibility = View.VISIBLE
                         updateSearchingUi(true)
@@ -1150,6 +1116,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
                         if (isShared && !tripGroupId.isNullOrEmpty()) {
                             showCoPassengerNameOnce(tripGroupId, bookingId)
+                            drawGroupRouteForPassenger(tripGroupId, null, null)
                         } else if (isShared) {
                             btnConfirmStage.text = "Searching for driver (Solo)..."
                         } else {
@@ -1259,10 +1226,18 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
             })
     }
 
+    /**
+     * Draws the matched trip: the driver's route coloured per passenger (you =
+     * lavender, co-passenger = blue, both = blue under lavender) with labeled pins.
+     * Before a driver has accepted there is no driver position, so the route starts
+     * at the first stop.
+     */
     private fun drawGroupRouteForPassenger(tripGroupId: String, driverLat: Double?, driverLng: Double?) {
-        if (driverLat == null || driverLng == null || driverLat == 0.0 || driverLng == 0.0) return
-        if (groupRouteGroupId == tripGroupId) return
-        groupRouteGroupId = tripGroupId
+        val driverKnown = driverLat != null && driverLng != null && driverLat != 0.0 && driverLng != 0.0
+        val drawKey = "$tripGroupId|$driverKnown"
+        if (groupRouteGroupId == drawKey) return
+        groupRouteGroupId = drawKey
+        val myBookingId = currentRequestId ?: return
 
         database.child("tripGroups").child(tripGroupId).get().addOnSuccessListener { snap ->
             val stops = snap.child("stopOrder").children.mapNotNull { s ->
@@ -1281,45 +1256,221 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                 return@addOnSuccessListener
             }
 
-            stops.forEachIndexed { i, stop ->
-                val isPickup = stop.type == RideshareManager.StopType.PICKUP
-                mMap.addMarker(
-                    MarkerOptions()
-                        .position(stop.location)
-                        .title("${i + 1}. ${if (isPickup) "Pickup" else "Dropoff"}")
-                        .icon(BitmapDescriptorFactory.defaultMarker(
-                            if (isPickup) BitmapDescriptorFactory.HUE_GREEN else BitmapDescriptorFactory.HUE_RED
-                        ))
-                )
+            database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(bookings: DataSnapshot) {
+                        val partnerName = bookings.children
+                            .firstOrNull { it.key != myBookingId }
+                            ?.child("passengerName")?.getValue(String::class.java)
+
+                        val origin = if (driverKnown) LatLng(driverLat!!, driverLng!!) else stops.first().location
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val fullRoute = RideshareRouteOptimizer.buildFinalDriverRoute(
+                                origin, stops, placesApiKey
+                            ) ?: return@launch
+
+                            withContext(Dispatchers.Main) {
+                                if (isDestroyed) return@withContext
+                                // The single-colour solo line is replaced by the per-passenger route.
+                                currentPolyline?.remove()
+                                currentPolyline = null
+                                routePolyline = null
+                                passengerPolylinePoints = mutableListOf()
+                                setOwnPinsHidden(true)
+                                rideshareOverlay().showGroupRoute(fullRoute, myBookingId, partnerName)
+                            }
+                        }
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Rideshare matching: search timer, co-passenger confirm, solo fallback
+    // ------------------------------------------------------------------
+
+    /** The plain booking pins hide while the labeled per-passenger pins are on the map. */
+    private fun setOwnPinsHidden(hidden: Boolean) {
+        listOf(pickupMarker, dropoffMarker, passengerPickupMarker, passengerDropoffMarker)
+            .forEach { it?.isVisible = !hidden }
+    }
+
+    private fun rideshareOverlay(): RideshareMapOverlay =
+        rideshareOverlay ?: RideshareMapOverlay(this, mMap, lifecycleScope, placesApiKey)
+            .also { rideshareOverlay = it }
+
+    private fun startRideshareFlow(bookingId: String, passengerId: String, pickup: LatLng, dropoff: LatLng) {
+        rideshareFlow?.stop()
+        rideshareUi?.dismissAll()
+
+        rideshareUi = RideshareMatchUi(this, btnConfirmStage, object : RideshareMatchUi.Callbacks {
+            override fun onConfirmMatch() { rideshareFlow?.confirmMatch() }
+            override fun onDeclineMatch() { rideshareFlow?.declineMatch() }
+            override fun onWantsSolo() { showSoloSummary(bookingId) }
+            override fun onKeepSearching() { rideshareFlow?.keepSearching() }
+            override fun onConfirmSolo() { confirmSolo() }
+        })
+
+        rideshareFlow = RideshareFlowManager(
+            myBookingId = bookingId,
+            myPassengerId = passengerId,
+            myPickup = pickup,
+            myDropoff = dropoff,
+            apiKey = placesApiKey
+        ) { event -> runOnUiThread { handleRideshareEvent(event, bookingId, pickup, dropoff) } }
+        rideshareFlow?.start()
+    }
+
+    private fun handleRideshareEvent(
+        event: RideshareFlowManager.Event,
+        bookingId: String,
+        pickup: LatLng,
+        dropoff: LatLng
+    ) {
+        if (isFinishing || isDestroyed) return
+        val ui = rideshareUi ?: return
+
+        when (event) {
+            is RideshareFlowManager.Event.Searching -> {
+                updateSearchingUi(true)
+                rideshareOverlay?.clear()
+                setOwnPinsHidden(false)
+                RideshareNotifier.cancel(this, RideshareNotifier.ID_MATCH_FOUND)
+                ui.onSearching(event.expiresAtLocalMs)
             }
-
-            lifecycleScope.launch(Dispatchers.IO) {
-                val fullRoute = RideshareRouteOptimizer.buildFinalDriverRoute(
-                    LatLng(driverLat, driverLng), stops, placesApiKey
-                ) ?: return@launch
-
-                withContext(Dispatchers.Main) {
-                    currentPolyline?.remove()
-
-                    passengerPolylinePoints = fullRoute.polyline.toMutableList()
-
-                    currentPolyline = mMap.addPolyline(
-                        PolylineOptions()
-                            .addAll(fullRoute.polyline)
-                            .width(12f)
-                            .color(Color.parseColor("#A855F7"))
-                            .geodesic(true)
+            is RideshareFlowManager.Event.ProposalReady -> {
+                ui.onProposalReady(event.proposal)
+                setOwnPinsHidden(true)
+                rideshareOverlay().showProposal(event.proposal, pickup, dropoff)
+                if (!inForeground) {
+                    RideshareNotifier.notify(
+                        this,
+                        RideshareNotifier.ID_MATCH_FOUND,
+                        getString(R.string.notif_match_found_title),
+                        getString(R.string.notif_match_found_text),
+                        bookingId
                     )
-                    routePolyline = currentPolyline
+                }
+            }
+            is RideshareFlowManager.Event.ProposalEnded -> {
+                rideshareOverlay?.clear()
+                setOwnPinsHidden(false)
+                RideshareNotifier.cancel(this, RideshareNotifier.ID_MATCH_FOUND)
+                ui.onProposalEnded(event.reason)
+            }
+            is RideshareFlowManager.Event.Matched -> {
+                ui.dismissAll()
+                rideshareOverlay?.clear()
+                setOwnPinsHidden(true) // the matched route is drawn with its own labeled pins
+                RideshareNotifier.cancel(this, RideshareNotifier.ID_MATCH_FOUND)
+                Toast.makeText(this, R.string.match_confirmed_toast, Toast.LENGTH_SHORT).show()
+                btnConfirmStage.text = "Searching for driver..."
+                rideshareFlow?.stop()
+                rideshareFlow = null
+            }
+            RideshareFlowManager.Event.SearchExpired -> {
+                ui.onSearchExpired()
+                if (!inForeground) {
+                    RideshareNotifier.notify(
+                        this,
+                        RideshareNotifier.ID_NO_MATCH,
+                        getString(R.string.no_copassenger_title),
+                        getString(R.string.no_copassenger_message),
+                        bookingId
+                    )
+                }
+            }
+            RideshareFlowManager.Event.SwitchedToSolo -> {
+                ui.dismissAll()
+                rideshareOverlay?.clear()
+                setOwnPinsHidden(false)
+                RideshareNotifier.cancel(this, RideshareNotifier.ID_NO_MATCH)
+                btnConfirmStage.text = "Searching for driver (Solo)..."
+                rideshareFlow?.stop()
+                rideshareFlow = null
+            }
+            RideshareFlowManager.Event.BookingEnded -> {
+                ui.dismissAll()
+                rideshareOverlay?.clear()
+                rideshareFlow?.stop()
+                rideshareFlow = null
+            }
+        }
+    }
+
+    /** Solo price from the booking itself, so nobody retypes a location. */
+    private fun showSoloSummary(bookingId: String) {
+        RideshareNotifier.cancel(this, RideshareNotifier.ID_NO_MATCH)
+        database.child("bookings").child(bookingId).get().addOnSuccessListener { snap ->
+            if (isFinishing || isDestroyed) return@addOnSuccessListener
+            val dist = snap.child("distanceMeters").getValue(Int::class.java) ?: routeDistanceMeters
+            val dur = snap.child("durationSeconds").getValue(Int::class.java) ?: routeDurationSeconds
+            val surge = snap.child("surgeMultiplier").getValue(Double::class.java) ?: currentSurgeMultiplier
+            val hasDiscount = snap.child("hasDiscount").getValue(Boolean::class.java) ?: currentUserHasDiscount
+
+            val before = calculateExactFare(dist, dur, surge, applyDiscount = false)
+            val fare = calculateExactFare(dist, dur, surge, applyDiscount = hasDiscount)
+            pendingSoloFare = fare
+            pendingSoloBefore = before
+
+            rideshareUi?.showSoloSummary(
+                RideshareMatchUi.SoloSummary(
+                    pickupAddress = snap.child("pickupAddress").getValue(String::class.java) ?: pickupAddress,
+                    dropoffAddress = snap.child("dropoffAddress").getValue(String::class.java) ?: dropoffAddress,
+                    distanceKm = dist / 1000.0,
+                    durationMin = dur / 60,
+                    fare = fare,
+                    discountAmount = (before - fare).coerceAtLeast(0.0)
+                )
+            )
+        }.addOnFailureListener {
+            rideshareUi?.onSoloSwitchFailed()
+        }
+    }
+
+    private fun confirmSolo() {
+        val fare = pendingSoloFare
+        val before = pendingSoloBefore
+        rideshareFlow?.switchToSolo(fare, before, (before - fare).coerceAtLeast(0.0)) { ok ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (ok) {
+                    rideshareUi?.dismissAll()
+                    currentDiscountAmount = (before - fare).coerceAtLeast(0.0)
+                    currentFareBeforeDiscount = before
+                    activeBookingIsShared = false
+                    settledFinalFareShown = false
+                    updateFareBanner(fare, isRideshare = false)
+                    btnConfirmStage.text = "Searching for driver (Solo)..."
+                } else {
+                    rideshareUi?.onSoloSwitchFailed()
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        inForeground = true
+        RideshareNotifier.cancel(this, RideshareNotifier.ID_MATCH_FOUND)
+        RideshareNotifier.cancel(this, RideshareNotifier.ID_NO_MATCH)
+    }
+
+    override fun onPause() {
+        inForeground = false
+        super.onPause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         rideshareFlow?.stop()
         rideshareFlow = null
+        rideshareUi?.dismissAll()
+        rideshareUi = null
+        rideshareOverlay?.clear()
+        rideshareOverlay = null
         stopPassengerLocationUpdates()
         deviationWatcher?.stop()
         detachRideTrackingListeners()

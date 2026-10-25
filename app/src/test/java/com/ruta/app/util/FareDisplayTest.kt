@@ -28,6 +28,7 @@ class FareDisplayTest {
         detailAdjustedFrom = "Adjusted from earlier estimate %1\$s",
         detailFinalising = "Final fare is being finalised…",
         detailAwaitingFinalShare = "Final share is set when the trip ends • estimated %1\$s",
+        detailDiscount = "Discount -%1\$s",
         moneyFormat = "₱%1\$.2f"
     )
 
@@ -290,5 +291,53 @@ class FareDisplayTest {
 
         assertEquals("Base ₱45.00 + Your ride ₱10.00", rendered.detail)
         assertTrue("a present base must be shown '${rendered.detail}'", rendered.detail!!.contains("Base ₱45.00"))
+    }
+
+    private val lockedLabels = labels.copy(detailLockedFare = "Fare locked at %1\$s — the price you confirmed")
+
+    // A confirmed rideshare match: the quote is locked, so the card says so instead of
+    // the old "estimated" wording.
+    @Test
+    fun lockedSharedFare_showsLockedPriceInsteadOfEstimate() {
+        val rendered = FareDisplay.render(
+            FareDisplay.Snapshot(
+                finalFare = 0.0, fareBase = 0.0, fareSoloCharge = 0.0, fareSharedCharge = 0.0,
+                fareDetourSurcharge = 0.0, fareInconvenienceCredit = 0.0,
+                quotedFare = 96.50, status = "MATCHED", isShared = true, fareLocked = true
+            ),
+            lockedLabels
+        )
+        assertNull(rendered.headline)
+        assertEquals("Fare locked at ₱96.50 — the price you confirmed", rendered.detail)
+    }
+
+    @Test
+    fun unlockedSharedFare_keepsTheEstimateWording() {
+        val rendered = FareDisplay.render(
+            FareDisplay.Snapshot(
+                finalFare = 0.0, fareBase = 0.0, fareSoloCharge = 0.0, fareSharedCharge = 0.0,
+                fareDetourSurcharge = 0.0, fareInconvenienceCredit = 0.0,
+                quotedFare = 96.50, status = "ACCEPTED", isShared = true, fareLocked = false
+            ),
+            lockedLabels
+        )
+        assertEquals(
+            String.format(java.util.Locale.US, labels.detailAwaitingFinalShare, "₱96.50"),
+            rendered.detail
+        )
+    }
+
+    // Labels without the new text (older callers) behave exactly as before.
+    @Test
+    fun lockedFlagWithoutLockedLabel_fallsBackToEstimateWording() {
+        val rendered = FareDisplay.render(
+            FareDisplay.Snapshot(
+                finalFare = 0.0, fareBase = 0.0, fareSoloCharge = 0.0, fareSharedCharge = 0.0,
+                fareDetourSurcharge = 0.0, fareInconvenienceCredit = 0.0,
+                quotedFare = 96.50, status = "ACCEPTED", isShared = true, fareLocked = true
+            ),
+            labels
+        )
+        assertTrue(rendered.detail!!.contains("estimated"))
     }
 }

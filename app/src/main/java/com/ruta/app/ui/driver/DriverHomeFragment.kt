@@ -49,6 +49,7 @@ import com.ruta.app.util.MapMarkerUtils
 import com.ruta.app.util.MapsApi
 import com.ruta.app.util.RideshareFareCalculator
 import com.ruta.app.util.RideshareManager
+import com.ruta.app.util.RideshareMapStyle
 import com.ruta.app.util.RideshareRouteOptimizer
 import com.ruta.app.util.RouteDeviationManager
 import com.ruta.app.util.WalletManager
@@ -92,6 +93,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private var dropoffMarker: Marker? = null
 
     private var activePolyline: Polyline? = null
+    /** bookingId -> passenger name for the shared trip on screen, for map pin captions. */
+    private val groupPassengerNames = mutableMapOf<String, String>()
     private var rawRoutePoints: List<LatLng> = emptyList()
 
     private var currentLatLng: LatLng? = null
@@ -1109,15 +1112,51 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         )
                     }
                     val anchor = currentLatLng ?: candidates.first().pickup
-                    val sequencedStops = RideshareManager.Sequencer.sequenceStops(anchor, candidates)
-
                     val bookingsMap = group.associateBy { it.bookingId }
-                    syncSequenceToFirebase(tripGroupId, sequencedStops, bookingsMap)
+                    group.forEach { groupPassengerNames[it.bookingId] = it.passengerName }
 
-                    onReady(sequencedStops)
+                    // A confirmed rideshare match carries the stop order its fare was
+                    // quoted on. Drive that order, so the route the driver follows is the
+                    // route the passengers were quoted. Anything that does not line up
+                    // exactly (older groups, a passenger already dropped off) keeps the
+                    // original sequencing.
+                    database.child("tripGroups").child(tripGroupId).child("stopOrder").get()
+                        .addOnCompleteListener { orderTask ->
+                            val locked = if (orderTask.isSuccessful) lockedStops(orderTask.result, bookingsMap.keys) else null
+                            val sequencedStops = locked
+                                ?: RideshareManager.Sequencer.sequenceStops(anchor, candidates)
+
+                            syncSequenceToFirebase(tripGroupId, sequencedStops, bookingsMap)
+                            onReady(sequencedStops)
+                        }
                 }
                 override fun onCancelled(error: DatabaseError) {}
             })
+    }
+
+    /** The stored stop order if it covers exactly the bookings still in the group, else null. */
+    private fun lockedStops(
+        stopOrder: DataSnapshot,
+        remainingBookingIds: Set<String>
+    ): List<RideshareManager.RideshareStop>? {
+        val stops = stopOrder.children.mapNotNull { st ->
+            RideshareManager.RideshareStop(
+                bookingId = st.child("bookingId").getValue(String::class.java) ?: return@mapNotNull null,
+                type = try {
+                    RideshareManager.StopType.valueOf(st.child("type").getValue(String::class.java) ?: return@mapNotNull null)
+                } catch (e: IllegalArgumentException) {
+                    return@mapNotNull null
+                },
+                location = LatLng(
+                    st.child("lat").getValue(Double::class.java) ?: return@mapNotNull null,
+                    st.child("lng").getValue(Double::class.java) ?: return@mapNotNull null
+                )
+            )
+        }
+        if (stops.isEmpty()) return null
+        if (stops.size != remainingBookingIds.size * 2) return null
+        if (stops.map { it.bookingId }.toSet() != remainingBookingIds) return null
+        return stops
     }
 
     private fun syncSequenceToFirebase(
@@ -1158,32 +1197,55 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     driverMarker = null
                 }
 
+                // One colour per passenger, matching the passenger's own screen: the
+                // lower booking id is lavender, the other is blue (shared legs show both).
+                val riderIds = stops.map { it.bookingId }.distinct().sorted()
+                val primaryId = riderIds.firstOrNull() ?: ""
+                val lavender = ContextCompat.getColor(requireContext(), R.color.ruta_primary)
+                val blue = ContextCompat.getColor(requireContext(), R.color.ruta_copassenger)
+                val idle = ContextCompat.getColor(requireContext(), R.color.ruta_route_idle)
+
                 if (finalRoute != null) {
                     rawRoutePoints = finalRoute.polyline
                     activePolyline?.remove()
+
+                    RideshareMapStyle.drawSegmentedRoute(
+                        map = mMap,
+                        route = finalRoute,
+                        passengerIds = riderIds.toSet(),
+                        primaryBookingId = primaryId,
+                        primaryColor = lavender,
+                        secondaryColor = blue,
+                        idleColor = idle
+                    )
+
+                    // Invisible full-route line: the live "trim behind the driver" logic
+                    // keeps working on it while the coloured legs above show the route.
                     activePolyline = mMap.addPolyline(
                         PolylineOptions()
                             .addAll(finalRoute.polyline)
-                            .width(12f)
-                            .color(ContextCompat.getColor(requireContext(), R.color.ruta_primary_dark))
+                            .width(2f)
+                            .color(Color.TRANSPARENT)
                     )
                 }
 
-                var pickupCount = 1
-                var dropoffCount = 1
-
-                stops.forEach { stop ->
+                stops.forEachIndexed { index, stop ->
                     val isPickup = stop.type == RideshareManager.StopType.PICKUP
-                    val tag = if (isPickup) "P${pickupCount++}" else "D${dropoffCount++}"
-                    val color = if (isPickup) Color.parseColor("#4CAF50") else Color.parseColor("#E53935")
-
+                    val first = groupPassengerNames[stop.bookingId]
+                        ?.trim()?.substringBefore(' ')?.takeIf { it.isNotBlank() } ?: "Rider"
+                    val color = if (stop.bookingId == primaryId) lavender else blue
+                    val pin = MapMarkerUtils.createPassengerPin(
+                        requireContext(), if (isPickup) "P" else "D", first, color, isDropoff = !isPickup
+                    )
                     val marker = mMap.addMarker(
                         MarkerOptions()
                             .position(stop.location)
-                            .title("$tag: ${if (isPickup) "Pickup" else "Dropoff"}")
-                            .icon(MapMarkerUtils.createNumberedMarker(requireContext(), tag, color))
+                            .title("${index + 1}. $first • ${if (isPickup) "Pickup" else "Drop-off"}")
+                            .icon(pin.icon)
+                            .anchor(0.5f, pin.anchorY)
+                            .zIndex(3f)
                     )
-                    marker?.showInfoWindow()
+                    if (index == currentStopIndex) marker?.showInfoWindow()
                 }
 
                 driverMarker = mMap.addMarker(
@@ -1457,6 +1519,17 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
     }
 
+    /** One passenger's payout, either the locked quote or a fresh calculation. */
+    private data class FareLine(
+        val bookingId: String,
+        val total: Double,
+        val base: Double,
+        val solo: Double,
+        val shared: Double,
+        val detour: Double,
+        val credit: Double
+    )
+
     private fun calculateAndSaveSharedFares(tripGroupId: String) {
         val apiKey = MapsApi.key(requireContext())
 
@@ -1469,52 +1542,87 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     val a = group[0]
                     val b = group[1]
 
-                    val candA = RideshareManager.RideshareCandidate(
-                        a.bookingId, a.passengerId,
-                        LatLng(a.pickupLat, a.pickupLng), LatLng(a.dropoffLat, a.dropoffLng)
-                    )
-                    val candB = RideshareManager.RideshareCandidate(
-                        b.bookingId, b.passengerId,
-                        LatLng(b.pickupLat, b.pickupLng), LatLng(b.dropoffLat, b.dropoffLng)
-                    )
+                    // The fare was quoted and locked when both passengers confirmed the
+                    // match (tripGroups/<id>/quote). Pay out exactly that; only fall back
+                    // to recomputing for older groups that have no stored quote.
+                    database.child("tripGroups").child(tripGroupId).child("quote").get()
+                        .addOnCompleteListener { quoteTask ->
+                            val quote = if (quoteTask.isSuccessful) quoteTask.result else null
 
-                    executor.execute {
-                        val route = RideshareRouteOptimizer.findOptimalSequence(candA, candB, apiKey) ?: return@execute
-                        val driverId = auth.currentUser?.uid ?: return@execute
-
-                        val breakdown = RideshareFareCalculator.calculate(
-                            route = route,
-                            bookingIdA = a.bookingId,
-                            bookingIdB = b.bookingId,
-                            directDistanceA = a.distanceMeters,
-                            directDurationA = a.durationSeconds,
-                            directDistanceB = b.distanceMeters,
-                            directDurationB = b.durationSeconds,
-                            surgeMultiplier = a.surgeMultiplier,
-                            hasDiscountA = false, // Shared rides are solo-discount-exempt
-                            hasDiscountB = false
-                        )
-
-                        listOf(a to breakdown.passengerA, b to breakdown.passengerB).forEach { (bookingObj, f) ->
-                            // 1. Deduct commission per passenger (hardcoded false for shared discount)
-                            WalletManager.deductCommission(database, driverId, f.total, false)
-
-                            // 2. Persist exact fare breakdown to Firebase
-                            database.child("bookings").child(f.bookingId).updateChildren(
-                                mapOf(
-                                    "finalFare" to f.total,
-                                    "fareBase" to f.baseFare,
-                                    "fareSoloCharge" to f.soloCharge,
-                                    "fareSharedCharge" to f.sharedCharge,
-                                    "fareDetourSurcharge" to f.detourSurcharge,
-                                    "fareInconvenienceCredit" to f.inconvenienceCredit,
-                                    "hasDiscount" to false,
-                                    "discountAmount" to 0.0
+                            fun locked(id: String): FareLine? {
+                                val q = quote?.child(id) ?: return null
+                                val total = q.child("total").getValue(Double::class.java) ?: return null
+                                return FareLine(
+                                    bookingId = id,
+                                    total = total,
+                                    base = q.child("base").getValue(Double::class.java) ?: 0.0,
+                                    solo = q.child("solo").getValue(Double::class.java) ?: 0.0,
+                                    shared = q.child("shared").getValue(Double::class.java) ?: 0.0,
+                                    detour = q.child("detour").getValue(Double::class.java) ?: 0.0,
+                                    credit = q.child("credit").getValue(Double::class.java) ?: 0.0
                                 )
-                            )
-                            NoShowManager.settleFeeOnCompletion(database, driverId, f.bookingId)
+                            }
+
+                            val lockedA = locked(a.bookingId)
+                            val lockedB = locked(b.bookingId)
+
+                            executor.execute {
+                                val driverId = auth.currentUser?.uid ?: return@execute
+
+                                val lines: List<FareLine> = if (lockedA != null && lockedB != null) {
+                                    listOf(lockedA, lockedB)
+                                } else {
+                                    val candA = RideshareManager.RideshareCandidate(
+                                        a.bookingId, a.passengerId,
+                                        LatLng(a.pickupLat, a.pickupLng), LatLng(a.dropoffLat, a.dropoffLng)
+                                    )
+                                    val candB = RideshareManager.RideshareCandidate(
+                                        b.bookingId, b.passengerId,
+                                        LatLng(b.pickupLat, b.pickupLng), LatLng(b.dropoffLat, b.dropoffLng)
+                                    )
+                                    val route = RideshareRouteOptimizer.findOptimalSequence(candA, candB, apiKey)
+                                        ?: return@execute
+                                    val breakdown = RideshareFareCalculator.calculate(
+                                        route = route,
+                                        bookingIdA = a.bookingId,
+                                        bookingIdB = b.bookingId,
+                                        directDistanceA = a.distanceMeters,
+                                        directDurationA = a.durationSeconds,
+                                        directDistanceB = b.distanceMeters,
+                                        directDurationB = b.durationSeconds,
+                                        surgeMultiplier = a.surgeMultiplier,
+                                        hasDiscountA = false, // Shared rides are solo-discount-exempt
+                                        hasDiscountB = false
+                                    )
+                                    listOf(breakdown.passengerA, breakdown.passengerB).map { f ->
+                                        FareLine(
+                                            f.bookingId, f.total, f.baseFare, f.soloCharge,
+                                            f.sharedCharge, f.detourSurcharge, f.inconvenienceCredit
+                                        )
+                                    }
+                                }
+
+                                lines.forEach { f ->
+                                    // 1. Deduct commission per passenger (hardcoded false for shared discount)
+                                    WalletManager.deductCommission(database, driverId, f.total, false)
+
+                                    // 2. Persist exact fare breakdown to Firebase
+                                    database.child("bookings").child(f.bookingId).updateChildren(
+                                        mapOf(
+                                            "finalFare" to f.total,
+                                            "fareBase" to f.base,
+                                            "fareSoloCharge" to f.solo,
+                                            "fareSharedCharge" to f.shared,
+                                            "fareDetourSurcharge" to f.detour,
+                                            "fareInconvenienceCredit" to f.credit,
+                                            "hasDiscount" to false,
+                                            "discountAmount" to 0.0
+                                        )
+                                    )
+                                    NoShowManager.settleFeeOnCompletion(database, driverId, f.bookingId)
+                                }
+                            }
                         }
-                    }
                 }
 
                 override fun onCancelled(error: DatabaseError) {}

@@ -43,4 +43,43 @@
     <string name="fare_detail_adjusted_from">Adjusted from earlier estimate %1$s</string>
     <string name="fare_detail_finalising">Final fare is being finalised…</string>
     <string name="fare_detail_awaiting_final_share">Final share is set when the trip ends • estimated %1$s</string>
+
+    <!-- Rideshare matching -->
+    <string name="match_title">Co-Passenger Found</string>
+    <string name="match_confirm_timer">Confirm within %1$s</string>
+    <string name="match_pickup_label">PICKUP</string>
+    <string name="match_dropoff_label">DROP-OFF</string>
+    <string name="match_you_pay">You pay</string>
+    <string name="match_co_pays">%1$s pays</string>
+    <string name="match_fare_locked_note">This fare is locked once you both confirm. The shared part of the trip is split 50/50.</string>
+    <string name="match_confirm">Confirm Passenger Match</string>
+    <string name="match_decline">Decline</string>
+    <string name="match_waiting_for">Waiting for %1$s to confirm…</string>
+    <string name="match_partner_confirmed">%1$s already confirmed.</string>
+    <string name="match_declined_by_partner">Your co-passenger declined. Looking for another one…</string>
+    <string name="match_timed_out">The match wasn\'t confirmed in time. Looking for another co-passenger…</string>
+    <string name="match_declined_by_me">Match declined. Looking for another co-passenger…</string>
+    <string name="match_failed">That match could not be set up. Looking for another co-passenger…</string>
+    <string name="match_searching_timer">Looking for a co-passenger… %1$s</string>
+    <string name="match_preparing">Co-passenger found, preparing details…</string>
+    <string name="match_booked_searching_driver">Matched with %1$s! Searching for driver…</string>
+    <string name="no_copassenger_title">No Co-Passenger available</string>
+    <string name="no_copassenger_message">Switch to Solo-Ride?</string>
+    <string name="no_copassenger_yes">Yes</string>
+    <string name="no_copassenger_no">No, keep searching</string>
+    <string name="solo_title">Solo Ride Summary</string>
+    <string name="solo_you_pay">You pay</string>
+    <string name="solo_confirm">Confirm Solo Ride</string>
+    <string name="solo_keep_searching">Keep searching for a co-passenger</string>
+    <string name="solo_fare_note_discount">Includes your %1$s discount.</string>
+    <string name="solo_switch_failed">Could not switch to a solo ride. Please try again.</string>
+    <string name="solo_switched">Switched to a solo ride. Searching for a driver…</string>
+    <string name="fare_detail_locked">Fare locked at %1$s — the price you confirmed</string>
+    <string name="notif_channel_rideshare">Rideshare matching</string>
+    <string name="notif_match_found_title">Co-passenger found</string>
+    <string name="notif_match_found_text">Confirm within 60 seconds to keep the match.</string>
+    <string name="notif_no_match_title">No Co-Passenger available</string>
+    <string name="notif_no_match_text">Switch to Solo-Ride? Tap to choose.</string>
+    <string name="match_confirmed_toast">Match confirmed! Looking for a driver…</string>
+    <string name="fare_banner_locked_note">Shared ride • price locked when you both confirmed</string>
 </resources>
