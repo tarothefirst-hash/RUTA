@@ -57,7 +57,7 @@
       ".read": "auth != null",
       ".indexOn": ["status", "passengerId", "driverId", "tripGroupId"],
       "$bookingId": {
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || data.child('passengerId').val() == auth.uid || (!data.exists() && newData.child('passengerId').val() == auth.uid) || data.child('driverId').val() == auth.uid || (root.child('users').child(auth.uid).child('role').val() == 'DRIVER' && root.child('users').child(auth.uid).child('isApproved').val() == true && !data.child('driverId').exists() && newData.child('driverId').val() == auth.uid) || data.child('status').val() == 'MATCHING')"
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || data.child('passengerId').val() == auth.uid || (!data.exists() && newData.child('passengerId').val() == auth.uid) || data.child('driverId').val() == auth.uid || (root.child('users').child(auth.uid).child('role').val() == 'DRIVER' && root.child('users').child(auth.uid).child('isApproved').val() == true && !data.child('driverId').exists() && (data.child('status').val() == 'REQUESTED' || data.child('status').val() == 'MATCHED') && newData.child('driverId').val() == auth.uid) || data.child('status').val() == 'MATCHING')"
       }
     },
 
