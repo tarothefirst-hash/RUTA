@@ -6,12 +6,21 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.location.Location
+import android.media.RingtoneManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.text.Html
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.RelativeLayout
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -34,19 +43,25 @@ import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.firebase.auth.FirebaseAuth
+import android.util.Log
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.MutableData
+import com.google.firebase.database.Transaction
 import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
 import com.ruta.app.databinding.FragmentDriverHomeBinding
+import com.ruta.app.driver.DriverLocationService
 import com.ruta.app.model.Booking
 import com.ruta.app.ui.ChatActivity
 import com.ruta.app.ui.DirectionsHelper
-import com.ruta.app.ui.LoginActivity
+import com.ruta.app.ui.TrackableTarget
+import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.MapMarkerUtils
 import com.ruta.app.util.MapsApi
+import com.ruta.app.util.NoShowManager
 import com.ruta.app.util.RideshareFareCalculator
 import com.ruta.app.util.RideshareManager
 import com.ruta.app.util.RideshareMapStyle
@@ -56,13 +71,9 @@ import com.ruta.app.util.WalletManager
 import com.ruta.app.util.keepClearOfKeyboard
 import java.util.Locale
 import java.util.concurrent.Executors
-import android.text.Html
-import android.os.Handler
-import androidx.appcompat.app.AlertDialog
 import com.google.firebase.database.MutableData
 import com.google.firebase.database.Transaction
 import com.ruta.app.util.BookingClaim
-import com.ruta.app.util.NoShowManager
 import com.ruta.app.util.PendingRequestRanker
 class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
@@ -86,11 +97,13 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private lateinit var locationCallback: LocationCallback
 
     private lateinit var database: DatabaseReference
+    private var syncOffsetMs = 0L
     private lateinit var auth: FirebaseAuth
 
     private var driverMarker: Marker? = null
     private var pickupMarker: Marker? = null
     private var dropoffMarker: Marker? = null
+    private var trackedContactMarker: Marker? = null
 
     private var activePolyline: Polyline? = null
     /** bookingId -> passenger name for the shared trip on screen, for map pin captions. */
@@ -104,6 +117,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     private var pendingRequestsListener: ValueEventListener? = null
     private var activeBookingListener: ValueEventListener? = null
+    private var alertListener: ValueEventListener? = null
 
     private var isOnline = false
     private val locationPermissionCode = 1002
@@ -112,7 +126,15 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private val declinedGroupIds = mutableSetOf<String>()
     private var wasDeviated = false
 
-    // Multi-stop shared-ride progress tracking
+    private val targetsList = mutableListOf<TrackableTarget>()
+    private var currentTargetIndex = 0
+    private var contactLocationRef: DatabaseReference? = null
+    private var contactLocationListener: ValueEventListener? = null
+    private var activeEmergencyUid: String? = null
+    private var isBlinking = false
+    private val blinkHandler = Handler(Looper.getMainLooper())
+    private var isSheetMinimized = false
+
     private var currentGroupStops: List<RideshareManager.RideshareStop> = emptyList()
     private var currentStopIndex: Int = 0
     private var arrivalHandledThisStop: Boolean = false
@@ -121,7 +143,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         override fun run() {
             val b = _binding ?: return
 
-            // Stop as soon as the booking being timed is no longer the pickup we're waiting on
             val target = currentPickupTarget()
             if (target == null || target.first != timerBookingId) {
                 stopPickupTimer()
@@ -129,9 +150,15 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
 
             val left = timerArrivedAt + NoShowManager.WAIT_MS - System.currentTimeMillis()
+
             b.txtPickupTimer.visibility = View.VISIBLE
             if (left > 0) {
-                b.txtPickupTimer.text = String.format(Locale.US, "Waiting for passenger  %d:%02d", left / 60000, (left / 1000) % 60)
+                b.txtPickupTimer.text = String.format(
+                    Locale.US,
+                    "Waiting for passenger %d:%02d",
+                    left / 60000,
+                    (left / 1000) % 60
+                )
                 b.btnReportNoShow.visibility = View.GONE
             } else {
                 b.txtPickupTimer.text = "Wait time is over"
@@ -143,6 +170,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private var timerBookingId: String? = null
     private var timerArrivedAt = 0L
     private var noShowHandling = false
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -156,6 +184,11 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         super.onViewCreated(view, savedInstanceState)
 
         database = FirebaseDatabase.getInstance().reference
+        FirebaseDatabase.getInstance().getReference(".info/serverTimeOffset")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(s: DataSnapshot) { syncOffsetMs = s.getValue(Long::class.java) ?: 0L }
+                override fun onCancelled(e: DatabaseError) {}
+            })
         auth = FirebaseAuth.getInstance()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
         WindowCompat.setDecorFitsSystemWindows(requireActivity().window, false)
@@ -167,7 +200,15 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         setupOnlineSwitch()
         setupLocationCallback()
         setupBookingActionListeners()
-   
+        setupSheetAndTargetControls()
+
+        val myUid = auth.currentUser?.uid
+        if (myUid != null) {
+            targetsList.clear()
+            targetsList.add(TrackableTarget(myUid, "Me", isSelf = true))
+            loadTrustedContacts(myUid)
+            startListeningForEmergencyAlerts(myUid)
+        }
     }
 
     override fun onResume() {
@@ -175,7 +216,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val savedOnlineState = requireContext().getSharedPreferences("DRIVER_SESSION", Context.MODE_PRIVATE)
             .getBoolean("IS_ONLINE", false)
         if (savedOnlineState) {
-            binding.switchOnline.isChecked = true
+            _binding?.switchOnline?.isChecked = true
         }
     }
 
@@ -183,6 +224,236 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         mMap = googleMap
         mMap.uiSettings.isZoomControlsEnabled = true
         checkLocationPermission()
+    }
+
+    private fun setupSheetAndTargetControls() {
+        val toggleCard = {
+            val b = _binding
+            if (b != null) {
+                isSheetMinimized = !isSheetMinimized
+                b.layoutCardContent.visibility = if (isSheetMinimized) View.GONE else View.VISIBLE
+                b.btnMinimizeCard.setImageResource(
+                    if (isSheetMinimized) android.R.drawable.arrow_up_float else android.R.drawable.arrow_down_float
+                )
+            }
+        }
+
+        binding.btnMinimizeCard.setOnClickListener { toggleCard() }
+        binding.layoutCardHeader.setOnClickListener { toggleCard() }
+
+        binding.btnMyLocation.setOnClickListener {
+            val selfIndex = targetsList.indexOfFirst { it.isSelf }
+            if (selfIndex != -1) {
+                switchTarget(selfIndex)
+            }
+            recenterMapOnCurrentState()
+        }
+
+        binding.btnPrevContact.setOnClickListener {
+            if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) {
+                Toast.makeText(context, "Locked to active ride route.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (targetsList.isNotEmpty()) {
+                val prev = if (currentTargetIndex - 1 < 0) targetsList.size - 1 else currentTargetIndex - 1
+                switchTarget(prev)
+            }
+        }
+
+        binding.btnNextContact.setOnClickListener {
+            if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) {
+                Toast.makeText(context, "Locked to active ride route.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (targetsList.isNotEmpty()) {
+                val next = (currentTargetIndex + 1) % targetsList.size
+                switchTarget(next)
+            }
+        }
+    }
+
+    private fun recenterMapOnCurrentState() {
+        if (!::mMap.isInitialized) return
+
+        if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) {
+            val curBooking = currentBooking
+            if (curBooking != null) {
+                if (currentRideState == DriverRideState.ACCEPTED) {
+                    drawDriverToPickupRoute(curBooking)
+                } else {
+                    drawDriverToDropoffRoute(curBooking)
+                }
+                return
+            }
+        }
+
+        val target = targetsList.getOrNull(currentTargetIndex)
+        if (target == null || target.isSelf) {
+            currentLatLng?.let { pos ->
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16f))
+            }
+        } else {
+            trackedContactMarker?.position?.let { pos ->
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16f))
+            }
+        }
+    }
+
+    private fun loadTrustedContacts(myUid: String) {
+        database.child("users").child(myUid).child("trustedContacts").get()
+            .addOnSuccessListener { snapshot ->
+                snapshot.children.mapNotNull { it.key }.forEach { contactUid ->
+                    if (targetsList.none { it.uid == contactUid }) {
+                        database.child("users").child(contactUid).child("name").get()
+                            .addOnSuccessListener { nameSnap ->
+                                val name = nameSnap.getValue(String::class.java)?.ifEmpty { null } ?: "Trusted Contact"
+                                targetsList.add(TrackableTarget(contactUid, name))
+                            }
+                    }
+                }
+            }
+    }
+
+    private fun switchTarget(index: Int) {
+        if (index !in targetsList.indices || !::mMap.isInitialized) return
+        currentTargetIndex = index
+        val target = targetsList[index]
+
+        _binding?.txtCurrentTargetIndicator?.text = "Pin: ${target.name}"
+        detachContactListener()
+
+        if (target.isSelf) {
+            currentLatLng?.let { pos ->
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16f))
+            }
+        } else {
+            startTrackingContactOnMap(target)
+        }
+    }
+
+    private fun startTrackingContactOnMap(target: TrackableTarget) {
+        contactLocationRef = database.child("users").child(target.uid).child("liveLocation")
+        contactLocationListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val lat = snapshot.child("lat").getValue(Double::class.java)
+                val lng = snapshot.child("lng").getValue(Double::class.java)
+
+                if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                    val pos = LatLng(lat, lng)
+                    updateContactMarkerOnMap(pos, target.name, target.uid)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        contactLocationRef?.addValueEventListener(contactLocationListener!!)
+    }
+
+    private fun updateContactMarkerOnMap(pos: LatLng, name: String, uid: String) {
+        if (!::mMap.isInitialized) return
+
+        val isEmergencyTarget = (uid == activeEmergencyUid)
+        val hue = if (isEmergencyTarget) BitmapDescriptorFactory.HUE_RED else BitmapDescriptorFactory.HUE_VIOLET
+
+        if (trackedContactMarker == null) {
+            trackedContactMarker = mMap.addMarker(
+                MarkerOptions()
+                    .position(pos)
+                    .title(if (isEmergencyTarget) "🚨 EMERGENCY: $name" else name)
+                    .icon(BitmapDescriptorFactory.defaultMarker(hue))
+            )
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16f))
+        } else {
+            trackedContactMarker?.position = pos
+            trackedContactMarker?.setIcon(BitmapDescriptorFactory.defaultMarker(hue))
+        }
+
+        if (isEmergencyTarget && !isBlinking) {
+            startBlinkingMarker()
+        }
+    }
+
+    private fun startListeningForEmergencyAlerts(myUid: String) {
+        alertListener = EmergencyContactManager.listenForIncomingAlerts(
+            database, myUid
+        ) { senderName, driverName, vehicleInfo, _, _, lat, lng ->
+            if (!isAdded) return@listenForIncomingAlerts
+
+            triggerAlertSoundAndVibration()
+            val emergencyPos = LatLng(lat, lng)
+
+            AlertDialog.Builder(requireContext())
+                .setTitle("🚨 EMERGENCY ALERT")
+                .setMessage("Distress signal received from $senderName!\nVehicle: $vehicleInfo")
+                .setCancelable(false)
+                .setPositiveButton("Focus Pin on Map") { dialog, _ ->
+                    dialog.dismiss()
+                    if (::mMap.isInitialized) {
+                        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(emergencyPos, 17f))
+                    }
+                }
+                .setNegativeButton("Dismiss", null)
+                .show()
+        }
+    }
+
+    private fun triggerAlertSoundAndVibration() {
+        val ctx = context ?: return
+        try {
+            val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val ringtone = RingtoneManager.getRingtone(ctx, notificationUri)
+            ringtone?.play()
+        } catch (_: Exception) {}
+
+        try {
+            val pattern = longArrayOf(0, 500, 200, 500)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = ctx.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator.vibrate(
+                    VibrationEffect.createWaveform(pattern, -1)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = ctx.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(pattern, -1)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun startBlinkingMarker() {
+        isBlinking = true
+        val runnable = object : Runnable {
+            var visible = true
+            override fun run() {
+                trackedContactMarker?.isVisible = visible
+                visible = !visible
+                if (isBlinking) {
+                    blinkHandler.postDelayed(this, 500)
+                }
+            }
+        }
+        blinkHandler.post(runnable)
+    }
+
+    private fun stopBlinkingMarker() {
+        isBlinking = false
+        blinkHandler.removeCallbacksAndMessages(null)
+        trackedContactMarker?.isVisible = true
+    }
+
+    private fun detachContactListener() {
+        stopBlinkingMarker()
+        contactLocationListener?.let { contactLocationRef?.removeEventListener(it) }
+        contactLocationListener = null
+        contactLocationRef = null
+        trackedContactMarker?.remove()
+        trackedContactMarker = null
     }
 
     private fun setupOnlineSwitch() {
@@ -241,7 +512,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         requireContext().getSharedPreferences("DRIVER_SESSION", Context.MODE_PRIVATE)
             .edit().putBoolean("IS_ONLINE", true).apply()
         updateDriverOnlineStatus(true)
-        binding.txtDriverStatus.text = "Status: Online"
+        _binding?.txtDriverStatus?.text = "Status: Online"
+
+        DriverLocationService.startService(requireContext())
+
         startLocationUpdates()
         checkAndRestoreActiveDriverSession()
     }
@@ -251,7 +525,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         requireContext().getSharedPreferences("DRIVER_SESSION", Context.MODE_PRIVATE)
             .edit().putBoolean("IS_ONLINE", false).apply()
         updateDriverOnlineStatus(false)
-        binding.txtDriverStatus.text = "Status: Offline"
+        _binding?.txtDriverStatus?.text = "Status: Offline"
+
+        DriverLocationService.stopService(requireContext())
+
         stopLocationUpdates()
         stopListeningForRequests()
         clearRouteAndMarkers()
@@ -259,8 +536,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         declinedBookingIds.clear()
         declinedGroupIds.clear()
     }
-
-
 
     private fun getFormattedServiceTitle(booking: Booking): String {
         val serviceType = booking.serviceType ?: ""
@@ -272,12 +547,15 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun bindPassengerInfoToView(booking: Booking, appendTitle: String = "") {
+        val b = _binding ?: return
+        if (!isAdded) return
+
         val serviceTitle = getFormattedServiceTitle(booking)
         val nameText = booking.passengerName.ifEmpty { "Passenger" }
-        binding.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText • $serviceTitle"
+        b.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText\n$serviceTitle"
 
-        binding.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
-        binding.txtDropoffLocation.text = "Dropoff: ${booking.dropoffAddress.ifEmpty { "N/A" }}"
+        b.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
+        b.txtDropoffLocation.text = "Dropoff: ${booking.dropoffAddress.ifEmpty { "N/A" }}"
 
         val finalFare = booking.fare
         val originalFare = if (booking.fareBeforeDiscount > 0.0) booking.fareBeforeDiscount else (finalFare + booking.discountAmount)
@@ -290,25 +568,24 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 finalFare,
                 booking.discountAmount
             )
-            binding.txtEstimatedFare.text = Html.fromHtml(htmlText, Html.FROM_HTML_MODE_COMPACT)
-        } else {132
-            binding.txtEstimatedFare.text = String.format(Locale.getDefault(), "Estimated Fare: ₱%.2f", finalFare)
+            b.txtEstimatedFare.text = Html.fromHtml(htmlText, Html.FROM_HTML_MODE_COMPACT)
+        } else {
+            b.txtEstimatedFare.text = String.format(Locale.getDefault(), "Estimated Fare: ₱%.2f", finalFare)
         }
 
         if (booking.noShowFee > 0.0) {
             val feeNotice = String.format(
                 Locale.getDefault(),
-"\n+ ₱%.2f unpaid no-show fee (collect from passenger)",
+                "\n+ ₱%.2f unpaid no-show fee (collect from passenger)",
                 booking.noShowFee
             )
-            binding.txtEstimatedFare.append(feeNotice)
+            b.txtEstimatedFare.append(feeNotice)
         }
 
-        // Commission calculations
         val commission = WalletManager.commissionFor(finalFare, false)
         val netEarnings = finalFare - commission
 
-        binding.txtWalletBalance.text = String.format(
+        b.txtWalletBalance.text = String.format(
             Locale.getDefault(),
             "Deduction: -₱%.2f (10%%) • Take-Home: ₱%.2f",
             commission,
@@ -318,11 +595,12 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val passengerId = booking.passengerId
         if (passengerId.isNotEmpty()) {
             database.child("users").child(passengerId).get().addOnSuccessListener { snapshot ->
+                if (_binding == null || !isAdded) return@addOnSuccessListener
                 val phone = snapshot.child("phone").value?.toString()
                     ?: snapshot.child("phoneNumber").value?.toString()
                     ?: ""
                 if (phone.isNotEmpty()) {
-                    binding.txtPassengerName.text = "${binding.txtPassengerName.text}\nContact: $phone"
+                    _binding?.txtPassengerName?.text = "${_binding?.txtPassengerName?.text}\nContact: $phone"
                 }
             }
         }
@@ -336,6 +614,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             .equalTo(driverId)
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
+                    if (_binding == null || !isAdded) return
+
                     var restoredBooking: Booking? = null
                     var restoredBookingId: String? = null
                     var restoredStatus = ""
@@ -359,6 +639,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         if (!tripGroupId.isNullOrEmpty()) {
                             database.child("tripGroups").child(tripGroupId).get()
                                 .addOnSuccessListener { groupSnap ->
+                                    if (_binding == null || !isAdded) return@addOnSuccessListener
                                     val savedIndex = groupSnap.child("currentStopIndex").getValue(Int::class.java) ?: 0
                                     loadGroupStopsLocally(tripGroupId) { stops ->
                                         currentGroupStops = stops
@@ -463,6 +744,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
     }
+
     private fun currentPickupTarget(): Pair<String, LatLng>? {
         val booking = currentBooking ?: return null
         if (booking.tripGroupId.isNullOrEmpty()) {
@@ -474,6 +756,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         if (stop.type != RideshareManager.StopType.PICKUP) return null
         return stop.bookingId to stop.location
     }
+
     private fun checkArrivalAtPickup(driverLoc: LatLng) {
         if (arrivalHandledThisStop) return
         val (bookingId, pickupLoc) = currentPickupTarget() ?: return
@@ -481,6 +764,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         arrivalHandledThisStop = true
         registerArrival(bookingId)
     }
+
     private fun registerArrival(bookingId: String) {
         database.child("bookings").child(bookingId).child("arrivedAt")
             .runTransaction(object : Transaction.Handler {
@@ -495,14 +779,15 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 }
             })
     }
+
     private fun startPickupTimer(bookingId: String, arrivedAt: Long) {
-        // A late transaction callback must not revive the timer after pickup was confirmed
         if (currentPickupTarget()?.first != bookingId) return
         timerBookingId = bookingId
         timerArrivedAt = arrivedAt
         timerHandler.removeCallbacks(timerTick)
         timerTick.run()
     }
+
     private fun onReportNoShowTapped() {
         val bookingId = timerBookingId ?: return
         val (targetId, pickupLoc) = currentPickupTarget() ?: return
@@ -531,7 +816,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val driverId = auth.currentUser?.uid ?: return
         val isShared = !currentBooking?.tripGroupId.isNullOrEmpty()
 
-        // Co-passengers not yet picked up have their pickup stop at or after the current index.
         val coPassengers: Set<String> = if (isShared) {
             currentGroupStops.drop(currentStopIndex)
                 .filter { it.type == RideshareManager.StopType.PICKUP && it.bookingId != bookingId }
@@ -540,11 +824,11 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val removed = coPassengers + bookingId
 
         noShowHandling = true
-        binding.btnReportNoShow.isEnabled = false
+        _binding?.btnReportNoShow?.isEnabled = false
 
         NoShowManager.reportNoShow(database, driverId, bookingId, coPassengers) { ok ->
             if (_binding == null) { noShowHandling = false; return@reportNoShow }
-            binding.btnReportNoShow.isEnabled = true
+            _binding?.btnReportNoShow?.isEnabled = true
 
             if (!ok) {
                 noShowHandling = false
@@ -556,19 +840,16 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             Toast.makeText(context, "No-show recorded. You'll be credited in your wallet.", Toast.LENGTH_LONG).show()
 
             if (!isShared) {
-                // Solo: monitorSingleBookingForCancellation sees CANCELLED and resets the screen.
                 noShowHandling = false
                 return@reportNoShow
             }
 
-            // Shared: drop the cancelled passengers' stops. They all sit at or after the current index.
             currentGroupStops = currentGroupStops.filter { it.bookingId !in removed }
             arrivalHandledThisStop = false
 
             if (currentGroupStops.getOrNull(currentStopIndex) == null) {
-                resetAfterNoShow()   // nobody onboard, so the trip is over
+                resetAfterNoShow()
             } else {
-                // A passenger is onboard (the P2 no-show case): carry on to their drop-off.
                 updateCardForCurrentStop()
                 drawGroupRoutePreviewOnly(currentGroupStops)
             }
@@ -587,6 +868,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         updateUIForState(DriverRideState.IDLE)
         listenForPendingRideRequests()
     }
+
     private fun stopPickupTimer() {
         timerHandler.removeCallbacks(timerTick)
         timerBookingId = null
@@ -596,8 +878,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             it.btnReportNoShow.visibility = View.GONE
         }
     }
-
-
 
     private fun flagTripAsDeviated() {
         val booking = currentBooking ?: return
@@ -684,7 +964,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             val pathPoints = DirectionsHelper.parseDirections(jsonResponse)
 
             activity?.runOnUiThread {
-                if (pathPoints.isNotEmpty()) {
+                if (pathPoints.isNotEmpty() && _binding != null) {
                     activePolyline?.remove()
                     rawRoutePoints = pathPoints
 
@@ -702,8 +982,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     private fun setupBookingActionListeners() {
         binding.btnAcceptRide.setOnClickListener {
-            // One tap must perform exactly one accept write: the group path for a
-            // shared trip group, the plain path otherwise.
             val driverId = auth.currentUser?.uid ?: return@setOnClickListener
             val tripGroupId = currentBooking?.tripGroupId
             if (!tripGroupId.isNullOrEmpty()) acceptRideGroup(driverId) else acceptCurrentRide()
@@ -740,6 +1018,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
+                    if (_binding == null || !isAdded) return
+
                     val group = snapshot.children.mapNotNull { it.getValue(Booking::class.java) }
                         .filter { it.status != "COMPLETED" && it.status != "CANCELLED" }
 
@@ -762,20 +1042,18 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     }
 
                     val totalFare = group.sumOf { it.fare }
-
-                    // Hardcode false so shared ride commission previews never apply solo discounts
                     val totalCommission = group.sumOf { WalletManager.commissionFor(it.fare, false) }
                     val totalNetEarnings = totalFare - totalCommission
 
-                    binding.txtPassengerName.text = "Shared Ride (${group.size} Pax)"
-                    binding.txtPickupLocation.text = infoList
-                    binding.txtDropoffLocation.text = "Dropoffs: ${group.joinToString(" -> ") { it.dropoffAddress.ifEmpty { "N/A" } }}"
+                    _binding?.txtPassengerName?.text = "Shared Ride (${group.size} Pax)"
+                    _binding?.txtPickupLocation?.text = infoList
+                    _binding?.txtDropoffLocation?.text = "Dropoffs: ${group.joinToString(" -> ") { it.dropoffAddress.ifEmpty { "N/A" } }}"
 
-                    binding.txtEstimatedFare.text = String.format(
+                    _binding?.txtEstimatedFare?.text = String.format(
                         Locale.getDefault(), "Estimated Fare: ₱%.2f (combined)", totalFare
                     )
 
-                    binding.txtWalletBalance.text = String.format(
+                    _binding?.txtWalletBalance?.text = String.format(
                         Locale.getDefault(),
                         "Deduction: -₱%.2f • Take-Home: ₱%.2f",
                         totalCommission,
@@ -841,44 +1119,67 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun updateUIForState(state: DriverRideState) {
+        val b = _binding ?: return
         currentRideState = state
         val isTripActive = (state == DriverRideState.ACCEPTED || state == DriverRideState.IN_PROGRESS)
 
-        binding.switchOnline.isEnabled = !isTripActive
+        b.switchOnline.isEnabled = !isTripActive
 
+        if (isTripActive) {
+            val selfIndex = targetsList.indexOfFirst { it.isSelf }
+            if (selfIndex != -1) currentTargetIndex = selfIndex
+            b.txtCurrentTargetIndicator.text = "Pin: Active Ride"
+        } else {
+            val target = targetsList.getOrNull(currentTargetIndex)
+            b.txtCurrentTargetIndicator.text = "Pin: ${target?.name ?: "Me"}"
+        }
+
+        val selectorParams = b.layoutTargetSelector.layoutParams as RelativeLayout.LayoutParams
+        selectorParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+        selectorParams.removeRule(RelativeLayout.ABOVE)
+
+        if (isTripActive && b.btnChatWithPassenger.visibility == View.VISIBLE) {
+            selectorParams.addRule(RelativeLayout.ABOVE, R.id.btnChatWithPassenger)
+        } else if (state != DriverRideState.IDLE) {
+            selectorParams.addRule(RelativeLayout.ABOVE, R.id.cardIncomingRequest)
+        } else {
+            selectorParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+            selectorParams.bottomMargin = (16 * resources.displayMetrics.density).toInt()
+        }
+        b.layoutTargetSelector.layoutParams = selectorParams
 
         when (state) {
             DriverRideState.IDLE -> {
-                binding.cardIncomingRequest.visibility = View.GONE
-                binding.btnAcceptRide.visibility = View.VISIBLE
-                binding.btnDeclineRide.visibility = View.VISIBLE
-                binding.btnConfirmPickup.visibility = View.GONE
-                binding.btnCompleteRide.visibility = View.GONE
-                binding.btnChatWithPassenger.visibility = View.GONE
+                b.cardIncomingRequest.visibility = View.GONE
+                b.btnAcceptRide.visibility = View.VISIBLE
+                b.btnDeclineRide.visibility = View.VISIBLE
+                b.btnConfirmPickup.visibility = View.GONE
+                b.btnCompleteRide.visibility = View.GONE
+                b.btnChatWithPassenger.visibility = View.GONE
             }
             DriverRideState.REQUEST_RECEIVED -> {
-                binding.cardIncomingRequest.visibility = View.VISIBLE
-                binding.btnAcceptRide.visibility = View.VISIBLE
-                binding.btnDeclineRide.visibility = View.VISIBLE
-                binding.btnConfirmPickup.visibility = View.GONE
-                binding.btnCompleteRide.visibility = View.GONE
-                binding.btnChatWithPassenger.visibility = View.GONE
+                b.cardIncomingRequest.visibility = View.VISIBLE
+                b.btnAcceptRide.visibility = View.VISIBLE
+                b.btnDeclineRide.visibility = View.VISIBLE
+                b.btnConfirmPickup.visibility = View.GONE
+                b.btnCompleteRide.visibility = View.GONE
+                b.btnChatWithPassenger.visibility = View.GONE
             }
             DriverRideState.ACCEPTED -> {
-                binding.cardIncomingRequest.visibility = View.VISIBLE
-                binding.btnAcceptRide.visibility = View.GONE
-                binding.btnDeclineRide.visibility = View.GONE
-                binding.btnConfirmPickup.visibility = View.VISIBLE
-                binding.btnCompleteRide.visibility = View.GONE
-                binding.btnChatWithPassenger.visibility = View.VISIBLE
+                b.cardIncomingRequest.visibility = View.VISIBLE
+                b.btnAcceptRide.visibility = View.GONE
+                b.btnDeclineRide.visibility = View.GONE
+                b.btnConfirmPickup.visibility = View.VISIBLE
+                b.btnCompleteRide.visibility = View.GONE
+                b.btnChatWithPassenger.visibility = View.VISIBLE
             }
             DriverRideState.IN_PROGRESS -> {
-                binding.cardIncomingRequest.visibility = View.VISIBLE
-                binding.btnAcceptRide.visibility = View.GONE
-                binding.btnDeclineRide.visibility = View.GONE
-                binding.btnConfirmPickup.visibility = View.GONE
-                binding.btnCompleteRide.visibility = View.VISIBLE
-                binding.btnChatWithPassenger.visibility = View.VISIBLE
+                b.cardIncomingRequest.visibility = View.VISIBLE
+                b.btnAcceptRide.visibility = View.GONE
+                b.btnDeclineRide.visibility = View.GONE
+                b.btnConfirmPickup.visibility = View.GONE
+                b.btnCompleteRide.visibility = View.VISIBLE
+                b.btnChatWithPassenger.visibility = View.VISIBLE
             }
         }
     }
@@ -896,6 +1197,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         binding.btnAcceptRide.isEnabled = false
 
         database.child("users").child(driverId).get().addOnSuccessListener { snapshot ->
+            if (_binding == null || !isAdded) return@addOnSuccessListener
             val firstName = snapshot.child("firstName").getValue(String::class.java) ?: ""
             val lastName = snapshot.child("lastName").getValue(String::class.java) ?: ""
             val driverName = "$firstName $lastName".trim().ifEmpty {
@@ -908,8 +1210,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             val driverPhone = snapshot.child("phoneNumber").getValue(String::class.java)
                 ?: snapshot.child("phone").getValue(String::class.java) ?: ""
 
-            // One atomic write: the status transition and every driver/vehicle
-            // detail travel together, so accepting can never half-write a booking.
             val updates = hashMapOf<String, Any>(
                 "status" to "ACCEPTED",
                 "driverId" to driverId,
@@ -921,10 +1221,11 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 "acceptedAt" to System.currentTimeMillis()
             )
 
+            Log.d("SYNC", "SENT ACCEPTED t=${System.currentTimeMillis() + syncOffsetMs}")
             // First driver wins: the claim is a transaction on the booking, so only
             // one driver can ever get WON for the same booking.
             BookingClaim.claim(database.child("bookings").child(bookingId), driverId, updates) { outcome ->
-                if (_binding == null) return@claim
+                if (_binding == null || !isAdded) return@claim
                 when (outcome) {
                     BookingClaim.Outcome.WON -> {
                         binding.btnAcceptRide.isEnabled = true
@@ -998,14 +1299,13 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val booking = currentBooking ?: return
         val tripGroupId = booking.tripGroupId
 
-        // The only caller routes here after confirming the trip group id is
-        // non-empty; this guard just keeps the id non-null below.
         if (tripGroupId.isNullOrEmpty()) return
 
         // Block double taps while the claim is in flight.
         binding.btnAcceptRide.isEnabled = false
 
         database.child("users").child(driverId).get().addOnSuccessListener { userSnapshot ->
+            if (_binding == null || !isAdded) return@addOnSuccessListener
             val firstName = userSnapshot.child("firstName").getValue(String::class.java) ?: ""
             val lastName = userSnapshot.child("lastName").getValue(String::class.java) ?: ""
             val driverName = "$firstName $lastName".trim().ifEmpty {
@@ -1018,8 +1318,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             val driverPhone = userSnapshot.child("phoneNumber").getValue(String::class.java)
                 ?: userSnapshot.child("phone").getValue(String::class.java) ?: ""
 
-            // One atomic write per booking: the status transition and every driver/vehicle
-            // detail travel together, so accepting a group can never half-write a booking.
             val updates = hashMapOf<String, Any>(
                 "status" to "ACCEPTED",
                 "driverId" to driverId,
@@ -1034,7 +1332,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
-                        if (_binding == null) return
+                        if (_binding == null || !isAdded) return
 
                         val groupRefs = snapshot.children
                             .mapNotNull { c -> c.key?.let { key -> key to c.ref } }
@@ -1049,7 +1347,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         // Every driver contends on the same lead booking, so exactly one
                         // driver wins the whole group (never one booking each).
                         BookingClaim.claim(leadRef, driverId, updates) { outcome ->
-                            if (_binding == null) return@claim
+                            if (_binding == null || !isAdded) return@claim
                             when (outcome) {
                                 BookingClaim.Outcome.WON -> {
                                     // Won the group: hand the remaining bookings to this driver too.
@@ -1098,6 +1396,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
+                    if (_binding == null || !isAdded) return
                     val group = snapshot.children.mapNotNull { it.getValue(Booking::class.java) }
                         .filter { it.status != "COMPLETED" && it.status != "CANCELLED" }
 
@@ -1192,6 +1491,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             val remainingStops = if (currentStopIndex in stops.indices) stops.subList(currentStopIndex, stops.size) else stops
             val finalRoute = RideshareRouteOptimizer.buildFinalDriverRoute(driverLoc, remainingStops, apiKey)
             activity?.runOnUiThread {
+                if (_binding == null || !isAdded) return@runOnUiThread
+
                 if (::mMap.isInitialized) {
                     mMap.clear()
                     driverMarker = null
@@ -1312,8 +1613,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         updateUIForState(DriverRideState.IN_PROGRESS)
 
+        Log.d("SYNC", "SENT IN_PROGRESS t=${System.currentTimeMillis() + syncOffsetMs}")
         database.child("bookings").child(bookingId).child("status").setValue("IN_PROGRESS")
             .addOnSuccessListener {
+                if (_binding == null || !isAdded) return@addOnSuccessListener
                 Toast.makeText(context, "Passenger Picked Up! Trip Started.", Toast.LENGTH_SHORT).show()
                 clearRouteAndMarkers()
 
@@ -1323,13 +1626,13 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 }
             }
             .addOnFailureListener { e ->
+                if (_binding == null || !isAdded) return@addOnFailureListener
                 updateUIForState(DriverRideState.ACCEPTED)
                 Toast.makeText(context, "Failed to start trip: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
 
     private fun confirmSharedStop(isAuto: Boolean = false) {
-
         val stops = currentGroupStops
         if (stops.isEmpty()) {
             val tripGroupId = currentBooking?.tripGroupId
@@ -1380,10 +1683,13 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         database.child("tripGroups").child(tripGroupId).child("currentStopIndex").setValue(currentStopIndex)
             .addOnCompleteListener {
+                if (_binding == null || !isAdded) return@addOnCompleteListener
+
                 if (currentStopIndex >= currentGroupStops.size) {
                     database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
                         .addListenerForSingleValueEvent(object : ValueEventListener {
                             override fun onDataChange(snapshot: DataSnapshot) {
+                                if (_binding == null || !isAdded) return
                                 val activeBookingsExist = snapshot.children.any { child ->
                                     val status = child.child("status").getValue(String::class.java)
                                     status != "COMPLETED" && status != "CANCELLED"
@@ -1423,6 +1729,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val label = if (isPickup) "Pickup" else "Dropoff"
 
         database.child("bookings").child(stop.bookingId).get().addOnSuccessListener { snap ->
+            if (_binding == null || !isAdded) return@addOnSuccessListener
+
             val status = snap.child("status").getValue(String::class.java) ?: ""
             if (status == "COMPLETED" || status == "CANCELLED") {
                 advanceToNextStop()
@@ -1438,26 +1746,28 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
             if (passengerId.isNotEmpty()) {
                 database.child("users").child(passengerId).get().addOnSuccessListener { userSnap ->
+                    if (_binding == null || !isAdded) return@addOnSuccessListener
                     val phone = userSnap.child("phone").value?.toString()
                         ?: userSnap.child("phoneNumber").value?.toString()
                         ?: ""
                     val phoneText = if (phone.isNotEmpty()) "\nContact: $phone" else ""
-                    binding.txtPassengerName.text = "$name (Stop ${currentStopIndex + 1} of ${stops.size})$phoneText"
+                    _binding?.txtPassengerName?.text = "$name (Stop ${currentStopIndex + 1} of ${stops.size})$phoneText"
                 }
             } else {
-                binding.txtPassengerName.text = "$name — Stop ${currentStopIndex + 1} of ${stops.size}"
+                _binding?.txtPassengerName?.text = "$name — Stop ${currentStopIndex + 1} of ${stops.size}"
             }
 
-            binding.txtPickupLocation.text = if (isPickup) "Pickup: $address" else ""
-            binding.txtDropoffLocation.text = if (!isPickup) "Dropoff: $address" else ""
+            _binding?.txtPickupLocation?.text = if (isPickup) "Pickup: $address" else ""
+            _binding?.txtDropoffLocation?.text = if (!isPickup) "Dropoff: $address" else ""
         }
 
-        binding.btnAcceptRide.visibility = View.GONE
-        binding.btnDeclineRide.visibility = View.GONE
-        binding.btnCompleteRide.visibility = View.GONE
-        binding.btnConfirmPickup.visibility = View.VISIBLE
-        binding.btnConfirmPickup.text = "Confirm $label"
-        binding.btnChatWithPassenger.visibility = View.VISIBLE
+        val b = _binding ?: return
+        b.btnAcceptRide.visibility = View.GONE
+        b.btnDeclineRide.visibility = View.GONE
+        b.btnCompleteRide.visibility = View.GONE
+        b.btnConfirmPickup.visibility = View.VISIBLE
+        b.btnConfirmPickup.text = "Confirm $label"
+        b.btnChatWithPassenger.visibility = View.VISIBLE
     }
 
     private fun finishSharedTrip(tripGroupId: String) {
@@ -1502,6 +1812,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val booking = currentBooking
         val driverId = auth.currentUser?.uid
 
+        Log.d("SYNC", "SENT COMPLETED t=${System.currentTimeMillis() + syncOffsetMs}")
         database.child("bookings").child(bookingId).child("status").setValue("COMPLETED")
             .addOnSuccessListener {
                 if (booking != null && driverId != null) {
@@ -1634,7 +1945,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         activeBookingId?.let { declinedBookingIds.add(it) }
         booking?.tripGroupId?.takeIf { it.isNotEmpty() }?.let { declinedGroupIds.add(it) }
 
-        // Record it server-side too, so you can later stop offering it to this driver across restarts
         val driverId = auth.currentUser?.uid
         val id = activeBookingId
         if (driverId != null && id != null) {
@@ -1681,7 +1991,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         pendingRequestsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                if (!isOnline) return
+                if (!isOnline || _binding == null || !isAdded) return
                 if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) return
 
                 val driverLoc = currentLatLng ?: return
@@ -1693,7 +2003,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         val key = child.key ?: continue
                         val groupId = child.child("tripGroupId").getValue(String::class.java)
 
-                        // Skip anything this driver already declined (a declined shared group hides both bookings)
                         if (key in declinedBookingIds) continue
                         if (!groupId.isNullOrEmpty() && groupId in declinedGroupIds) continue
                         if (child.child("declinedBy").hasChild(auth.currentUser?.uid ?: "_")) continue
@@ -1749,6 +2058,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         bookingsRef.addValueEventListener(pendingRequestsListener!!)
     }
+
     private fun distanceMeters(a: LatLng, b: LatLng): Double {
         val results = FloatArray(1)
         Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, results)
@@ -1850,6 +2160,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             activeBookingListener = null
         }
     }
+
     private fun monitorSingleBookingForCancellation(bookingId: String) {
         activeBookingListener?.let {
             database.child("bookings").child(bookingId).removeEventListener(it)
@@ -1859,12 +2170,12 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         activeBookingListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                if (_binding == null || !isAdded) return
                 val status = snapshot.child("status").getValue(String::class.java) ?: return
 
                 if (status == "CANCELLED" || status == "COMPLETED") {
                     val finishedTripGroupId = snapshot.child("tripGroupId").getValue(String::class.java)
 
-                    // Shared no-shows are handled in-session so the active group state isn't wiped
                     if (noShowHandling && !finishedTripGroupId.isNullOrEmpty()) return
 
                     if (status == "CANCELLED") {
@@ -1884,11 +2195,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
                     if (finishedBookingId != null) {
                         if (finishedTripGroupId.isNullOrEmpty()) {
-                            // Solo booking: the trip is over, so its streak can go.
                             RouteDeviationManager.clearTripDeviationState(finishedBookingId)
                         } else {
-                            // Shared group: only drop the streak once no co-passenger
-                            // is still riding, or a live deviation gets masked.
                             database.child("bookings").orderByChild("tripGroupId").equalTo(finishedTripGroupId)
                                 .addListenerForSingleValueEvent(object : ValueEventListener {
                                     override fun onDataChange(groupSnapshot: DataSnapshot) {
@@ -1921,8 +2229,13 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        detachContactListener()
         stopLocationUpdates()
         stopListeningForRequests()
+        val myUid = auth.currentUser?.uid
+        if (myUid != null && alertListener != null) {
+            database.child("emergencyAlerts").child(myUid).removeEventListener(alertListener!!)
+        }
         _binding = null
     }
 }

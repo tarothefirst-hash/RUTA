@@ -5,7 +5,6 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.ValueEventListener
 
-
 object EmergencyContactManager {
 
     const val MAX_TRUSTED_CONTACTS = 3
@@ -60,8 +59,6 @@ object EmergencyContactManager {
                     return@addOnSuccessListener
                 }
 
-                // The requester's own list must obey the same cap, otherwise it
-                // can be exceeded by having multiple outbound requests accepted.
                 database.child("users").child(requesterUid).child("trustedContacts").get()
                     .addOnSuccessListener { requesterSnap ->
                         if (requesterSnap.childrenCount.toInt() >= MAX_TRUSTED_CONTACTS) {
@@ -87,11 +84,6 @@ object EmergencyContactManager {
         database.child("pairRequests").child(myUid).child(requesterUid).removeValue()
     }
 
-    /**
-     * One-directional: removes the contact from MY list only. They may still have
-     * me in theirs unless they remove me too — same as unfriending doesn't require
-     * mutual consent.
-     */
     fun removeTrustedContact(database: DatabaseReference, myUid: String, contactUid: String) {
         database.child("users").child(myUid).child("trustedContacts").child(contactUid).removeValue()
     }
@@ -134,26 +126,19 @@ object EmergencyContactManager {
     }
 
     // ---------------------------------------------------------------------
-    // EMERGENCY ALERT FAN-OUT
+    // EMERGENCY ALERT FAN-OUT (Supports both Passengers and Drivers)
     // ---------------------------------------------------------------------
 
-    /**
-     * Reads the booking + driver profile, then pushes one alert per trusted
-     * contact. Every call site (the deviation dialog, an always-visible SOS
-     * button) just needs a bookingId — driver name, vehicle, plate, and current
-     * location are all looked up here.
-     */
     fun sendEmergencyAlertForBooking(
         database: DatabaseReference,
         bookingId: String,
+        isDriver: Boolean = false,
         onComplete: (contactsNotified: Int) -> Unit = {}
     ) {
         database.child("bookings").child(bookingId).get().addOnSuccessListener { booking ->
-            val passengerId = booking.child("passengerId").getValue(String::class.java)
-                ?: return@addOnSuccessListener onComplete(0)
-            val passengerName = booking.child("passengerName").getValue(String::class.java)
-                ?.ifEmpty { null } ?: "A RUTA passenger"
+            val passengerId = booking.child("passengerId").getValue(String::class.java) ?: ""
             val driverId = booking.child("driverId").getValue(String::class.java) ?: ""
+            val passengerName = booking.child("passengerName").getValue(String::class.java)?.ifEmpty { null } ?: "A RUTA passenger"
             val pickupAddress = booking.child("pickupAddress").getValue(String::class.java) ?: "N/A"
             val dropoffAddress = booking.child("dropoffAddress").getValue(String::class.java) ?: "N/A"
             val lat = booking.child("driverLat").getValue(Double::class.java)
@@ -161,21 +146,47 @@ object EmergencyContactManager {
             val lng = booking.child("driverLng").getValue(Double::class.java)
                 ?: booking.child("lastDeviatedLng").getValue(Double::class.java) ?: 0.0
 
-            fun dispatch(driverName: String, vehicleInfo: String) {
-                database.child("users").child(passengerId).child("trustedContacts").get()
+            // If triggered by Driver, target driver's UID; otherwise target passenger's UID
+            val targetUid = if (isDriver) driverId else passengerId
+            if (targetUid.isEmpty()) return@addOnSuccessListener onComplete(0)
+
+            database.child("users").child(driverId).get().addOnSuccessListener { driverSnap ->
+                val firstName = driverSnap.child("firstName").getValue(String::class.java) ?: ""
+                val lastName = driverSnap.child("lastName").getValue(String::class.java) ?: ""
+                var driverFullName = "$firstName $lastName".trim()
+                if (driverFullName.isEmpty()) {
+                    driverFullName = driverSnap.child("name").getValue(String::class.java) ?: "Assigned Driver"
+                }
+
+                val vehicleModel = driverSnap.child("vehicleModel").getValue(String::class.java)
+                    ?: driverSnap.child("carModel").getValue(String::class.java) ?: "Vehicle"
+                val plateNumber = driverSnap.child("plateNumber").getValue(String::class.java)
+                    ?: driverSnap.child("licensePlate").getValue(String::class.java) ?: ""
+                val vehicleColor = driverSnap.child("vehicleColor").getValue(String::class.java) ?: ""
+
+                val vehicleInfo = buildString {
+                    if (vehicleColor.isNotEmpty()) append("$vehicleColor ")
+                    append(vehicleModel)
+                    if (plateNumber.isNotEmpty()) append(" • $plateNumber")
+                }
+
+                val senderName = if (isDriver) "$driverFullName (Driver)" else passengerName
+
+                database.child("users").child(targetUid).child("trustedContacts").get()
                     .addOnSuccessListener { contactsSnap ->
                         val contactUids = contactsSnap.children.mapNotNull { it.key }
                         if (contactUids.isEmpty()) return@addOnSuccessListener onComplete(0)
 
                         val alertData = mapOf(
-                            "senderName" to passengerName,
+                            "senderName" to senderName,
                             "bookingId" to bookingId,
-                            "driverName" to driverName,
+                            "driverName" to driverFullName,
                             "vehicleInfo" to vehicleInfo,
                             "pickupAddress" to pickupAddress,
                             "dropoffAddress" to dropoffAddress,
                             "lat" to lat,
                             "lng" to lng,
+                            "isDriverEmergency" to isDriver,
                             "timestamp" to System.currentTimeMillis()
                         )
 
@@ -185,43 +196,10 @@ object EmergencyContactManager {
                         onComplete(contactUids.size)
                     }
                     .addOnFailureListener { onComplete(0) }
-            }
-
-            if (driverId.isEmpty()) {
-                dispatch("Not yet assigned", "N/A")
-            } else {
-                database.child("users").child(driverId).get()
-                    .addOnSuccessListener { driverSnap ->
-                        val firstName = driverSnap.child("firstName").getValue(String::class.java) ?: ""
-                        val lastName = driverSnap.child("lastName").getValue(String::class.java) ?: ""
-                        var fullName = "$firstName $lastName".trim()
-                        if (fullName.isEmpty()) {
-                            fullName = driverSnap.child("name").getValue(String::class.java) ?: "Assigned Driver"
-                        }
-
-                        val vehicleModel = driverSnap.child("vehicleModel").getValue(String::class.java)
-                            ?: driverSnap.child("carModel").getValue(String::class.java) ?: "Vehicle"
-                        val plateNumber = driverSnap.child("plateNumber").getValue(String::class.java)
-                            ?: driverSnap.child("licensePlate").getValue(String::class.java) ?: ""
-                        val vehicleColor = driverSnap.child("vehicleColor").getValue(String::class.java) ?: ""
-
-                        val vehicleInfo = buildString {
-                            if (vehicleColor.isNotEmpty()) append("$vehicleColor ")
-                            append(vehicleModel)
-                            if (plateNumber.isNotEmpty()) append(" \u2022 $plateNumber")
-                        }
-
-                        dispatch(fullName, vehicleInfo)
-                    }
-                    .addOnFailureListener { dispatch("Assigned Driver", "N/A") }
-            }
+            }.addOnFailureListener { onComplete(0) }
         }.addOnFailureListener { onComplete(0) }
     }
 
-    /**
-     * Each alert is consumed (removed) right after being surfaced, so a
-     * reconnecting listener never replays an alert the contact already saw.
-     */
     fun listenForIncomingAlerts(
         database: DatabaseReference,
         myUid: String,

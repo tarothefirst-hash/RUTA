@@ -26,13 +26,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="16dp"
             android:layout_marginBottom="16dp">
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/imgDriverProfile"
-                android:layout_width="110dp"
-                android:layout_height="110dp"
+                android:layout_width="100dp"
+                android:layout_height="100dp"
                 android:padding="2dp"
                 android:scaleType="centerCrop"
                 android:src="@drawable/carpin"
@@ -48,9 +48,92 @@
                 android:layout_alignEnd="@id/imgDriverProfile"
                 android:contentDescription="@string/dr_change_photo"
                 app:backgroundTint="@color/ruta_primary"
-                app:fabCustomSize="36dp"
+                app:fabCustomSize="32dp"
                 app:tint="@android:color/white" />
         </RelativeLayout>
+
+        <!-- EMERGENCY SAFETY QR CARD (MATCHES PASSENGER DESIGN) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardEmergencyQr"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="@color/ruta_card_bg"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="2dp"
+            app:strokeColor="@color/ruta_primary_light"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Emergency Safety QR"
+                    android:textColor="@color/ruta_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <!-- Generated QR Code Image -->
+                <ImageView
+                    android:id="@+id/imgDriverQrCode"
+                    android:layout_width="160dp"
+                    android:layout_height="160dp"
+                    android:layout_marginTop="12dp"
+                    android:contentDescription="Driver Safety QR Code"
+                    android:scaleType="fitCenter" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Let your contact scan this code to link accounts"
+                    android:textColor="@color/ruta_text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/txtTrustedContactsSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Trusted Contacts: 0/3"
+                    android:textColor="@color/ruta_primary_dark"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <!-- Scan Contact QR Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnScanContactQr"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="12dp"
+                    android:text="SCAN CONTACT'S QR"
+                    android:textColor="@android:color/white"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/ruta_primary"
+                    app:cornerRadius="12dp" />
+
+                <!-- View Trusted Contacts Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnViewTrustedContacts"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="VIEW TRUSTED CONTACTS"
+                    android:textColor="@color/ruta_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/ruta_primary" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- Driver Metrics Card -->
         <com.google.android.material.card.MaterialCardView
@@ -59,67 +142,30 @@
             android:layout_marginBottom="16dp"
             app:cardBackgroundColor="@color/ruta_card_bg"
             app:cardCornerRadius="16dp"
-            app:cardElevation="4dp">
+            app:cardElevation="2dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="16dp">
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="14dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
+                <TextView
+                    android:id="@+id/txtCompletedRides"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:orientation="vertical">
+                    android:text="0"
+                    android:textColor="@color/ruta_text_primary"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
 
-                    <TextView
-                        android:id="@+id/txtDriverRating"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="5.0 ★"
-                        android:textColor="@color/ruta_primary"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/dr_rating"
-                        android:textColor="@color/ruta_text_secondary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <View
-                    android:layout_width="1dp"
-                    android:layout_height="30dp"
-                    android:layout_gravity="center_vertical"
-                    android:background="#DDDDDD" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/txtCompletedRides"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="0"
-                        android:textColor="@color/ruta_text_primary"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/dr_rides_completed"
-                        android:textColor="@color/ruta_text_secondary"
-                        android:textSize="12sp" />
-                </LinearLayout>
+                    android:text="@string/dr_rides_completed"
+                    android:textColor="@color/ruta_text_secondary"
+                    android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -130,7 +176,7 @@
             android:layout_marginBottom="20dp"
             app:cardBackgroundColor="@color/ruta_card_bg"
             app:cardCornerRadius="16dp"
-            app:cardElevation="4dp">
+            app:cardElevation="2dp">
 
             <LinearLayout
                 android:layout_width="match_parent"

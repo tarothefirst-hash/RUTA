@@ -1,26 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:paddingVertical="10dp">
 
-    <TextView
-        android:id="@+id/txtContactName"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:text="@string/i_contact_name_placeholder"
-        android:textColor="@color/ruta_text_primary"
-        android:textSize="14sp" />
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
 
-    <Button
-        android:id="@+id/btnRemoveContact"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
+        <TextView
+            android:id="@+id/txtContactName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toStartOf="@id/layoutContactActions"
+            android:text="@string/i_contact_name_placeholder"
+            android:textColor="@color/ruta_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/layoutContactActions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchRouteDeviation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:checked="true"
+                app:useMaterialThemeColors="true" />
+
+            <Button
+                android:id="@+id/btnRemoveContact"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/i_remove"
+                android:textColor="@color/ruta_cancel" />
+        </LinearLayout>
+    </RelativeLayout>
+
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/i_remove"
-        android:textColor="@color/ruta_cancel" />
+        android:layout_marginTop="2dp"
+        android:text="Send Route Deviation Warning to this contact"
+        android:textColor="@color/ruta_text_secondary"
+        android:textSize="11sp" />
 
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="10dp"
+        android:background="#E5E7EB" />
 </LinearLayout>

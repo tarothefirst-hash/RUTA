@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application
         android:name=".MainApplication"
         android:allowBackup="false"
@@ -27,6 +27,22 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
+
+        <!-- Registered Foreground Location Service -->
+        <service
+            android:name=".driver.DriverLocationService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
+
+        <!-- Registered FCM Messaging Service -->
+        <service
+            android:name=".util.RutaFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".ui.TermsActivity"
             android:exported="false" />
@@ -66,7 +82,11 @@
             android:name=".ui.SignupActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
-
+        <activity
+            android:name=".ui.PortraitCaptureActivity"
+            android:screenOrientation="portrait"
+            android:stateNotNeeded="true"
+            android:theme="@style/zxing_CaptureTheme" />
         <activity
             android:name=".ui.ChatActivity"
             android:exported="false"

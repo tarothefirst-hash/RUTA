@@ -24,6 +24,7 @@ import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
 import com.ruta.app.databinding.ActivitySignupBinding
 import com.ruta.app.model.UserRole
+import com.ruta.app.ui.driver.DriverDocumentUploadActivity
 import com.ruta.app.util.keepClearOfKeyboard
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -344,9 +345,8 @@ class SignupActivity : AppCompatActivity() {
             .addOnSuccessListener {
                 setLoading(false)
                 if (isDriver) {
-                    auth.signOut()
-                    Toast.makeText(this, "Driver account created! Please await admin approval.", Toast.LENGTH_LONG).show()
-                    finish()
+                    Toast.makeText(this, "Driver account registered! Please complete document submission.", Toast.LENGTH_LONG).show()
+                    goToDriverDocumentUpload()
                 } else {
                     Toast.makeText(this, "Account setup completed!", Toast.LENGTH_SHORT).show()
                     goToHome()
@@ -356,6 +356,14 @@ class SignupActivity : AppCompatActivity() {
                 setLoading(false)
                 showError("Database error: ${e.message}")
             }
+    }
+
+    private fun goToDriverDocumentUpload() {
+        val intent = Intent(this, DriverDocumentUploadActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        startActivity(intent)
+        finish()
     }
 
     private fun goToHome() {

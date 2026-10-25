@@ -31,14 +31,19 @@
 
     </ScrollView>
 
+    <!-- Fixed button cutoff by using minHeight and explicit vertical padding -->
     <Button
         android:id="@+id/btnCloseTerms"
         style="@style/RutaButton"
         android:layout_width="match_parent"
-        android:layout_height="50dp"
+        android:layout_height="wrap_content"
+        android:minHeight="52dp"
         android:layout_margin="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
         android:backgroundTint="@color/ruta_primary"
         android:text="I Understand"
+        android:textSize="16sp"
         android:textAllCaps="false" />
 
 </LinearLayout>

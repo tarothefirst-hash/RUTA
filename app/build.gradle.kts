@@ -64,6 +64,7 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-storage-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // AndroidX & UI
     implementation("androidx.core:core-ktx:1.15.0")

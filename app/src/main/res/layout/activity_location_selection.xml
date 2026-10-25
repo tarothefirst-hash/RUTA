@@ -1,89 +1,181 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/ruta_bg">
 
-    <!-- Top Return Bar -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnReturn"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:text="@string/a_loc_return"
-        android:textAllCaps="false"
-        android:textColor="@color/white"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        app:backgroundTint="@color/ruta_primary"
-        app:cornerRadius="12dp"
-        app:elevation="4dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- Search Input Bar -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/searchContainer"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="12dp"
-        app:cardBackgroundColor="@color/ruta_card_bg"
-        app:cardCornerRadius="14dp"
-        app:cardElevation="6dp"
-        app:strokeColor="@color/ruta_primary_light"
-        app:strokeWidth="1dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnReturn">
-
-        <EditText
-            android:id="@+id/etSearchLocation"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@null"
-            android:hint="@string/a_loc_search_hint"
-            android:padding="12dp"
-            android:textColor="@color/ruta_text_primary"
-            android:textColorHint="@color/ruta_text_muted"
-            android:textSize="14sp" />
-    </androidx.cardview.widget.CardView>
-
-    <!-- Search Suggestions List Overlay -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvSearchSuggestions"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:background="@color/ruta_card_bg"
-        android:elevation="10dp"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/searchContainer" />
-
-    <!-- Map View -->
+    <!-- Map View (Takes full screen) -->
     <fragment
         android:id="@+id/mapFragment"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/searchContainer" />
+        app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Floating Booking Widget -->
+    <!-- FIXED MAXIM-STYLE CENTER PIN (Uses Proper Pin Vector) -->
+    <ImageView
+        android:id="@+id/imgCenterPin"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginBottom="24dp"
+        android:contentDescription="Location Pin"
+        android:elevation="12dp"
+        android:src="@drawable/ic_location_pin"
+        app:tint="#6D5EFC"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- TOP HEADER OVERLAY CONTAINER -->
+    <LinearLayout
+        android:id="@+id/layoutTopHeader"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReturn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/a_loc_return"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/ruta_primary"
+            app:cornerRadius="12dp"
+            app:elevation="6dp" />
+
+        <!-- Stacked Pickup & Destination Address Search Input -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardAddressInputs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardBackgroundColor="@color/ruta_card_bg"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            app:strokeColor="@color/ruta_primary_light"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <!-- Pickup Selection Row -->
+                <LinearLayout
+                    android:id="@+id/rowPickupInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_location_pin"
+                        app:tint="#22C55E" />
+
+                    <EditText
+                        android:id="@+id/etPickupLocation"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="Set pickup location..."
+                        android:imeOptions="actionSearch"
+                        android:inputType="text"
+                        android:paddingVertical="8dp"
+                        android:textColor="@color/ruta_text_primary"
+                        android:textColorHint="@color/ruta_text_muted"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="6dp"
+                    android:background="#E2E8F0" />
+
+                <!-- Dropoff Selection Row -->
+                <LinearLayout
+                    android:id="@+id/rowDropoffInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_location_pin"
+                        app:tint="#EF4444" />
+
+                    <EditText
+                        android:id="@+id/etDropoffLocation"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="Set destination..."
+                        android:imeOptions="actionSearch"
+                        android:inputType="text"
+                        android:paddingVertical="8dp"
+                        android:textColor="@color/ruta_text_primary"
+                        android:textColorHint="@color/ruta_text_muted"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Search Suggestions List Overlay -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvSearchSuggestions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@color/ruta_card_bg"
+            android:elevation="12dp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- RECENTER MY LOCATION FAB BUTTON -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/btnRecenterLocation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
+        android:contentDescription="Recenter to my location"
+        app:backgroundTint="#FFFFFF"
+        app:fabSize="mini"
+        app:srcCompat="@drawable/ic_location_pin"
+        app:tint="@color/ruta_primary"
+        app:layout_constraintBottom_toTopOf="@id/cardFloatingBooking"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- FLOATING BOTTOM BOOKING WIDGET -->
     <androidx.cardview.widget.CardView
         android:id="@+id/cardFloatingBooking"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="64dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="32dp"
         app:cardBackgroundColor="@color/ruta_card_bg"
         app:cardCornerRadius="24dp"
         app:cardElevation="12dp"
@@ -99,7 +191,7 @@
             android:orientation="vertical"
             android:padding="18dp">
 
-            <!-- 1. SEARCHING DRIVER STATE (Hidden by default) -->
+            <!-- 1. SEARCHING DRIVER STATE -->
             <LinearLayout
                 android:id="@+id/layoutSearching"
                 android:layout_width="match_parent"
@@ -134,7 +226,7 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- 2. ADDRESS SELECTION BLOCK (Pickup / Dropoff) -->
+            <!-- 2. ADDRESS SUMMARY DISPLAY -->
             <LinearLayout
                 android:id="@+id/layoutAddressDetails"
                 android:layout_width="match_parent"
@@ -142,15 +234,16 @@
                 android:orientation="vertical">
 
                 <TextView
+                    android:id="@+id/txtStageHeaderTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/a_loc_pick_up"
+                    android:text="Select Pick-up Point"
                     android:textColor="@color/ruta_primary_dark"
                     android:textSize="12sp"
                     android:textStyle="bold" />
 
                 <TextView
-                    android:id="@+id/txtPickupDisplay"
+                    android:id="@+id/txtActivePinAddress"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
@@ -160,84 +253,116 @@
                     android:textColor="@color/ruta_text_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/a_loc_to"
-                    android:textColor="@color/ruta_text_secondary"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:id="@+id/txtDropoffDisplay"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:background="@drawable/bg_input_field"
-                    android:backgroundTint="@color/ruta_bg"
-                    android:padding="10dp"
-                    android:text="@string/a_loc_add_location"
-                    android:textColor="@color/ruta_text_muted"
-                    android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- FARE BANNER CARD (LAVENDER / RUTA_PRIMARY) -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardFareDetails"
+            <!-- 3. SELECTABLE RIDE OPTIONS -->
+            <LinearLayout
+                android:id="@+id/layoutRideOptions"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:visibility="visible"
-                app:cardBackgroundColor="@color/ruta_primary"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="0dp">
+                android:orientation="horizontal"
+                android:visibility="gone"
+                android:weightSum="2">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="14dp">
+                <!-- Solo Ride Option -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardOptionSolo"
+                    android:layout_width="0dp"
+                    android:layout_height="80dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:cardBackgroundColor="@color/ruta_primary_light"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="@color/ruta_primary"
+                    app:strokeWidth="2dp">
 
-                    <TextView
-                        android:id="@+id/txtUserFare"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/a_loc_your_fare"
-                        android:textColor="@color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-                    <TextView
-                        android:id="@+id/tvDiscountBadge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="20% Student/Senior Discount Applied"
-                        android:textColor="#2E7D32"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
-                    <TextView
-                        android:id="@+id/txtTripCalculation"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:text="@string/a_loc_trip_total"
-                        android:textColor="#F0E6FF"
-                        android:textSize="12sp" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="vertical"
+                        android:padding="12dp">
 
-                    <TextView
-                        android:id="@+id/txtFinalFareDetail"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:text="@string/fare_detail_finalising"
-                        android:textColor="#F0E6FF"
-                        android:textSize="12sp"
-                        android:visibility="gone" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Solo Ride"
+                            android:textColor="@color/ruta_text_primary"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
 
-            <!-- 3. DRIVER MATCHED CARD -->
+                        <TextView
+                            android:id="@+id/txtFareSolo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="₱0.00"
+                            android:textColor="@color/ruta_primary_dark"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Shared Ride Option -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardOptionShared"
+                    android:layout_width="0dp"
+                    android:layout_height="80dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:cardBackgroundColor="@color/ruta_card_bg"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="#CBD5E1"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Shared Ride"
+                                android:textColor="@color/ruta_text_primary"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/txtFareShared"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:includeFontPadding="false"
+                            android:text="Save up to 50%"
+                            android:textColor="@color/ruta_status_success"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <!-- 4. DRIVER MATCHED CARD -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardDriverInfo"
                 android:layout_width="match_parent"
@@ -298,13 +423,13 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 4. CONFIRM BUTTON -->
+            <!-- 5. CONFIRM BUTTON -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnConfirmStage"
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:layout_marginTop="16dp"
-                android:text="@string/a_loc_confirm_pickup"
+                android:text="Confirm Pickup"
                 android:textColor="@color/white"
                 android:textSize="15sp"
                 android:textStyle="bold"
