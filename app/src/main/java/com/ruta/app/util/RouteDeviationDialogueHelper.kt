@@ -27,6 +27,8 @@ object RouteDeviationDialogHelper {
             }
             .setNegativeButton("Emergency") { dialog, _ ->
                 dialog.dismiss()
+                // An emergency always denies the reroute, whether or not contacts are notified.
+                writeDeviationResponse(bookingId, DeviationApproval.EMERGENCY)
                 showEmergencyConfirmation(context, database, bookingId)
             }
             .show()
@@ -46,6 +48,8 @@ object RouteDeviationDialogHelper {
             .setPositiveButton("Yes") { _, _ ->
                 // Clear the route deviation streak state for this booking
                 RouteDeviationManager.clearTripDeviationState(bookingId)
+                // Tell the driver's screen: this passenger approves the new route.
+                writeDeviationResponse(bookingId, DeviationApproval.OK)
                 Toast.makeText(context, "Reroute validated.", Toast.LENGTH_SHORT).show()
                 onRerouteValidated()
             }
@@ -79,5 +83,17 @@ object RouteDeviationDialogHelper {
                 dialog.dismiss()
             }
             .show()
+    }
+
+    /** The passenger's answer, read by the driver app to approve or deny the reroute. */
+    fun writeDeviationResponse(bookingId: String, response: String) {
+        val ref = com.google.firebase.database.FirebaseDatabase.getInstance().reference
+            .child("bookings").child(bookingId)
+        ref.updateChildren(
+            mapOf(
+                "deviationResponse" to response,
+                "deviationResponseAt" to System.currentTimeMillis()
+            )
+        )
     }
 }

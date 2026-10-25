@@ -3,6 +3,7 @@ package com.ruta.app.ui
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import com.google.android.material.snackbar.Snackbar
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
@@ -284,8 +285,8 @@ class PassengerHomeActivity : AppCompatActivity() {
                         hasFiredNotification = true
                         RouteDeviationManager.sendDeviationNotification(this@PassengerHomeActivity, bookingId)
 
-                        viewPager.setCurrentItem(1, true)
-
+                        // No forced tab switch: the red warning card + this dialog are enough,
+                        // the rider keeps whatever screen they were on.
                         RouteDeviationDialogHelper.showDeviationAlert(
                             context = this@PassengerHomeActivity,
                             database = database,
@@ -357,22 +358,16 @@ class PassengerHomeActivity : AppCompatActivity() {
     private fun startIncomingEmergencyAlertListener() {
         val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
-        alertListener = EmergencyContactManager.listenForIncomingAlerts(database, myUid) { senderName, driverName, vehicleInfo, pickupAddress, dropoffAddress, _, _ ->
-            AlertDialog.Builder(this)
-                .setTitle("⚠️ Emergency Alert")
-                .setMessage(
-                    "$senderName's ride showed a route deviation.\n\n" +
-                            "Driver: $driverName\n" +
-                            "Vehicle: $vehicleInfo\n" +
-                            "Pickup: $pickupAddress\n" +
-                            "Dropoff: $dropoffAddress"
-                )
-                .setCancelable(false)
-                .setPositiveButton("View Live Map") { dialog, _ ->
-                    dialog.dismiss()
-                    viewPager.setCurrentItem(1, true)
-                }
-                .setNegativeButton("Dismiss") { dialog, _ -> dialog.dismiss() }
+        alertListener = EmergencyContactManager.listenForIncomingAlertsDetailed(database, myUid) { alert ->
+            if (isFinishing || isDestroyed) return@listenForIncomingAlertsDetailed
+
+            // A warning only: a bar at the bottom, never a modal and never a screen switch.
+            // "View live map" is the rider's own choice.
+            val text = "⚠️ ${alert.senderName}'s ride showed a route deviation. " +
+                    "Driver: ${alert.driverName} • ${alert.vehicleInfo}"
+            Snackbar.make(findViewById(android.R.id.content), text, 15000)
+                .setTextMaxLines(4)
+                .setAction("View live map") { viewPager.setCurrentItem(1, true) }
                 .show()
         }
     }

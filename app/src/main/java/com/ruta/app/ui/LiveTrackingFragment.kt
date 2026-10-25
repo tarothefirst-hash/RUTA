@@ -404,6 +404,8 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    private var lastRerouteAt = 0L
+
     private fun attachBookingListener(bId: String) {
         bookingRef = database.child("bookings").child(bId)
         bookingListener = object : ValueEventListener {
@@ -443,10 +445,18 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
 
                     val destinationPos = if (status == "IN_PROGRESS") dropoffLatLng else pickupLatLng
 
-                    // If route status is DEVIATED or polyline isn't drawn, trigger AUTO-REROUTE
-                    if (destinationPos != null && (routeStatus == "DEVIATED" || currentRoutePoints.isEmpty())) {
+                    // The line only changes when the driver's reroute was APPROVED (the driver
+                    // stamps `reroutedAt`). While a deviation is pending or denied the
+                    // original line stays, so the rider can see where the driver should be.
+                    val reroutedAt = snapshot.child("reroutedAt").getValue(Long::class.java) ?: 0L
+                    val rerouteApproved = reroutedAt > lastRerouteAt
+                    if (destinationPos != null && (currentRoutePoints.isEmpty() || rerouteApproved)) {
+                        lastRerouteAt = reroutedAt
                         recalculateAndRedrawRoute(driverPos, destinationPos)
                     }
+                    activeRoutePolyline?.color = Color.parseColor(
+                        if (routeStatus == "DEVIATED") "#E53935" else "#6D5EFC"
+                    )
                 }
             }
 

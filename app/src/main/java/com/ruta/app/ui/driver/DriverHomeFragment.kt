@@ -36,6 +36,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
@@ -57,6 +58,8 @@ import com.ruta.app.driver.DriverLocationService
 import com.ruta.app.model.Booking
 import com.ruta.app.ui.ChatActivity
 import com.ruta.app.ui.DirectionsHelper
+import com.ruta.app.util.DeviationApproval
+import com.google.firebase.database.ServerValue
 import com.ruta.app.ui.TrackableTarget
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.MapMarkerUtils
@@ -124,6 +127,21 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private val declinedBookingIds = mutableSetOf<String>()
     private val declinedGroupIds = mutableSetOf<String>()
     private var wasDeviated = false
+
+    // ---- Navigation / reroute state ----
+    private var navigator: DriverNavigator? = null
+    private var followMode = true
+    private var lastNavKey: String? = null
+    private var lastFix: Location? = null
+    private var deviatedAt = 0L
+    private var suppressDeviationUntil = 0L
+    private var returnPromptShown = false
+    private val deviationResponses = mutableMapOf<String, String?>()
+    private val deviationListeners = mutableMapOf<String, ValueEventListener>()
+    private val deviationHandler = Handler(Looper.getMainLooper())
+    private var alertTrackRef: DatabaseReference? = null
+    private var alertTrackListener: ValueEventListener? = null
+    private var lastPersistedIds = "\u0000" // forces the first write to overwrite any stale value
 
     private val targetsList = mutableListOf<TrackableTarget>()
     private var currentTargetIndex = 0
@@ -199,6 +217,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         setupLocationCallback()
         setupBookingActionListeners()
         setupSheetAndTargetControls()
+        setupNavigationUi()
 
         val myUid = auth.currentUser?.uid
         if (myUid != null) {
@@ -221,6 +240,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
         mMap.uiSettings.isZoomControlsEnabled = true
+        mMap.setOnCameraMoveStartedListener { reason ->
+            // The driver dragged the map: stop auto-follow until they tap recenter.
+            if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) followMode = false
+        }
         checkLocationPermission()
     }
 
@@ -240,11 +263,15 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         binding.layoutCardHeader.setOnClickListener { toggleCard() }
 
         binding.btnMyLocation.setOnClickListener {
+            followMode = true
             val selfIndex = targetsList.indexOfFirst { it.isSelf }
             if (selfIndex != -1) {
                 switchTarget(selfIndex)
             }
-            recenterMapOnCurrentState()
+            val fix = lastFix
+            val here = currentLatLng
+            if (lastNavKey != null && fix != null && here != null) followCamera(fix, here)
+            else recenterMapOnCurrentState()
         }
 
         binding.btnPrevContact.setOnClickListener {
@@ -319,6 +346,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         _binding?.txtCurrentTargetIndicator?.text = "Pin: ${target.name}"
         detachContactListener()
+        detachAlertTracking()
+        _binding?.btnBackToMyScreen?.visibility = if (target.isSelf) View.GONE else View.VISIBLE
+        if (!target.isSelf) followMode = false
 
         if (target.isSelf) {
             currentLatLng?.let { pos ->
@@ -372,27 +402,92 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun startListeningForEmergencyAlerts(myUid: String) {
-        alertListener = EmergencyContactManager.listenForIncomingAlerts(
-            database, myUid
-        ) { senderName, driverName, vehicleInfo, _, _, lat, lng ->
-            if (!isAdded) return@listenForIncomingAlerts
+        alertListener = EmergencyContactManager.listenForIncomingAlertsDetailed(database, myUid) { alert ->
+            if (!isAdded || _binding == null) return@listenForIncomingAlertsDetailed
+            showIncomingAlert(alert)
+        }
+    }
 
-            triggerAlertSoundAndVibration()
-            val emergencyPos = LatLng(lat, lng)
+    /**
+     * An alert from someone who lists this driver as a trusted contact. It is only a warning:
+     * a banner + sound, the driver's own map, route and voice guidance stay exactly as they
+     * are. "Track on map" is opt-in, and "Back to my screen" undoes it.
+     */
+    private fun showIncomingAlert(a: EmergencyContactManager.IncomingAlert) {
+        val b = _binding ?: return
+        triggerAlertSoundAndVibration()
 
-            AlertDialog.Builder(requireContext())
-                .setTitle("🚨 EMERGENCY ALERT")
-                .setMessage("Distress signal received from $senderName!\nVehicle: $vehicleInfo")
-                .setCancelable(false)
-                .setPositiveButton("Focus Pin on Map") { dialog, _ ->
-                    dialog.dismiss()
-                    if (::mMap.isInitialized) {
-                        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(emergencyPos, 17f))
+        b.txtAlertTitle.text = "🚨 Emergency alert from ${a.senderName}"
+        b.txtAlertBody.text = buildString {
+            append("Vehicle: ${a.vehicleInfo}")
+            if (a.pickupAddress != "N/A") append("\nFrom: ${a.pickupAddress}")
+            if (a.dropoffAddress != "N/A") append("\nTo: ${a.dropoffAddress}")
+            if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) {
+                append("\nYour current trip and navigation are not affected.")
+            }
+        }
+        b.cardAlertBanner.visibility = View.VISIBLE
+        b.btnAlertTrack.setOnClickListener {
+            b.cardAlertBanner.visibility = View.GONE
+            trackAlert(a)
+        }
+        navigator?.speak("Emergency alert received from ${a.senderName}.", force = true)
+    }
+
+    /** Opt-in: follow the alert sender's vehicle on the map until "Back to my screen". */
+    private fun trackAlert(a: EmergencyContactManager.IncomingAlert) {
+        if (!::mMap.isInitialized) return
+        detachContactListener()
+        detachAlertTracking()
+        val uid = a.senderUid.ifEmpty { "alert" }
+        activeEmergencyUid = uid
+        followMode = false
+        _binding?.btnBackToMyScreen?.visibility = View.VISIBLE
+        _binding?.txtCurrentTargetIndicator?.text = "Pin: ${a.senderName}"
+
+        if (a.lat != 0.0 || a.lng != 0.0) {
+            updateContactMarkerOnMap(LatLng(a.lat, a.lng), a.senderName, uid)
+        }
+        if (a.bookingId.isNotEmpty()) {
+            val ref = database.child("bookings").child(a.bookingId)
+            val l = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val lat = snapshot.child("driverLat").getValue(Double::class.java)
+                    val lng = snapshot.child("driverLng").getValue(Double::class.java)
+                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                        updateContactMarkerOnMap(LatLng(lat, lng), a.senderName, uid)
                     }
                 }
-                .setNegativeButton("Dismiss", null)
-                .show()
+                override fun onCancelled(error: DatabaseError) {}
+            }
+            alertTrackRef = ref
+            alertTrackListener = l
+            ref.addValueEventListener(l)
         }
+    }
+
+    private fun detachAlertTracking() {
+        alertTrackListener?.let { alertTrackRef?.removeEventListener(it) }
+        alertTrackListener = null
+        alertTrackRef = null
+        if (activeEmergencyUid != null) {
+            stopBlinkingMarker()
+            trackedContactMarker?.remove()
+            trackedContactMarker = null
+            activeEmergencyUid = null
+        }
+    }
+
+    private fun backToMyScreen() {
+        detachAlertTracking()
+        _binding?.btnBackToMyScreen?.visibility = View.GONE
+        followMode = true
+        val selfIndex = targetsList.indexOfFirst { it.isSelf }
+        if (selfIndex != -1) switchTarget(selfIndex)
+        val fix = lastFix
+        val here = currentLatLng
+        if (fix != null && here != null && lastNavKey != null) followCamera(fix, here)
+        else here?.let { mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(it, 16f)) }
     }
 
     private fun triggerAlertSoundAndVibration() {
@@ -712,35 +807,282 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val isTripActive = (currentRideState == DriverRideState.IN_PROGRESS) ||
                 (!currentBooking?.tripGroupId.isNullOrEmpty() && currentRideState == DriverRideState.ACCEPTED)
 
-        if (isTripActive && rawRoutePoints.isNotEmpty()) {
+        if (isTripActive && rawRoutePoints.isNotEmpty() && System.currentTimeMillis() >= suppressDeviationUntil) {
             val isDeviated = RouteDeviationManager.isDriverDeviated(location, rawRoutePoints, activeBookingId ?: "")
             if (isDeviated && !wasDeviated) {
                 wasDeviated = true
                 flagTripAsDeviated()
+                onDeviationStarted()
             } else if (!isDeviated && wasDeviated) {
                 wasDeviated = false
                 clearTripDeviation()
+                onBackOnRoute()
             }
         }
+
+        lastFix = location
+        updateNavigation(location, latLng)
 
         checkArrivalAtPickup(latLng)
 
         val currentUserId = auth.currentUser?.uid ?: return
+        val bearing = if (location.hasBearing()) location.bearing.toDouble() else 0.0
+        val speed = if (location.hasSpeed()) location.speed.toDouble() else 0.0
+
         val locationMap = hashMapOf<String, Any>(
             "lat" to location.latitude,
-            "lng" to location.longitude
+            "lng" to location.longitude,
+            "bearing" to bearing,
+            "speed" to speed,
+            "updatedAt" to ServerValue.TIMESTAMP
         )
         database.child("drivers").child(currentUserId).updateChildren(locationMap)
 
-        activeBookingId?.let { bookingId ->
-            if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) {
-                val driverLocMap = hashMapOf<String, Any>(
-                    "driverLat" to location.latitude,
-                    "driverLng" to location.longitude
-                )
-                database.child("bookings").child(bookingId).updateChildren(driverLocMap)
-            }
+        // Live location goes to EVERY passenger still on the trip (a shared ride used to
+        // update only the lead booking, so the second passenger saw a frozen driver).
+        val liveIds = if (currentRideState == DriverRideState.ACCEPTED ||
+            currentRideState == DriverRideState.IN_PROGRESS) bookingIdsOnTrip() else emptyList()
+        if (liveIds.isNotEmpty()) {
+            val driverLocMap = hashMapOf<String, Any>(
+                "driverLat" to location.latitude,
+                "driverLng" to location.longitude,
+                "driverBearing" to bearing,
+                "driverSpeed" to speed,
+                "driverUpdatedAt" to ServerValue.TIMESTAMP
+            )
+            liveIds.forEach { id -> database.child("bookings").child(id).updateChildren(driverLocMap) }
         }
+        persistActiveBookingIds(liveIds)
+    }
+
+    /** Bookings that still have a passenger to serve (shared trips: from the current stop on). */
+    private fun bookingIdsOnTrip(): List<String> {
+        val booking = currentBooking
+        if (booking != null && !booking.tripGroupId.isNullOrEmpty() && currentGroupStops.isNotEmpty()) {
+            return currentGroupStops.drop(currentStopIndex).map { it.bookingId }.distinct()
+        }
+        return listOfNotNull(activeBookingId)
+    }
+
+    /**
+     * Lets DriverLocationService keep the passengers' live map moving if this screen is
+     * ever destroyed while a trip is running (e.g. the driver opens another tab).
+     */
+    private fun persistActiveBookingIds(ids: List<String>) {
+        val ctx = context ?: return
+        val prefs = ctx.getSharedPreferences("DRIVER_SESSION", Context.MODE_PRIVATE)
+        val joined = ids.joinToString(",")
+        val edit = prefs.edit().putLong("SCREEN_LIVE_AT", System.currentTimeMillis())
+        if (joined != lastPersistedIds) {
+            lastPersistedIds = joined
+            edit.putString("ACTIVE_BOOKING_IDS", joined)
+        }
+        edit.apply()
+    }
+
+    // ------------------------------------------------------------------
+    // Navigation UI (turn banner, voice, follow camera)
+    // ------------------------------------------------------------------
+
+    private fun setupNavigationUi() {
+        navigator = DriverNavigator(
+            requireContext(),
+            onBanner = { arrow, distance, instruction ->
+                _binding?.let {
+                    it.cardNavBanner.visibility = View.VISIBLE
+                    it.txtNavArrow.text = arrow
+                    it.txtNavDistance.text = distance
+                    it.txtNavInstruction.text = instruction
+                }
+            },
+            onIdle = { _binding?.cardNavBanner?.visibility = View.GONE }
+        )
+        updateMuteIcon()
+        binding.btnMuteVoice.setOnClickListener {
+            val nav = navigator ?: return@setOnClickListener
+            nav.setMuted(!nav.muted)
+            updateMuteIcon()
+            Toast.makeText(context, if (nav.muted) "Voice guidance muted" else "Voice guidance on", Toast.LENGTH_SHORT).show()
+        }
+        binding.btnBackToMyScreen.setOnClickListener { backToMyScreen() }
+        binding.btnAlertDismiss.setOnClickListener { binding.cardAlertBanner.visibility = View.GONE }
+    }
+
+    private fun updateMuteIcon() {
+        val muted = navigator?.muted == true
+        _binding?.btnMuteVoice?.setImageResource(
+            if (muted) android.R.drawable.ic_lock_silent_mode else android.R.drawable.ic_lock_silent_mode_off
+        )
+    }
+
+    /** Where the current leg of guidance should end. */
+    private fun navTarget(): LatLng? {
+        val booking = currentBooking ?: return null
+        if (!booking.tripGroupId.isNullOrEmpty()) return currentGroupStops.getOrNull(currentStopIndex)?.location
+        return when (currentRideState) {
+            DriverRideState.ACCEPTED -> LatLng(booking.pickupLat, booking.pickupLng)
+            DriverRideState.IN_PROGRESS -> LatLng(booking.dropoffLat, booking.dropoffLng)
+            else -> null
+        }
+    }
+
+    private fun navKey(): String? {
+        val booking = currentBooking ?: return null
+        if (currentRideState != DriverRideState.ACCEPTED && currentRideState != DriverRideState.IN_PROGRESS) return null
+        if (!booking.tripGroupId.isNullOrEmpty()) {
+            val stop = currentGroupStops.getOrNull(currentStopIndex) ?: return null
+            return "G:${stop.bookingId}:${stop.type}:$currentStopIndex"
+        }
+        return "S:${activeBookingId}:$currentRideState"
+    }
+
+    private fun updateNavigation(location: Location, latLng: LatLng) {
+        val b = _binding ?: return
+        val key = navKey()
+        if (key == null) {
+            if (lastNavKey != null) {
+                lastNavKey = null
+                navigator?.stop()
+            }
+            return
+        }
+        if (key != lastNavKey) {
+            lastNavKey = key
+            navTarget()?.let { navigator?.startLeg(latLng, it) }
+        }
+        navigator?.onLocation(latLng.latitude, latLng.longitude)
+
+        val kmh = if (location.hasSpeed()) Math.round(location.speed * 3.6f) else 0
+        b.txtNavSpeed.text = "$kmh\nkm/h"
+        followCamera(location, latLng)
+    }
+
+    private fun followCamera(location: Location, latLng: LatLng) {
+        if (!followMode || !::mMap.isInitialized) return
+        val target = targetsList.getOrNull(currentTargetIndex)
+        if (target != null && !target.isSelf) return
+        val bearing = if (location.hasBearing() && location.speed > 1.5f) location.bearing
+        else mMap.cameraPosition.bearing
+        mMap.animateCamera(
+            CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder().target(latLng).zoom(17.5f).tilt(45f).bearing(bearing).build()
+            ),
+            900,
+            null
+        )
+    }
+
+    // ------------------------------------------------------------------
+    // Deviation -> passenger approval -> reroute (or keep the original route)
+    // ------------------------------------------------------------------
+
+    private fun onDeviationStarted() {
+        deviatedAt = System.currentTimeMillis()
+        returnPromptShown = false
+        deviationResponses.clear()
+        showDeviationStatus("⚠ You are off the route. Waiting for passenger approval. Follow the original route if it is not approved.")
+        navigator?.speak("You are off route. Waiting for passenger approval.", force = true)
+
+        detachDeviationListeners()
+        bookingIdsOnTrip().forEach { id ->
+            val ref = database.child("bookings").child(id)
+            // Forget any answer left over from an earlier deviation, then listen for the new one.
+            ref.child("deviationResponse").removeValue()
+            ref.child("deviationResponseAt").removeValue()
+            val l = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    deviationResponses[id] = snapshot.getValue(String::class.java)
+                    evaluateDeviation(fromTimer = false)
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            }
+            deviationListeners[id] = l
+            ref.child("deviationResponse").addValueEventListener(l)
+        }
+        deviationHandler.removeCallbacksAndMessages(null)
+        deviationHandler.postDelayed({ evaluateDeviation(fromTimer = true) }, 90_000L)
+    }
+
+    private fun evaluateDeviation(fromTimer: Boolean) {
+        if (!wasDeviated || _binding == null) return
+        when (DeviationApproval.resolve(deviationResponses.values)) {
+            DeviationApproval.Outcome.APPROVED -> applyApprovedReroute()
+            DeviationApproval.Outcome.BLOCKED ->
+                showReturnToRoute("🚨 A passenger reported an emergency, so the reroute was denied. Return to the original route (shown in red).")
+            DeviationApproval.Outcome.PENDING ->
+                if (fromTimer && DeviationApproval.timedOut(deviatedAt, System.currentTimeMillis())) {
+                    showReturnToRoute("No passenger approval. Return to the original route (shown in red).")
+                }
+        }
+    }
+
+    private fun showReturnToRoute(message: String) {
+        if (returnPromptShown) return
+        returnPromptShown = true
+        showDeviationStatus(message)
+        setReturnRouteHighlight(true)
+        navigator?.speak("Reroute not approved. Please return to the original route.", force = true)
+    }
+
+    /** Approved: new line from where the driver is now to the next stop, old line replaced. */
+    private fun applyApprovedReroute() {
+        val ids = bookingIdsOnTrip()
+        wasDeviated = false
+        detachDeviationListeners()
+        deviationHandler.removeCallbacksAndMessages(null)
+        suppressDeviationUntil = System.currentTimeMillis() + 10_000L
+        ids.forEach { RouteDeviationManager.clearTripDeviationState(it) }
+        clearTripDeviation(rerouted = true)
+        setReturnRouteHighlight(false)
+
+        showDeviationStatus("✔ Reroute approved. New route calculated.", autoHideMs = 6000L)
+        navigator?.speak("Rerouting.", force = true)
+
+        val here = currentLatLng ?: return
+        if (!currentBooking?.tripGroupId.isNullOrEmpty()) {
+            drawGroupRoutePreviewOnly(currentGroupStops)
+        } else {
+            navTarget()?.let { drawRoute(here, it) }
+        }
+        navTarget()?.let { navigator?.startLeg(here, it, announceStart = false) }
+    }
+
+    private fun onBackOnRoute() {
+        detachDeviationListeners()
+        deviationHandler.removeCallbacksAndMessages(null)
+        setReturnRouteHighlight(false)
+        if (returnPromptShown) navigator?.speak("You are back on the route.", force = true)
+        showDeviationStatus("✔ Back on the route.", autoHideMs = 4000L)
+    }
+
+    private fun detachDeviationListeners() {
+        deviationListeners.forEach { (id, l) ->
+            database.child("bookings").child(id).child("deviationResponse").removeEventListener(l)
+        }
+        deviationListeners.clear()
+    }
+
+    private fun resetDeviationFlow() {
+        detachDeviationListeners()
+        deviationHandler.removeCallbacksAndMessages(null)
+        suppressDeviationUntil = 0L
+        returnPromptShown = false
+        _binding?.cardDeviationStatus?.visibility = View.GONE
+    }
+
+    private fun showDeviationStatus(message: String, autoHideMs: Long = 0L) {
+        val b = _binding ?: return
+        b.txtDeviationStatus.text = message
+        b.cardDeviationStatus.visibility = View.VISIBLE
+        if (autoHideMs > 0) {
+            deviationHandler.postDelayed({ _binding?.cardDeviationStatus?.visibility = View.GONE }, autoHideMs)
+        }
+    }
+
+    private fun setReturnRouteHighlight(on: Boolean) {
+        // Shared trips draw coloured legs plus an invisible trim line, so only single trips recolour.
+        if (!currentBooking?.tripGroupId.isNullOrEmpty()) return
+        activePolyline?.color = Color.parseColor(if (on) "#E53935" else "#6D5EFC")
     }
 
     private fun currentPickupTarget(): Pair<String, LatLng>? {
@@ -878,51 +1220,26 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun flagTripAsDeviated() {
-        val booking = currentBooking ?: return
-        val tripGroupId = booking.tripGroupId
-
         val deviationUpdates = hashMapOf<String, Any>(
             "routeStatus" to "DEVIATED",
             "lastDeviatedLat" to (currentLatLng?.latitude ?: 0.0),
             "lastDeviatedLng" to (currentLatLng?.longitude ?: 0.0),
             "deviatedTimestamp" to System.currentTimeMillis()
         )
-
-        if (!tripGroupId.isNullOrEmpty()) {
-            database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        for (child in snapshot.children) {
-                            child.ref.updateChildren(deviationUpdates)
-                        }
-                    }
-                    override fun onCancelled(error: DatabaseError) {}
-                })
-        } else {
-            activeBookingId?.let { id ->
-                database.child("bookings").child(id).updateChildren(deviationUpdates)
-            }
+        bookingIdsOnTrip().forEach { id ->
+            database.child("bookings").child(id).updateChildren(deviationUpdates)
         }
     }
 
-    private fun clearTripDeviation() {
-        val booking = currentBooking ?: return
-        val tripGroupId = booking.tripGroupId
-
-        if (!tripGroupId.isNullOrEmpty()) {
-            database.child("bookings").orderByChild("tripGroupId").equalTo(tripGroupId)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        for (child in snapshot.children) {
-                            child.ref.child("routeStatus").setValue("NORMAL")
-                        }
-                    }
-                    override fun onCancelled(error: DatabaseError) {}
-                })
-        } else {
-            activeBookingId?.let { id ->
-                database.child("bookings").child(id).child("routeStatus").setValue("NORMAL")
-            }
+    /** Back to NORMAL; [rerouted] also stamps `reroutedAt` so passenger maps redraw the new line once. */
+    private fun clearTripDeviation(rerouted: Boolean = false) {
+        val updates = hashMapOf<String, Any>("routeStatus" to "NORMAL")
+        if (rerouted) updates["reroutedAt"] = System.currentTimeMillis()
+        bookingIdsOnTrip().forEach { id ->
+            val ref = database.child("bookings").child(id)
+            ref.updateChildren(updates)
+            ref.child("deviationResponse").removeValue()
+            ref.child("deviationResponseAt").removeValue()
         }
     }
 
@@ -1962,6 +2279,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         activePolyline = null
         rawRoutePoints = emptyList()
         wasDeviated = false
+        resetDeviationFlow()
         arrivalHandledThisStop = false
 
         pickupMarker?.remove()
@@ -2271,6 +2589,11 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     override fun onDestroyView() {
         super.onDestroyView()
         detachContactListener()
+        detachAlertTracking()
+        detachDeviationListeners()
+        deviationHandler.removeCallbacksAndMessages(null)
+        navigator?.shutdown()
+        navigator = null
         stopLocationUpdates()
         stopListeningForRequests()
         val myUid = auth.currentUser?.uid
