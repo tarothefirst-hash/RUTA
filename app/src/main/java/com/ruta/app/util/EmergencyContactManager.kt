@@ -179,6 +179,7 @@ object EmergencyContactManager {
 
                         val alertData = mapOf(
                             "senderName" to senderName,
+                            "senderUid" to targetUid,
                             "bookingId" to bookingId,
                             "driverName" to driverFullName,
                             "vehicleInfo" to vehicleInfo,
@@ -222,6 +223,52 @@ object EmergencyContactManager {
                         child.child("lat").getValue(Double::class.java) ?: 0.0,
                         child.child("lng").getValue(Double::class.java) ?: 0.0
                     )
+                    ref.child(key).removeValue()
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        return listener
+    }
+
+    /** Everything an incoming alert carries; lets the screen show a popup and track on demand. */
+    data class IncomingAlert(
+        val senderName: String,
+        val senderUid: String,
+        val bookingId: String,
+        val driverName: String,
+        val vehicleInfo: String,
+        val pickupAddress: String,
+        val dropoffAddress: String,
+        val lat: Double,
+        val lng: Double,
+        val isDriverEmergency: Boolean
+    )
+
+    fun listenForIncomingAlertsDetailed(
+        database: DatabaseReference,
+        myUid: String,
+        onAlert: (IncomingAlert) -> Unit
+    ): ValueEventListener {
+        val ref = database.child("emergencyAlerts").child(myUid)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                for (child in snapshot.children) {
+                    val key = child.key ?: continue
+                    val alert = IncomingAlert(
+                        senderName = child.child("senderName").getValue(String::class.java) ?: "A trusted contact",
+                        senderUid = child.child("senderUid").getValue(String::class.java) ?: "",
+                        bookingId = child.child("bookingId").getValue(String::class.java) ?: "",
+                        driverName = child.child("driverName").getValue(String::class.java) ?: "Unknown",
+                        vehicleInfo = child.child("vehicleInfo").getValue(String::class.java) ?: "N/A",
+                        pickupAddress = child.child("pickupAddress").getValue(String::class.java) ?: "N/A",
+                        dropoffAddress = child.child("dropoffAddress").getValue(String::class.java) ?: "N/A",
+                        lat = child.child("lat").getValue(Double::class.java) ?: 0.0,
+                        lng = child.child("lng").getValue(Double::class.java) ?: 0.0,
+                        isDriverEmergency = child.child("isDriverEmergency").getValue(Boolean::class.java) ?: false
+                    )
+                    onAlert(alert)
                     ref.child(key).removeValue()
                 }
             }

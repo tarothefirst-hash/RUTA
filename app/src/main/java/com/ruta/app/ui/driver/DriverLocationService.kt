@@ -18,6 +18,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ServerValue
 import com.ruta.app.R
 
 class DriverLocationService : Service() {
@@ -61,11 +62,34 @@ class DriverLocationService : Service() {
                 val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
                 val database = FirebaseDatabase.getInstance().reference
+                val bearing = if (lastLocation.hasBearing()) lastLocation.bearing.toDouble() else 0.0
+                val speed = if (lastLocation.hasSpeed()) lastLocation.speed.toDouble() else 0.0
                 val locationMap = hashMapOf<String, Any>(
                     "lat" to lastLocation.latitude,
-                    "lng" to lastLocation.longitude
+                    "lng" to lastLocation.longitude,
+                    "bearing" to bearing,
+                    "speed" to speed,
+                    "updatedAt" to ServerValue.TIMESTAMP
                 )
                 database.child("drivers").child(uid).updateChildren(locationMap)
+
+                // Safety net: if the driver screen is gone (destroyed tab, app in background)
+                // keep every passenger on the trip seeing a moving driver. While the screen
+                // is alive it already writes these, so the service stays out of the way.
+                val prefs = getSharedPreferences("DRIVER_SESSION", Context.MODE_PRIVATE)
+                val screenAlive = System.currentTimeMillis() - prefs.getLong("SCREEN_LIVE_AT", 0L) < 6000L
+                val ids = prefs.getString("ACTIVE_BOOKING_IDS", "").orEmpty()
+                    .split(",").filter { it.isNotBlank() }
+                if (!screenAlive && ids.isNotEmpty()) {
+                    val live = hashMapOf<String, Any>(
+                        "driverLat" to lastLocation.latitude,
+                        "driverLng" to lastLocation.longitude,
+                        "driverBearing" to bearing,
+                        "driverSpeed" to speed,
+                        "driverUpdatedAt" to ServerValue.TIMESTAMP
+                    )
+                    ids.forEach { database.child("bookings").child(it).updateChildren(live) }
+                }
             }
         }
 
