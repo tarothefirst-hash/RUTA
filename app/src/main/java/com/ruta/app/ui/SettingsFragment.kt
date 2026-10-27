@@ -38,6 +38,7 @@ class SettingsFragment : Fragment() {
     private fun performLogout() {
         // 1. Sign out from Firebase Auth
         NotificationWatchService.stop(requireContext().applicationContext)
+        com.ruta.app.util.PushTokens.onSignOut()
         FirebaseAuth.getInstance().signOut()
 
         // 2. Clear local session cached in SharedPreferences

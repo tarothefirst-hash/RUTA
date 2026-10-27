@@ -74,3 +74,16 @@ not be compiled here (no Android SDK), so please build and run it once.
 "notifications": { "$uid": { ".read": "auth != null && auth.uid == $uid", ".write": "auth != null" } },
 "config": { ".read": "auth != null", "fare": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'ADMIN'" } }
 ```
+
+## Cloud Storage photos + closed-app push (post-defense)
+
+**Photos.** New uploads go to Firebase Storage; the database keeps a `storage:<path>` reference
+(old inline Base64 still displays, nothing is migrated).
+- `profiles/{uid}/avatar.jpg` – any signed-in user can view, owner writes.
+- `ids/{uid}/…`, `driver_docs/{uid}/…`, `receipts/{uid}/…` – owner + admin only (admin UID list in `storage.rules`).
+- Drivers upload a 1x1 photo during registration; admin checks it as the 4th checklist item; it becomes the locked profile picture (`photoLocked`).
+- Riders can add/remove a profile photo; it appears in the "Co-Passenger Found" sheet and on the driver's trip card. Initials show when there is no photo.
+- Honest limits: the driver photo lock and "only the matched co-passenger/driver sees a rider photo" are enforced in the app, not by Storage rules.
+
+**Closed-app push.** `functions/` has three Cloud Functions (notification created, emergency alert created, booking status changed). Phones register `users/{uid}/fcmTokens/{token}`.
+Deploy: `cd functions && npm install && cd .. && firebase deploy --only functions,storage`. Set `REGION` in `functions/index.js` to the database region first. `maxInstances` is capped at 3; add a budget alert in Google Cloud Billing.

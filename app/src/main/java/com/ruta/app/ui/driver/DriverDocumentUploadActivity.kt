@@ -16,6 +16,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
 import com.ruta.app.util.ImageUtils
+import com.ruta.app.util.PhotoPaths
+import com.ruta.app.util.StoragePhotos
 import com.ruta.app.util.keepClearOfKeyboard
 
 class DriverDocumentUploadActivity : AppCompatActivity() {
@@ -26,14 +28,19 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
     private var licenseUri: Uri? = null
     private var registrationUri: Uri? = null
     private var nbiUri: Uri? = null
+    private var photoUri: Uri? = null
+    private var alreadyHasPhoto = false
 
     private lateinit var txtLicenseStatus: TextView
     private lateinit var txtRegistrationStatus: TextView
     private lateinit var txtNbiStatus: TextView
+    private lateinit var txtPhotoStatus: TextView
+    private lateinit var imgPhotoPreview: android.widget.ImageView
     private lateinit var progressBar: ProgressBar
 
     // Documents the admin already marked good: kept as they are, no re-upload needed.
     private val approvedDocs = mutableSetOf<String>()
+    private val rejectedDocs = mutableSetOf<String>()
 
     // Photo selection contract pickers
     private val pickLicense = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -57,6 +64,15 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
         }
     }
 
+    private val pickPhoto = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            photoUri = uri
+            imgPhotoPreview.setImageURI(uri)
+            txtPhotoStatus.text = "1x1 photo attached ✓"
+            txtPhotoStatus.setTextColor(android.graphics.Color.parseColor("#6B7280"))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driver_document_upload)
@@ -71,12 +87,15 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
         txtLicenseStatus = findViewById(R.id.txtLicenseStatus)
         txtRegistrationStatus = findViewById(R.id.txtRegistrationStatus)
         txtNbiStatus = findViewById(R.id.txtNbiStatus)
+        txtPhotoStatus = findViewById(R.id.txtPhotoStatus)
+        imgPhotoPreview = findViewById(R.id.imgPhotoPreview)
         progressBar = findViewById(R.id.progressBar)
 
         val btnLicense = findViewById<Button>(R.id.btnSelectLicense)
         val btnRegistration = findViewById<Button>(R.id.btnSelectRegistration)
         val btnNbi = findViewById<Button>(R.id.btnSelectNbi)
         val btnSubmit = findViewById<Button>(R.id.btnSubmitDocuments)
+        findViewById<Button>(R.id.btnSelectPhoto).setOnClickListener { pickPhoto.launch("image/*") }
 
         // Show what the admin said about each file, and prefill the vehicle info.
         auth.currentUser?.uid?.let { uid ->
@@ -84,12 +103,16 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
                 edtModel.setText(snap.child("vehicleModel").getValue(String::class.java) ?: "")
                 edtPlate.setText(snap.child("plateNumber").getValue(String::class.java) ?: "")
                 edtColor.setText(snap.child("vehicleColor").getValue(String::class.java) ?: "")
+                val existingPhoto = snap.child("profilePhoto").getValue(String::class.java)
+                alreadyHasPhoto = !existingPhoto.isNullOrBlank()
+                if (alreadyHasPhoto) StoragePhotos.show(imgPhotoPreview, existingPhoto, R.drawable.ic_person)
 
                 val review = snap.child("docReview")
                 if (snap.child("docReviewStatus").getValue(String::class.java) == "REJECTED") {
                     showReview(review.child("license"), "license", txtLicenseStatus, "Driver's License")
                     showReview(review.child("registration"), "registration", txtRegistrationStatus, "OR/CR")
                     showReview(review.child("nbi"), "nbi", txtNbiStatus, "NBI Clearance")
+                    showReview(review.child("photo"), "photo", txtPhotoStatus, "1x1 photo")
                     Toast.makeText(this, "Some documents need changes. See the notes in red.", Toast.LENGTH_LONG).show()
                 }
             }
@@ -114,7 +137,8 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
 
             val missing = (licenseUri == null && "license" !in approvedDocs) ||
                 (registrationUri == null && "registration" !in approvedDocs) ||
-                (nbiUri == null && "nbi" !in approvedDocs)
+                (nbiUri == null && "nbi" !in approvedDocs) ||
+                (photoUri == null && "photo" !in approvedDocs && (!alreadyHasPhoto || "photo" in rejectedDocs))
             if (missing) {
                 Toast.makeText(this, "Please attach every document that is not already approved.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -131,6 +155,7 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
             label.text = "$name approved ✓ (no need to upload again)"
             label.setTextColor(android.graphics.Color.parseColor("#059669"))
         } else if (ok == false) {
+            rejectedDocs.add(key)
             val why = node.child("comment").getValue(String::class.java).orEmpty()
             label.text = "✗ $name rejected: $why. Please upload a new photo."
             label.setTextColor(android.graphics.Color.parseColor("#DC2626"))
@@ -141,60 +166,74 @@ class DriverDocumentUploadActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
 
         progressBar.visibility = View.VISIBLE
+        findViewById<Button>(R.id.btnSubmitDocuments).isEnabled = false
 
-        // Process images on a background thread to prevent UI locking
+        // Decode/compress off the main thread, then upload each chosen file to Firebase Storage.
+        // Only files picked this time are sent; documents the admin already approved stay as they are.
         Thread {
+            val jobs = linkedMapOf<String, Pair<String, String>>()   // db field -> (storage path, base64)
+            var failed = false
+            fun add(uri: Uri?, field: String, path: String, square: Boolean = false) {
+                if (uri == null) return
+                val b64 = if (square) ImageUtils.uriToAvatarBase64(this, uri, 512)
+                else ImageUtils.uriToCompressedBase64(this, uri)
+                if (b64 == null) failed = true else jobs[field] = path to b64
+            }
             try {
-                // Only the documents the driver picked this time; approved ones are kept untouched.
-                val chosen = linkedMapOf(
-                    "license" to (licenseUri to "licenseUrl"),
-                    "registration" to (registrationUri to "registrationUrl"),
-                    "nbi" to (nbiUri to "nbiClearanceUrl")
+                add(licenseUri, "licenseUrl", PhotoPaths.driverDoc(uid, "license"))
+                add(registrationUri, "registrationUrl", PhotoPaths.driverDoc(uid, "registration"))
+                add(nbiUri, "nbiClearanceUrl", PhotoPaths.driverDoc(uid, "nbi"))
+                add(photoUri, "profilePhoto", PhotoPaths.avatar(uid), square = true)
+            } catch (e: Exception) { failed = true }
+
+            runOnUiThread {
+                if (failed) { finishFail("Failed to process attached photos."); return@runOnUiThread }
+
+                val updates = hashMapOf<String, Any?>(
+                    "vehicleModel" to model,
+                    "plateNumber" to plate,
+                    "vehicleColor" to color,
+                    "documentsSubmitted" to true,
+                    "docReviewStatus" to "PENDING"
                 )
-                val encoded = HashMap<String, String?>()
-                for ((key, pair) in chosen) {
-                    val uri = pair.first ?: continue
-                    encoded[key] = ImageUtils.uriToCompressedBase64(this, uri)
-                }
-
-                runOnUiThread {
-                    if (encoded.values.any { it == null }) {
-                        progressBar.visibility = View.GONE
-                        Toast.makeText(this, "Failed to process attached document photos.", Toast.LENGTH_SHORT).show()
-                        return@runOnUiThread
+                val queue = jobs.entries.toMutableList()
+                fun next() {
+                    val job = queue.removeFirstOrNull()
+                    if (job == null) {
+                        database.child("users").child(uid).updateChildren(updates)
+                            .addOnSuccessListener {
+                                progressBar.visibility = View.GONE
+                                Toast.makeText(this, "Credentials submitted! Awaiting Admin approval.", Toast.LENGTH_LONG).show()
+                                finish()
+                            }
+                            .addOnFailureListener { e -> finishFail("Failed to update profile: ${e.message}") }
+                        return
                     }
-
-                    // Format as Data URIs for Realtime DB storage
-                    val updates = hashMapOf<String, Any?>(
-                        "vehicleModel" to model,
-                        "plateNumber" to plate,
-                        "vehicleColor" to color,
-                        "documentsSubmitted" to true,
-                        "docReviewStatus" to "PENDING"
-                    )
-                    for ((key, b64) in encoded) {
-                        updates[chosen.getValue(key).second] = "data:image/jpeg;base64,$b64"
+                    val (path, b64) = job.value
+                    StoragePhotos.uploadBase64(path, b64) { ref, error ->
+                        if (ref == null) { finishFail("Upload failed: $error"); return@uploadBase64 }
+                        updates[job.key] = ref
                         // A new file clears the old verdict for that document.
-                        updates["docReview/$key"] = null
+                        val reviewKey = when (job.key) {
+                            "licenseUrl" -> "license"; "registrationUrl" -> "registration"
+                            "nbiClearanceUrl" -> "nbi"; else -> "photo"
+                        }
+                        updates["docReview/$reviewKey"] = null
+                        if (job.key == "profilePhoto") {
+                            updates["photoLocked"] = true
+                            updates["profilePhotoUpdatedAt"] = System.currentTimeMillis()
+                        }
+                        next()
                     }
-
-                    database.child("users").child(uid).updateChildren(updates)
-                        .addOnSuccessListener {
-                            progressBar.visibility = View.GONE
-                            Toast.makeText(this, "Credentials submitted! Awaiting Admin approval.", Toast.LENGTH_LONG).show()
-                            finish()
-                        }
-                        .addOnFailureListener { e ->
-                            progressBar.visibility = View.GONE
-                            Toast.makeText(this, "Failed to update profile: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
                 }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    progressBar.visibility = View.GONE
-                    Toast.makeText(this, "Error processing images: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+                next()
             }
         }.start()
+    }
+
+    private fun finishFail(message: String) {
+        progressBar.visibility = View.GONE
+        findViewById<Button>(R.id.btnSubmitDocuments).isEnabled = true
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 }

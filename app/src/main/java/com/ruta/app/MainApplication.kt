@@ -41,6 +41,7 @@ class MainApplication : Application() {
         // Fare rates the admin can edit. Listening starts once someone is signed in
         // (the database rules need auth) and stays attached for the life of the process.
         FirebaseAuth.getInstance().addAuthStateListener { auth ->
+            if (auth.currentUser != null) com.ruta.app.util.PushTokens.register()
             if (auth.currentUser != null && !fareListening) {
                 fareListening = true
                 FirebaseDatabase.getInstance().reference.child("config").child("fare")

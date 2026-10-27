@@ -25,7 +25,9 @@ object ReviewLogic {
         "Name does not match",
         "Photo is cropped or cut off",
         "Wrong document",
-        "Glare makes it unreadable"
+        "Glare makes it unreadable",
+        "Face is not clearly visible",
+        "Not a 1x1 / ID-style photo"
     )
 
     /** An X must always explain itself; a check needs nothing. */

@@ -55,7 +55,7 @@ object ImageUtils {
     private const val AVATAR_QUALITY = 80
 
     /** A square, upright, 256px JPEG of the picked image as Base64, or null if unreadable. */
-    fun uriToAvatarBase64(context: Context, uri: Uri): String? {
+    fun uriToAvatarBase64(context: Context, uri: Uri, size: Int = AVATAR_SIZE): String? {
         return try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -63,7 +63,7 @@ object ImageUtils {
 
             // Decode no larger than needed, so a 12 MP photo never fills memory.
             var sample = 1
-            while (bounds.outWidth / (sample * 2) >= AVATAR_SIZE && bounds.outHeight / (sample * 2) >= AVATAR_SIZE) {
+            while (bounds.outWidth / (sample * 2) >= size && bounds.outHeight / (sample * 2) >= size) {
                 sample *= 2
             }
             val decoded = context.contentResolver.openInputStream(uri)?.use {
@@ -82,7 +82,7 @@ object ImageUtils {
             val square = Bitmap.createBitmap(
                 upright, (upright.width - side) / 2, (upright.height - side) / 2, side, side
             )
-            val avatar = Bitmap.createScaledBitmap(square, AVATAR_SIZE, AVATAR_SIZE, true)
+            val avatar = Bitmap.createScaledBitmap(square, size, size, true)
 
             val out = ByteArrayOutputStream()
             avatar.compress(Bitmap.CompressFormat.JPEG, AVATAR_QUALITY, out)

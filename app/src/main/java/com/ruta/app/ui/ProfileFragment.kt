@@ -37,6 +37,8 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.ruta.app.R
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.ImageUtils
+import com.ruta.app.util.PhotoPaths
+import com.ruta.app.util.StoragePhotos
 import com.ruta.app.util.ProfileFields
 import java.util.UUID
 import com.ruta.app.ui.driver.DriverProfileFragment
@@ -131,7 +133,17 @@ class ProfileFragment : Fragment() {
             listenForTrustedContactCount()
         }
 
-        btnChangePhoto.setOnClickListener { openImagePickerWithPermissionCheck() }
+        btnChangePhoto.setOnClickListener {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            if (uid == null) { openImagePickerWithPermissionCheck(); return@setOnClickListener }
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Profile photo")
+                .setItems(arrayOf("Choose a new photo", "Remove my photo")) { _, which ->
+                    if (which == 0) openImagePickerWithPermissionCheck() else removeProfilePhoto(uid)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
 
         btnScanQr.setOnClickListener {
             val options = ScanOptions().apply {
@@ -256,7 +268,7 @@ class ProfileFragment : Fragment() {
                 snapshot.child("email").getValue(String::class.java)
                     ?: FirebaseAuth.getInstance().currentUser?.email.orEmpty()
             )
-            ImageUtils.showAvatar(imgProfile, snapshot.child("profilePhoto").getValue(String::class.java))
+            StoragePhotos.show(imgProfile, snapshot.child("profilePhoto").getValue(String::class.java), R.drawable.ic_person)
         }
     }
 
@@ -277,9 +289,28 @@ class ProfileFragment : Fragment() {
         }
 
         val updates = HashMap<String, Any>(ProfileFields.updatesFor(name, phone))
-        pendingPhotoBase64?.let { updates["profilePhoto"] = it }
 
         btnSaveProfile.isEnabled = false
+        val pending = pendingPhotoBase64
+        if (pending == null) {
+            commitProfile(uid, updates, phone)
+        } else {
+            // The picture goes to Firebase Storage; the user record only keeps its reference.
+            StoragePhotos.uploadBase64(PhotoPaths.avatar(uid), pending) { value, error ->
+                if (_isGone()) return@uploadBase64
+                if (value == null) {
+                    btnSaveProfile.isEnabled = true
+                    Toast.makeText(requireContext(), "Photo upload failed: $error", Toast.LENGTH_LONG).show()
+                    return@uploadBase64
+                }
+                updates["profilePhoto"] = value
+                updates["profilePhotoUpdatedAt"] = System.currentTimeMillis()
+                commitProfile(uid, updates, phone)
+            }
+        }
+    }
+
+    private fun commitProfile(uid: String, updates: HashMap<String, Any>, phone: String) {
         database.child("users").child(uid).updateChildren(updates).addOnSuccessListener {
             if (_isGone()) return@addOnSuccessListener
             btnSaveProfile.isEnabled = true
@@ -369,6 +400,7 @@ class ProfileFragment : Fragment() {
 
     private fun performLogout() {
         NotificationWatchService.stop(requireContext().applicationContext)
+        com.ruta.app.util.PushTokens.onSignOut()
         FirebaseAuth.getInstance().signOut()
         val sharedPref = requireContext().getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
         sharedPref.edit().clear().apply()
@@ -386,5 +418,16 @@ class ProfileFragment : Fragment() {
         trustedContactsListener?.let {
             currentUid?.let { uid -> database.child("users").child(uid).child("trustedContacts").removeEventListener(it) }
         }
+    }
+
+    /** Deletes the stored photo and goes back to the initials look. */
+    private fun removeProfilePhoto(uid: String) {
+        com.ruta.app.util.StoragePhotos.delete(com.ruta.app.util.PhotoPaths.avatar(uid))
+        pendingPhotoBase64 = null
+        FirebaseDatabase.getInstance().reference.child("users").child(uid).updateChildren(
+            mapOf<String, Any?>("profilePhoto" to null, "profilePhotoUpdatedAt" to null)
+        )
+        imgProfile.setImageResource(R.drawable.ic_person)
+        Toast.makeText(context, "Photo removed.", Toast.LENGTH_SHORT).show()
     }
 }

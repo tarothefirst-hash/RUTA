@@ -14,6 +14,7 @@ import com.ruta.app.R
 import com.ruta.app.util.RideshareFlowManager
 import com.ruta.app.util.RideshareFlowManager.EndReason
 import com.ruta.app.util.RideshareMatchLogic
+import com.ruta.app.util.StoragePhotos
 
 /**
  * The passenger-facing screens of the rideshare flow:
@@ -145,6 +146,7 @@ class RideshareMatchUi(
         val coFirst = p.partnerName.trim().substringBefore(' ').ifBlank { p.partnerName }
 
         view.findViewById<TextView>(R.id.txtMatchName).text = p.partnerName
+        bindPartnerPhoto(view, p)
         view.findViewById<TextView>(R.id.txtMatchPhone).apply {
             text = p.partnerPhone
             visibility = if (p.partnerPhone.isBlank()) View.GONE else View.VISIBLE
@@ -178,6 +180,20 @@ class RideshareMatchUi(
             }
         }
         refreshProposalTimer()
+    }
+
+    /** The co-passenger's photo (initials if they have none). Only shown once matched with them. */
+    private fun bindPartnerPhoto(view: View, p: RideshareFlowManager.Proposal) {
+        val img = view.findViewById<android.widget.ImageView>(R.id.imgMatchAvatar)
+        val px = (48 * activity.resources.displayMetrics.density).toInt()
+        StoragePhotos.showAvatar(img, null, p.partnerName, px)
+        if (p.partnerUserId.isBlank()) return
+        com.google.firebase.database.FirebaseDatabase.getInstance().reference
+            .child("users").child(p.partnerUserId).child("profilePhoto").get()
+            .addOnSuccessListener { snap ->
+                if (matchView !== view) return@addOnSuccessListener
+                StoragePhotos.showAvatar(img, snap.getValue(String::class.java), p.partnerName, px)
+            }
     }
 
     private fun refreshProposalTimer() {

@@ -41,6 +41,8 @@ import com.ruta.app.databinding.FragmentDriverProfileBinding
 import com.ruta.app.ui.LoginActivity
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.ImageUtils
+import com.ruta.app.util.PhotoPaths
+import com.ruta.app.util.StoragePhotos
 import com.ruta.app.util.ProfileFields
 import java.util.UUID
 import com.ruta.app.ui.PortraitCaptureActivity
@@ -54,6 +56,7 @@ class DriverProfileFragment : Fragment() {
 
     /** A newly picked picture, already shrunk, waiting for Save. */
     private var pendingPhotoBase64: String? = null
+    private var photoLocked = false
     private var activeQrToken: String? = null
 
     private var trustedContactsListener: ValueEventListener? = null
@@ -284,9 +287,12 @@ class DriverProfileFragment : Fragment() {
         bindingRef.txtCompletedRides.text = rides.toString()
 
         val storedPhoto = snapshot.child("profilePhoto").getValue(String::class.java)
-        if (!ImageUtils.showAvatar(bindingRef.imgDriverProfile, storedPhoto) &&
-            !photoUrl.isNullOrEmpty() && isAdded
-        ) {
+        // The 1x1 photo checked by the admin at registration is locked in as the profile picture.
+        photoLocked = snapshot.child("photoLocked").getValue(Boolean::class.java) == true && !storedPhoto.isNullOrBlank()
+        bindingRef.btnChangeDriverPhoto.visibility = if (photoLocked) View.GONE else View.VISIBLE
+        if (!storedPhoto.isNullOrBlank()) {
+            StoragePhotos.show(bindingRef.imgDriverProfile, storedPhoto, R.drawable.carpin)
+        } else if (!photoUrl.isNullOrEmpty() && isAdded) {
             try {
                 Glide.with(this)
                     .load(photoUrl)
@@ -429,14 +435,37 @@ class DriverProfileFragment : Fragment() {
         // name + phone go to every field the app reads; the email is never written.
         val updates = HashMap<String, Any>(ProfileFields.updatesFor(name, phone))
         updates["vehicleDetails"] = vehicle
-        pendingPhotoBase64?.let { updates["profilePhoto"] = it }
 
         binding.btnSaveDriverProfile.isEnabled = false
 
+        val pending = pendingPhotoBase64
+        if (pending == null || photoLocked) {
+            commitDriverProfile(uid, updates, phone)
+        } else {
+            // Only reachable for drivers who registered before the 1x1 photo existed: one upload,
+            // then it is locked like everyone else's.
+            StoragePhotos.uploadBase64(PhotoPaths.avatar(uid), pending) { value, error ->
+                val b = _binding ?: return@uploadBase64
+                if (value == null) {
+                    b.btnSaveDriverProfile.isEnabled = true
+                    context?.let { Toast.makeText(it, "Photo upload failed: $error", Toast.LENGTH_LONG).show() }
+                    return@uploadBase64
+                }
+                updates["profilePhoto"] = value
+                updates["profilePhotoUpdatedAt"] = System.currentTimeMillis()
+                updates["photoLocked"] = true
+                commitDriverProfile(uid, updates, phone)
+            }
+        }
+    }
+
+    private fun commitDriverProfile(uid: String, updates: HashMap<String, Any>, phone: String) {
         database.child("users").child(uid).updateChildren(updates)
             .addOnSuccessListener {
                 // Keep the driver record in step (it has no photo of its own: users/<uid> is the source).
-                val driverUpdates = HashMap(updates).apply { remove("profilePhoto") }
+                val driverUpdates = HashMap(updates).apply {
+                    remove("profilePhoto"); remove("profilePhotoUpdatedAt"); remove("photoLocked")
+                }
                 database.child("drivers").child(uid).updateChildren(driverUpdates)
 
                 _binding?.btnSaveDriverProfile?.isEnabled = true
@@ -493,6 +522,7 @@ class DriverProfileFragment : Fragment() {
     private fun performLogout() {
         val ctx = context ?: return
         NotificationWatchService.stop(requireContext().applicationContext)
+        com.ruta.app.util.PushTokens.onSignOut()
         auth.signOut()
         val sharedPref = ctx.getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
         sharedPref.edit().clear().apply()

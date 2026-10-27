@@ -640,12 +640,26 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /** The rider's own photo (initials if none): the driver sees it on the trip card while it is their stop. */
+    private fun showPassengerAvatar(passengerId: String, name: String) {
+        val img = _binding?.imgPassengerAvatar ?: return
+        val px = (44 * resources.displayMetrics.density).toInt()
+        com.ruta.app.util.StoragePhotos.showAvatar(img, null, name, px)
+        if (passengerId.isEmpty()) return
+        database.child("users").child(passengerId).child("profilePhoto").get().addOnSuccessListener { s ->
+            val still = _binding?.imgPassengerAvatar ?: return@addOnSuccessListener
+            if (still !== img) return@addOnSuccessListener
+            com.ruta.app.util.StoragePhotos.showAvatar(img, s.getValue(String::class.java), name, px)
+        }
+    }
+
     private fun bindPassengerInfoToView(booking: Booking, appendTitle: String = "") {
         val b = _binding ?: return
         if (!isAdded) return
 
         val serviceTitle = getFormattedServiceTitle(booking)
         val nameText = booking.passengerName.ifEmpty { "Passenger" }
+        showPassengerAvatar(booking.passengerId, nameText)
         b.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText\n$serviceTitle"
 
         b.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
@@ -2095,6 +2109,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             else
                 snap.child("dropoffAddress").getValue(String::class.java) ?: "N/A"
 
+            showPassengerAvatar(passengerId, name)
             if (passengerId.isNotEmpty()) {
                 database.child("users").child(passengerId).get().addOnSuccessListener { userSnap ->
                     if (_binding == null || !isAdded) return@addOnSuccessListener

@@ -1,5 +1,6 @@
 package com.ruta.app.ui
 
+import com.ruta.app.util.StoragePhotos
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -251,9 +252,11 @@ class AdminHomeActivity : AppCompatActivity() {
                         ?: reqSnap.child("uid").getValue(String::class.java) ?: requestId
                     val userName = reqSnap.child("userName").getValue(String::class.java) ?: "Passenger"
                     val discountType = reqSnap.child("discountType").getValue(String::class.java) ?: "N/A"
-                    val frontUrl = reqSnap.child("frontBase64").getValue(String::class.java)
+                    val frontUrl = reqSnap.child("frontRef").getValue(String::class.java)
+                        ?: reqSnap.child("frontBase64").getValue(String::class.java)
                         ?: reqSnap.child("idFrontUrl").getValue(String::class.java)
-                    val backUrl = reqSnap.child("backBase64").getValue(String::class.java)
+                    val backUrl = reqSnap.child("backRef").getValue(String::class.java)
+                        ?: reqSnap.child("backBase64").getValue(String::class.java)
                         ?: reqSnap.child("idBackUrl").getValue(String::class.java)
                     shown++
 
@@ -451,18 +454,9 @@ class AdminHomeActivity : AppCompatActivity() {
             return
         }
 
-        try {
-            val cleanBase64 = value.substringAfter("base64,")
-            val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.NO_WRAP)
-            val bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-
-            if (bitmap != null) {
-                imageView.setImageBitmap(bitmap)
-            } else {
-                Toast.makeText(this, "Could not render image bytes.", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Error decoding image: ${e.message}", Toast.LENGTH_SHORT).show()
+        StoragePhotos.loadBitmap(value) { bitmap ->
+            if (bitmap != null) imageView.setImageBitmap(bitmap)
+            else Toast.makeText(this, "Could not load this receipt.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -634,6 +628,7 @@ class AdminHomeActivity : AppCompatActivity() {
             val licenseUrl = driverSnap.child("licenseUrl").getValue(String::class.java)
             val regUrl = driverSnap.child("registrationUrl").getValue(String::class.java)
             val nbiUrl = driverSnap.child("nbiClearanceUrl").getValue(String::class.java)
+            val photoRef = driverSnap.child("profilePhoto").getValue(String::class.java)
 
             val view = inflater.inflate(R.layout.item_booking_history, binding.layoutApprovalList, false)
 
@@ -651,10 +646,13 @@ class AdminHomeActivity : AppCompatActivity() {
 
                 addReviewPanel(
                     innerLayout,
-                    listOf(
+                    listOfNotNull(
                         ReviewItem("license", "Driver's License", licenseUrl, driverSnap.child("docReview").child("license").child("ok").getValue(Boolean::class.java) == true),
                         ReviewItem("registration", "OR/CR", regUrl, driverSnap.child("docReview").child("registration").child("ok").getValue(Boolean::class.java) == true),
-                        ReviewItem("nbi", "NBI Clearance", nbiUrl, driverSnap.child("docReview").child("nbi").child("ok").getValue(Boolean::class.java) == true)
+                        ReviewItem("nbi", "NBI Clearance", nbiUrl, driverSnap.child("docReview").child("nbi").child("ok").getValue(Boolean::class.java) == true),
+                        // Drivers registered before the 1x1 requirement have no photo yet: nothing to check.
+                        if (photoRef.isNullOrEmpty()) null else
+                            ReviewItem("photo", "1x1 Photo", photoRef, driverSnap.child("docReview").child("photo").child("ok").getValue(Boolean::class.java) == true)
                     ),
                     ReviewLogic.DRIVER_DOC_REASONS
                 ) { decision, reviews ->
@@ -702,18 +700,10 @@ class AdminHomeActivity : AppCompatActivity() {
             )
         }
 
-        try {
-            val cleanBase64 = dataUrl.substringAfter("base64,")
-            val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.NO_WRAP)
-            val bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-
-            if (bitmap != null) {
-                imageView.setImageBitmap(bitmap)
-            } else {
-                Toast.makeText(this, "Could not render image bytes.", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Error decoding image: ${e.message}", Toast.LENGTH_SHORT).show()
+        // Storage reference (new) or inline Base64 (old): both handled here.
+        StoragePhotos.loadBitmap(dataUrl) { bitmap ->
+            if (bitmap != null) imageView.setImageBitmap(bitmap)
+            else Toast.makeText(this, "Could not load this photo.", Toast.LENGTH_SHORT).show()
         }
 
         AlertDialog.Builder(this)
@@ -1122,7 +1112,7 @@ class AdminHomeActivity : AppCompatActivity() {
                     Toast.makeText(this, "Driver approved successfully!", Toast.LENGTH_SHORT).show()
                 } else {
                     val why = ReviewLogic.summary(
-                        mapOf("license" to "Driver's License", "registration" to "OR/CR", "nbi" to "NBI Clearance"), reviews
+                        mapOf("license" to "Driver's License", "registration" to "OR/CR", "nbi" to "NBI Clearance", "photo" to "1x1 Photo"), reviews
                     )
                     NotificationStore.push(
                         database, uid, NotificationStore.TYPE_DRIVER_REVIEW,

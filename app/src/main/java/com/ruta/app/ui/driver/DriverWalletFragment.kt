@@ -1,5 +1,7 @@
 package com.ruta.app.ui.driver
 
+import com.ruta.app.util.StoragePhotos
+import com.ruta.app.util.PhotoPaths
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -202,8 +204,19 @@ class DriverWalletFragment : Fragment() {
             return
         }
 
-        // Pass processed Base64 string directly to Realtime Database (matching your document upload flow)
-        saveTopUpRequestToDatabase(requestId, driverId, amount, base64Image)
+        // The proof of payment goes to Firebase Storage (owner + admin only); the request keeps its path.
+        binding.btnSubmitTopUp.text = "Uploading Receipt..."
+        StoragePhotos.uploadBase64(PhotoPaths.receipt(driverId, requestId), base64Image) { ref, error ->
+            if (_binding == null) return@uploadBase64
+            if (ref == null) {
+                binding.btnSubmitTopUp.isEnabled = true
+                binding.btnSelectReceipt.isEnabled = true
+                binding.btnSubmitTopUp.text = "I've Sent Payment"
+                Toast.makeText(context, "Receipt upload failed: ${error ?: "check your connection"}", Toast.LENGTH_LONG).show()
+                return@uploadBase64
+            }
+            saveTopUpRequestToDatabase(requestId, driverId, amount, ref)
+        }
     }
 
     private fun saveTopUpRequestToDatabase(
@@ -232,7 +245,7 @@ class DriverWalletFragment : Fragment() {
                 "driverName" to fullName,
                 "driverEmail" to email,
                 "amount" to amount,
-                "receiptUrl" to "data:image/jpeg;base64,$receiptBase64", // Data URI so the admin console can render it (matches document upload flow)
+                "receiptUrl" to receiptBase64, // a "storage:" reference (older requests hold inline Base64)
                 "status" to "PENDING",
                 "timestamp" to ServerValue.TIMESTAMP
             )

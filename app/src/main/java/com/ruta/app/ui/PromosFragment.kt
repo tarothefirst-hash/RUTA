@@ -30,6 +30,8 @@ import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
 import com.ruta.app.util.ImageUtils
+import com.ruta.app.util.PhotoPaths
+import com.ruta.app.util.StoragePhotos
 
 class PromosFragment : Fragment() {
 
@@ -52,6 +54,9 @@ class PromosFragment : Fragment() {
 
     private var frontBase64: String? = null
     private var backBase64: String? = null
+    // true = freshly picked (still needs uploading); false = already stored (Storage ref or legacy Base64)
+    private var frontIsNew = false
+    private var backIsNew = false
 
     private val currentUid = FirebaseAuth.getInstance().currentUser?.uid
     private val database: DatabaseReference = FirebaseDatabase.getInstance().reference
@@ -78,6 +83,7 @@ class PromosFragment : Fragment() {
             showUploadConfirmationDialog("Front ID") {
                 frontUri = uri
                 frontBase64 = convertedBase64
+                frontIsNew = true
                 if (frontBase64 != null) {
                     imgFrontPreview.setImageURI(uri)
                     btnUploadFront.text = "Replace / Remove Front ID"
@@ -108,6 +114,7 @@ class PromosFragment : Fragment() {
             showUploadConfirmationDialog("Back ID") {
                 backUri = uri
                 backBase64 = convertedBase64
+                backIsNew = true
                 if (backBase64 != null) {
                     imgBackPreview.setImageURI(uri)
                     btnUploadBack.text = "Replace / Remove Back ID"
@@ -217,7 +224,7 @@ class PromosFragment : Fragment() {
             return
         }
 
-        if (frontBase64 == backBase64) {
+        if (frontIsNew && backIsNew && frontBase64 == backBase64) {
             Toast.makeText(requireContext(), "Front ID and Back ID cannot be the same image!", Toast.LENGTH_LONG).show()
             return
         }
@@ -228,6 +235,33 @@ class PromosFragment : Fragment() {
         progressBar.visibility = View.VISIBLE
         btnSubmitDiscount.isEnabled = false
 
+        // 1) photos to Firebase Storage (only the ones picked this time), 2) the request itself.
+        uploadSide("front", frontBase64!!, frontIsNew, uid) { frontRef, e1 ->
+            if (!isAdded) return@uploadSide
+            if (frontRef == null) { submitFailed(e1); return@uploadSide }
+            uploadSide("back", backBase64!!, backIsNew, uid) { backRef, e2 ->
+                if (!isAdded) return@uploadSide
+                if (backRef == null) { submitFailed(e2); return@uploadSide }
+                saveRequest(uid, discountType, frontRef, backRef)
+            }
+        }
+    }
+
+    private fun uploadSide(
+        side: String, value: String, isNew: Boolean, uid: String,
+        done: (ref: String?, error: String?) -> Unit
+    ) {
+        if (!isNew) { done(value, null); return }
+        StoragePhotos.uploadBase64(PhotoPaths.discountId(uid, side), value, done)
+    }
+
+    private fun submitFailed(error: String?) {
+        progressBar.visibility = View.GONE
+        btnSubmitDiscount.isEnabled = true
+        Toast.makeText(requireContext(), "Upload failed: ${error ?: "check your connection"}", Toast.LENGTH_LONG).show()
+    }
+
+    private fun saveRequest(uid: String, discountType: String, frontRef: String, backRef: String) {
         database.child("users").child(uid).get().addOnCompleteListener { task ->
             if (!isAdded) return@addOnCompleteListener
             val snap = task.result
@@ -240,8 +274,8 @@ class PromosFragment : Fragment() {
                 "userId" to uid,
                 "userName" to name.ifBlank { "Passenger" },
                 "discountType" to discountType,
-                "frontBase64" to frontBase64!!,
-                "backBase64" to backBase64!!,
+                "frontRef" to frontRef,
+                "backRef" to backRef,
                 "status" to "PENDING",
                 "timestamp" to System.currentTimeMillis()
             )
@@ -250,6 +284,10 @@ class PromosFragment : Fragment() {
                 .addOnSuccessListener {
                     if (!isAdded) return@addOnSuccessListener
                     progressBar.visibility = View.GONE
+                    frontIsNew = false
+                    backIsNew = false
+                    frontBase64 = frontRef
+                    backBase64 = backRef
                     updateStatusUi("PENDING", null)
                     Toast.makeText(requireContext(), "Application submitted for review!", Toast.LENGTH_LONG).show()
                 }
@@ -288,8 +326,11 @@ class PromosFragment : Fragment() {
     private fun applyDiscountSnapshot(snapshot: DataSnapshot) {
         if (!snapshot.exists()) return
                 val status = snapshot.child("status").getValue(String::class.java) ?: "PENDING_REVIEW"
-                val loadedFrontBase64 = snapshot.child("frontBase64").getValue(String::class.java)
-                val loadedBackBase64 = snapshot.child("backBase64").getValue(String::class.java)
+                // New requests keep a Storage reference; older ones kept the Base64 inline.
+                val loadedFrontBase64 = snapshot.child("frontRef").getValue(String::class.java)
+                    ?: snapshot.child("frontBase64").getValue(String::class.java)
+                val loadedBackBase64 = snapshot.child("backRef").getValue(String::class.java)
+                    ?: snapshot.child("backBase64").getValue(String::class.java)
 
                 // Items the admin marked with an X must be re-uploaded; the good ones are kept.
                 val review = snapshot.child("review")
@@ -298,12 +339,14 @@ class PromosFragment : Fragment() {
 
                 if (!frontBad && !loadedFrontBase64.isNullOrEmpty()) {
                     frontBase64 = loadedFrontBase64
-                    loadBase64IntoImageView(loadedFrontBase64, imgFrontPreview)
+                    frontIsNew = false
+                    StoragePhotos.show(imgFrontPreview, loadedFrontBase64, R.drawable.ic_business)
                     btnUploadFront.text = "Replace / Remove Front ID"
                 }
                 if (!backBad && !loadedBackBase64.isNullOrEmpty()) {
                     backBase64 = loadedBackBase64
-                    loadBase64IntoImageView(loadedBackBase64, imgBackPreview)
+                    backIsNew = false
+                    StoragePhotos.show(imgBackPreview, loadedBackBase64, R.drawable.ic_business)
                     btnUploadBack.text = "Replace / Remove Back ID"
                 }
 
