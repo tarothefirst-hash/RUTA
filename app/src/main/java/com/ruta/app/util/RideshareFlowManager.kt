@@ -104,7 +104,9 @@ class RideshareFlowManager(
         val stopOrder: List<RideshareManager.RideshareStop>,
         val expiresAtLocalMs: Long,
         val myConfirmed: Boolean,
-        val partnerConfirmed: Boolean
+        val partnerConfirmed: Boolean,
+        /** The co-passenger's account id, used to show their profile photo. */
+        val partnerUserId: String = ""
     )
 
     // ---------------------------------------------------------------------
@@ -784,7 +786,8 @@ class RideshareFlowManager(
             stopOrder = stops,
             expiresAtLocalMs = toLocal(expiresAt),
             myConfirmed = myConfirmed,
-            partnerConfirmed = ps.child("matchConfirmed").getValue(Boolean::class.java) == true
+            partnerConfirmed = ps.child("matchConfirmed").getValue(Boolean::class.java) == true,
+            partnerUserId = ps.child("passengerId").getValue(String::class.java) ?: ""
         )
     }
 

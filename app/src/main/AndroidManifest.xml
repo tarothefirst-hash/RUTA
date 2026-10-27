@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -32,6 +33,20 @@
         <service
             android:name=".driver.DriverLocationService"
             android:foregroundServiceType="location"
+            android:exported="false" />
+
+        <!-- Best-effort ride/account notifications while the app is closed -->
+        <service
+            android:name=".util.NotificationWatchService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps ride and account update notifications arriving while the app is closed" />
+        </service>
+
+        <activity
+            android:name=".ui.NotificationsActivity"
             android:exported="false" />
 
         <!-- Registered FCM Messaging Service -->

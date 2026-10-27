@@ -32,7 +32,7 @@ class RutaFirebaseMessagingService : FirebaseMessagingService() {
         val bookingId = remoteMessage.data["bookingId"]
         val contactUid = remoteMessage.data["contactUid"]
 
-        showNotification(title, body, bookingId, contactUid)
+        showNotification(title, body, bookingId, contactUid, remoteMessage.data["notifId"])
     }
 
     private fun listenForDirectDatabaseAlerts() {
@@ -60,7 +60,7 @@ class RutaFirebaseMessagingService : FirebaseMessagingService() {
         })
     }
 
-    private fun showNotification(title: String, body: String, bookingId: String?, contactUid: String?) {
+    private fun showNotification(title: String, body: String, bookingId: String?, contactUid: String?, notifId: String? = null) {
         val channelId = "ruta_push_alerts"
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -102,10 +102,12 @@ class RutaFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .build()
 
-        notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), notification)
+        // Same id as the in-app watcher uses (the notification key), so one event never shows twice.
+        notificationManager.notify(notifId?.hashCode() ?: (System.currentTimeMillis() % 10000).toInt(), notification)
     }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+        FirebaseAuth.getInstance().currentUser?.uid?.let { PushTokens.save(it, token) }
     }
 }

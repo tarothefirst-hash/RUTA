@@ -156,6 +156,52 @@
             android:textColor="#6B7280"
             android:textSize="12sp" />
 
+        <!-- 4. 1x1 ID-style photo: becomes the driver's profile picture -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="1x1 photo (becomes your profile picture)"
+            android:textColor="#111827"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Clear front-facing photo, plain background, no sunglasses or mask. Riders will see it."
+            android:textColor="#6B7280"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/imgPhotoPreview"
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:layout_marginTop="10dp"
+            android:background="#F3F4F6"
+            android:contentDescription="1x1 photo preview"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_person" />
+
+        <Button
+            android:id="@+id/btnSelectPhoto"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:text="Select 1x1 photo"
+            android:textAllCaps="false" />
+
+        <TextView
+            android:id="@+id/txtPhotoStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/a_doc_upload_no_file_selected"
+            android:textColor="#6B7280"
+            android:textSize="12sp" />
+
         <ProgressBar
             android:id="@+id/progressBar"
             android:layout_width="wrap_content"

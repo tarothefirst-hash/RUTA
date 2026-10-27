@@ -1,14 +1,13 @@
 package com.ruta.app.util
 
-enum class VehicleType(
-    val flagDown: Double,
-    val ratePerKm: Double,
-    val ratePerMin: Double
-) {
-    // Read the base rates straight from the pricing authority
-    // (RideshareFareCalculator) so the two engines can never drift apart.
-    SEDAN(65.0, 15.0, 2.0),
+enum class VehicleType {
+    // Rates come from FareConfig (admin-editable, defaults 65 / 15 / 2), so the solo
+    // engine and the rideshare engine always read the same numbers.
+    SEDAN;
 
+    val flagDown: Double get() = FareConfig.rates.soloBase
+    val ratePerKm: Double get() = FareConfig.rates.soloPerKm
+    val ratePerMin: Double get() = FareConfig.rates.soloPerMin
 }
 
 object FareCalculator {

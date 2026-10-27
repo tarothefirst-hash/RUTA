@@ -206,6 +206,13 @@
                 android:layout_marginBottom="12dp"
                 android:background="#E5E7EB" />
 
+            <ImageView
+                android:id="@+id/imgDriverPhoto"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_marginBottom="8dp"
+                android:contentDescription="@null" />
+
             <TextView
                 android:id="@+id/txtDriverName"
                 android:layout_width="wrap_content"

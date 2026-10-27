@@ -1,5 +1,6 @@
 package com.ruta.app.ui.driver
 
+import com.ruta.app.util.NotificationWatchService
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -12,6 +13,7 @@ class DriverMainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driver_main)
+        NotificationWatchService.start(this)
 
         val bottomNav = findViewById<BottomNavigationView>(R.id.driverBottomNav)
         hideWhileKeyboardOpen(findViewById(android.R.id.content), bottomNav)

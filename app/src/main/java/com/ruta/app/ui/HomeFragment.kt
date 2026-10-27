@@ -7,7 +7,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.ruta.app.model.BookingModel
+import com.ruta.app.util.NotificationLogic
+import com.ruta.app.util.NotificationStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -32,6 +38,11 @@ class HomeFragment : Fragment() {
     // Tracks current active booking ID to lock search behavior
     private var currentActiveBookingId: String? = null
 
+    private var recyclerRecent: RecyclerView? = null
+    private var txtNoRecent: TextView? = null
+    private var txtNotifBadge: TextView? = null
+    private var notifListener: ValueEventListener? = null
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View? {
@@ -49,6 +60,16 @@ class HomeFragment : Fragment() {
         txtActiveTripStatus = view.findViewById(R.id.txtActiveTripStatus)
         txtActiveTripEta = view.findViewById(R.id.txtActiveTripEta)
         txtDriverInfoHome = view.findViewById(R.id.txtDriverInfoHome)
+
+        recyclerRecent = view.findViewById(R.id.recyclerRecentBookings)
+        recyclerRecent?.layoutManager = LinearLayoutManager(requireContext())
+        txtNoRecent = view.findViewById(R.id.txtNoRecentRides)
+        txtNotifBadge = view.findViewById(R.id.txtNotifBadge)
+
+        // The bell opens the notification list.
+        view.findViewById<View>(R.id.btnNotification)?.setOnClickListener {
+            startActivity(Intent(requireContext(), NotificationsActivity::class.java))
+        }
 
         // 2. Fetch User Name
         loadUserName()
@@ -70,11 +91,49 @@ class HomeFragment : Fragment() {
         super.onResume()
         // Automatically checks Firebase state when returning to HomeFragment
         listenForActiveTrip()
+        listenForNotificationBadge()
     }
 
     override fun onPause() {
         super.onPause()
         detachActiveTripListener()
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        notifListener?.let { l -> if (uid != null) NotificationStore.stopListening(database, uid, l) }
+        notifListener = null
+    }
+
+    private fun listenForNotificationBadge() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        notifListener?.let { NotificationStore.stopListening(database, uid, it) }
+        notifListener = NotificationStore.listen(database, uid) { items ->
+            val unread = NotificationLogic.unreadCount(items)
+            txtNotifBadge?.apply {
+                text = if (unread > 9) "9+" else unread.toString()
+                visibility = if (unread > 0) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    /** The passenger's last few finished trips, newest first. */
+    private fun showRecentRides(snapshot: DataSnapshot) {
+        val rides = snapshot.children.mapNotNull { child ->
+            val status = child.child("status").getValue(String::class.java)
+            if (status != "COMPLETED" && status != "CANCELLED") return@mapNotNull null
+            child.getValue(BookingModel::class.java)?.also { it.bookingId = child.key }
+        }.sortedByDescending { it.createdAt }.take(3)
+
+        txtNoRecent?.visibility = if (rides.isEmpty()) View.VISIBLE else View.GONE
+        recyclerRecent?.adapter = BookingHistoryAdapter(rides) { ride ->
+            val fare = if (ride.finalFare > 0.0) ride.finalFare else (ride.fare ?: 0.0)
+            AlertDialog.Builder(requireContext())
+                .setTitle(if (ride.status == "COMPLETED") "Completed trip" else "Cancelled trip")
+                .setMessage(
+                    "From: ${ride.pickupAddress ?: "N/A"}\nTo: ${ride.dropoffAddress ?: "N/A"}\n" +
+                        "Fare: ₱${String.format("%.2f", fare)}"
+                )
+                .setPositiveButton("Close", null)
+                .show()
+        }
     }
 
     private fun listenForActiveTrip() {
@@ -113,6 +172,7 @@ class HomeFragment : Fragment() {
                 }
 
                 currentActiveBookingId = activeBookingId
+                if (isAdded) showRecentRides(snapshot)
 
                 if (activeBookingId != null) {
                     cardActiveTripEta.visibility = View.VISIBLE

@@ -405,6 +405,21 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
     }
 
     private var lastRerouteAt = 0L
+    private var shownDriverPhotoFor: String? = null
+
+    /** The driver's locked 1x1 photo, so the passenger can check who is coming. */
+    private fun showDriverPhoto(driverId: String?, name: String) {
+        val v = view ?: return
+        val img = v.findViewById<android.widget.ImageView>(R.id.imgDriverPhoto) ?: return
+        if (driverId.isNullOrEmpty() || shownDriverPhotoFor == driverId) return
+        shownDriverPhotoFor = driverId
+        val px = (72 * resources.displayMetrics.density).toInt()
+        com.ruta.app.util.StoragePhotos.showAvatar(img, null, name.ifEmpty { "Driver" }, px)
+        database.child("users").child(driverId).child("profilePhoto").get().addOnSuccessListener { s ->
+            if (!isAdded) return@addOnSuccessListener
+            com.ruta.app.util.StoragePhotos.showAvatar(img, s.getValue(String::class.java), name.ifEmpty { "Driver" }, px)
+        }
+    }
 
     private fun attachBookingListener(bId: String) {
         bookingRef = database.child("bookings").child(bId)
@@ -413,6 +428,7 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
                 val booking = snapshot.getValue(Booking::class.java) ?: return
 
                 txtDriverName.text = "Driver: ${booking.driverName.ifEmpty { "Assigned Driver" }}"
+                showDriverPhoto(booking.driverId, booking.driverName)
                 txtVehicleInfo.text = "Vehicle: ${booking.vehicleModel.ifEmpty { "N/A" }} (${booking.vehicleColor.ifEmpty { "Color N/A" }})"
                 txtPlateNumber.text = "Plate Number: ${booking.plateNumber.ifEmpty { "N/A" }}"
                 txtTripRouteInfo.text = "Route: ${booking.pickupAddress} ➔ ${booking.dropoffAddress}"

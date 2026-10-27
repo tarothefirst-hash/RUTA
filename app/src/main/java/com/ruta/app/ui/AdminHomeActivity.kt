@@ -1,5 +1,6 @@
 package com.ruta.app.ui
 
+import com.ruta.app.util.StoragePhotos
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -27,6 +28,10 @@ import com.ruta.app.R
 import com.ruta.app.databinding.ActivityAdminHomeBinding
 import com.ruta.app.model.BookingModel
 import com.ruta.app.model.User
+import com.ruta.app.util.FareConfig
+import com.ruta.app.util.FareRates
+import com.ruta.app.util.NotificationStore
+import com.ruta.app.util.ReviewLogic
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -53,6 +58,7 @@ class AdminHomeActivity : AppCompatActivity() {
         binding.btnAddDriver.setOnClickListener { showCreateDriverDialog() }
         binding.btnViewAllApprovals.setOnClickListener { showSection(R.id.nav_driver_approvals) }
         binding.btnAdminLogout.setOnClickListener { performLogout() }
+        setupFareEditor()
     }
 
     private fun showCreateDriverDialog() {
@@ -237,13 +243,22 @@ class AdminHomeActivity : AppCompatActivity() {
                     return
                 }
 
+                var shown = 0
                 for (reqSnap in snapshot.children) {
+                    val status = reqSnap.child("status").getValue(String::class.java) ?: ""
+                    if (status != "PENDING" && status != "PENDING_REVIEW") continue
                     val requestId = reqSnap.key ?: continue
-                    val userId = reqSnap.child("userId").getValue(String::class.java) ?: continue
+                    val userId = reqSnap.child("userId").getValue(String::class.java)
+                        ?: reqSnap.child("uid").getValue(String::class.java) ?: requestId
                     val userName = reqSnap.child("userName").getValue(String::class.java) ?: "Passenger"
                     val discountType = reqSnap.child("discountType").getValue(String::class.java) ?: "N/A"
-                    val frontUrl = reqSnap.child("idFrontUrl").getValue(String::class.java)
-                    val backUrl = reqSnap.child("idBackUrl").getValue(String::class.java)
+                    val frontUrl = reqSnap.child("frontRef").getValue(String::class.java)
+                        ?: reqSnap.child("frontBase64").getValue(String::class.java)
+                        ?: reqSnap.child("idFrontUrl").getValue(String::class.java)
+                    val backUrl = reqSnap.child("backRef").getValue(String::class.java)
+                        ?: reqSnap.child("backBase64").getValue(String::class.java)
+                        ?: reqSnap.child("idBackUrl").getValue(String::class.java)
+                    shown++
 
                     val view = inflater.inflate(R.layout.item_booking_history, binding.layoutFullRiderList, false)
                     view.findViewById<TextView>(R.id.txtHistoryPickup).text = "Applicant: $userName"
@@ -255,43 +270,33 @@ class AdminHomeActivity : AppCompatActivity() {
 
                     val innerLayout = view.findViewById<TextView>(R.id.txtHistoryPickup).parent as LinearLayout
 
-                    addDocumentReviewButton(innerLayout, "View Front ID", frontUrl)
-                    addDocumentReviewButton(innerLayout, "View Back ID", backUrl)
-
-                    val btnApprove = Button(this@AdminHomeActivity).apply {
-                        text = "APPROVE DISCOUNT"
-                        setBackgroundColor(Color.parseColor("#10B981"))
-                        setTextColor(Color.WHITE)
-                        textSize = 12f
-                        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120)
-                        params.setMargins(0, 12, 0, 0)
-                        layoutParams = params
+                    addReviewPanel(
+                        innerLayout,
+                        listOf(
+                            ReviewItem("front", "Front ID", frontUrl),
+                            ReviewItem("back", "Back ID", backUrl)
+                        ),
+                        ReviewLogic.PASSENGER_ID_REASONS
+                    ) { decision, reviews ->
+                        finalizeDiscountReview(requestId, userId, decision, reviews)
                     }
-                    btnApprove.setOnClickListener { approveDiscountRequest(requestId, userId) }
-
-                    val btnReject = Button(this@AdminHomeActivity).apply {
-                        text = "REJECT"
-                        setBackgroundColor(Color.parseColor("#F3F4F6"))
-                        setTextColor(Color.parseColor("#EF4444"))
-                        textSize = 12f
-                        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                        params.setMargins(0, 8, 0, 0)
-                        layoutParams = params
-                    }
-                    btnReject.setOnClickListener { rejectDiscountRequest(requestId) }
-
-                    innerLayout.addView(btnApprove)
-                    innerLayout.addView(btnReject)
 
                     binding.layoutFullRiderList.addView(view)
                     addDivider(binding.layoutFullRiderList)
+                }
+                if (shown == 0) {
+                    val empty = TextView(this@AdminHomeActivity).apply {
+                        text = "No pending ID submissions."
+                        setTextColor(Color.GRAY)
+                        setPadding(0, 32, 0, 32)
+                    }
+                    binding.layoutFullRiderList.addView(empty)
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
         }
         discountRequestsListener = listener
-        database.child("discount_requests").orderByChild("status").equalTo("PENDING")
-            .addValueEventListener(listener)
+        database.child("discount_requests").addValueEventListener(listener)
     }
 
     private fun approveDiscountRequest(requestId: String, userId: String) {
@@ -449,18 +454,9 @@ class AdminHomeActivity : AppCompatActivity() {
             return
         }
 
-        try {
-            val cleanBase64 = value.substringAfter("base64,")
-            val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.NO_WRAP)
-            val bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-
-            if (bitmap != null) {
-                imageView.setImageBitmap(bitmap)
-            } else {
-                Toast.makeText(this, "Could not render image bytes.", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Error decoding image: ${e.message}", Toast.LENGTH_SHORT).show()
+        StoragePhotos.loadBitmap(value) { bitmap ->
+            if (bitmap != null) imageView.setImageBitmap(bitmap)
+            else Toast.makeText(this, "Could not load this receipt.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -586,7 +582,7 @@ class AdminHomeActivity : AppCompatActivity() {
         val bookingsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 var tripsToday = 0
-                val bookings = mutableListOf<Pair<Long, BookingModel>>()
+                val bookings = mutableListOf<Pair<Long, DataSnapshot>>()
                 val todayStart = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, 0)
                     set(Calendar.MINUTE, 0)
@@ -597,12 +593,12 @@ class AdminHomeActivity : AppCompatActivity() {
                     val booking = bookingSnap.getValue(BookingModel::class.java)
                     if (booking != null) {
                         val bookedAt = bookingTime(bookingSnap)
-                        bookings.add(bookedAt to booking)
+                        bookings.add(bookedAt to bookingSnap)
                         if (bookedAt >= todayStart) tripsToday++
                     }
                 }
                 binding.txtTripsToday.text = tripsToday.toString()
-                updateTripFeed(bookings.sortedByDescending { it.first }.take(15).map { it.second })
+                updateTripFeed(bookings.sortedByDescending { it.first }.take(40).map { it.second })
             }
 
             override fun onCancelled(error: DatabaseError) {}
@@ -632,6 +628,7 @@ class AdminHomeActivity : AppCompatActivity() {
             val licenseUrl = driverSnap.child("licenseUrl").getValue(String::class.java)
             val regUrl = driverSnap.child("registrationUrl").getValue(String::class.java)
             val nbiUrl = driverSnap.child("nbiClearanceUrl").getValue(String::class.java)
+            val photoRef = driverSnap.child("profilePhoto").getValue(String::class.java)
 
             val view = inflater.inflate(R.layout.item_booking_history, binding.layoutApprovalList, false)
 
@@ -647,23 +644,24 @@ class AdminHomeActivity : AppCompatActivity() {
                 txtStatus.text = "Documents Submitted — Ready for Review"
                 txtStatus.setTextColor(Color.parseColor("#10B981"))
 
-                addDocumentReviewButton(innerLayout, "View Driver's License", licenseUrl)
-                addDocumentReviewButton(innerLayout, "View OR/CR", regUrl)
-                addDocumentReviewButton(innerLayout, "View NBI Clearance", nbiUrl)
-
-                val btnApprove = Button(this).apply {
-                    text = "APPROVE DRIVER"
-                    setBackgroundColor(Color.parseColor("#10B981"))
-                    setTextColor(Color.WHITE)
-                    textSize = 12f
-                    val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120)
-                    params.setMargins(0, 24, 0, 0)
-                    layoutParams = params
+                addReviewPanel(
+                    innerLayout,
+                    listOfNotNull(
+                        ReviewItem("license", "Driver's License", licenseUrl, driverSnap.child("docReview").child("license").child("ok").getValue(Boolean::class.java) == true),
+                        ReviewItem("registration", "OR/CR", regUrl, driverSnap.child("docReview").child("registration").child("ok").getValue(Boolean::class.java) == true),
+                        ReviewItem("nbi", "NBI Clearance", nbiUrl, driverSnap.child("docReview").child("nbi").child("ok").getValue(Boolean::class.java) == true),
+                        // Drivers registered before the 1x1 requirement have no photo yet: nothing to check.
+                        if (photoRef.isNullOrEmpty()) null else
+                            ReviewItem("photo", "1x1 Photo", photoRef, driverSnap.child("docReview").child("photo").child("ok").getValue(Boolean::class.java) == true)
+                    ),
+                    ReviewLogic.DRIVER_DOC_REASONS
+                ) { decision, reviews ->
+                    finalizeDriverReview(uid, decision, reviews)
                 }
-                btnApprove.setOnClickListener { approveDriver(uid) }
-                innerLayout.addView(btnApprove)
             } else {
-                txtStatus.text = "Pending Requirements Submission"
+                val rejected = driverSnap.child("docReviewStatus").getValue(String::class.java) == "REJECTED"
+                txtStatus.text = if (rejected) "Rejected. Waiting for the driver to re-upload the marked documents."
+                else "Pending Requirements Submission"
                 txtStatus.setTextColor(Color.parseColor("#EF4444"))
             }
 
@@ -702,18 +700,10 @@ class AdminHomeActivity : AppCompatActivity() {
             )
         }
 
-        try {
-            val cleanBase64 = dataUrl.substringAfter("base64,")
-            val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.NO_WRAP)
-            val bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-
-            if (bitmap != null) {
-                imageView.setImageBitmap(bitmap)
-            } else {
-                Toast.makeText(this, "Could not render image bytes.", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Error decoding image: ${e.message}", Toast.LENGTH_SHORT).show()
+        // Storage reference (new) or inline Base64 (old): both handled here.
+        StoragePhotos.loadBitmap(dataUrl) { bitmap ->
+            if (bitmap != null) imageView.setImageBitmap(bitmap)
+            else Toast.makeText(this, "Could not load this photo.", Toast.LENGTH_SHORT).show()
         }
 
         AlertDialog.Builder(this)
@@ -723,22 +713,415 @@ class AdminHomeActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun updateTripFeed(bookings: List<BookingModel>) {
+    private fun updateTripFeed(bookings: List<DataSnapshot>) {
         binding.layoutTripFeed.removeAllViews()
         val inflater = LayoutInflater.from(this)
+        val dateFmt = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault())
 
-        for (booking in bookings) {
+        for (snap in bookings) {
+            fun str(k: String) = snap.child(k).getValue(String::class.java)
             val view = inflater.inflate(R.layout.item_booking_history, binding.layoutTripFeed, false)
-            val txtStatus = view.findViewById<TextView>(R.id.txtHistoryStatus)
-            txtStatus.text = booking.status
-
-            view.findViewById<TextView>(R.id.txtHistoryPickup).text = "From: ${booking.pickupAddress}"
-            view.findViewById<TextView>(R.id.txtHistoryDropoff).text = "To: ${booking.dropoffAddress}"
-            view.findViewById<TextView>(R.id.txtHistoryFare).text = "₱${if (booking.finalFare > 0.0) booking.finalFare else booking.fare}"
+            view.findViewById<TextView>(R.id.txtHistoryStatus).text = str("status") ?: "—"
+            val whenMs = bookingTime(snap)
+            view.findViewById<TextView>(R.id.txtHistoryDate).text = if (whenMs > 0) dateFmt.format(java.util.Date(whenMs)) else "—"
+            view.findViewById<TextView>(R.id.txtHistoryPickup).text = "From: ${str("pickupAddress") ?: "N/A"}"
+            view.findViewById<TextView>(R.id.txtHistoryDropoff).text = "To: ${str("dropoffAddress") ?: "N/A"}"
+            val fare = snap.child("finalFare").getValue(Double::class.java)?.takeIf { it > 0.0 }
+                ?: snap.child("fare").getValue(Double::class.java) ?: 0.0
+            view.findViewById<TextView>(R.id.txtHistoryFare).text = "₱${String.format(Locale.US, "%.2f", fare)}"
+            // Who rode with whom, at a glance.
+            view.findViewById<TextView>(R.id.txtHistoryServiceType).text =
+                "Passenger: ${str("passengerName") ?: "—"}  •  Driver: ${str("driverName") ?: "Unassigned"}"
+            view.setOnClickListener { showTripDetails(snap) }
 
             binding.layoutTripFeed.addView(view)
             addDivider(binding.layoutTripFeed)
         }
+    }
+
+    /** Full ride record: who rode, who drove, the vehicle, route, fare and timing. */
+    private fun showTripDetails(snap: DataSnapshot) {
+        fun str(k: String) = snap.child(k).getValue(String::class.java)
+        val passengerId = str("passengerId")
+        val show = { passengerPhone: String ->
+            val dateFmt = SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault())
+            fun time(k: String) = snap.child(k).getValue(Long::class.java)?.takeIf { it > 0 }?.let { dateFmt.format(java.util.Date(it)) }
+            val fare = snap.child("finalFare").getValue(Double::class.java)?.takeIf { it > 0.0 }
+                ?: snap.child("fare").getValue(Double::class.java) ?: 0.0
+            val meters = snap.child("distanceMeters").getValue(Long::class.java) ?: 0L
+            val secs = snap.child("durationSeconds").getValue(Long::class.java) ?: 0L
+            val vehicle = listOfNotNull(str("vehicleColor"), str("vehicleModel"), str("plateNumber")?.let { "• $it" })
+                .filter { it.isNotBlank() }.joinToString(" ")
+            val text = buildString {
+                append("Status: ${str("status") ?: "—"}\n")
+                time("createdAt")?.let { append("Booked: $it\n") }
+                time("acceptedAt")?.let { append("Accepted: $it\n") }
+                append("\nPASSENGER\n${str("passengerName") ?: "—"}\n")
+                if (passengerPhone.isNotBlank()) append("$passengerPhone\n")
+                append("\nDRIVER\n${str("driverName") ?: "Unassigned"}\n")
+                str("driverPhone")?.takeIf { it.isNotBlank() }?.let { append("$it\n") }
+                if (vehicle.isNotBlank()) append("$vehicle\n")
+                append("\nROUTE\nFrom: ${str("pickupAddress") ?: "N/A"}\nTo: ${str("dropoffAddress") ?: "N/A"}\n")
+                if (meters > 0) append("Distance: ${String.format(Locale.US, "%.1f", meters / 1000.0)} km")
+                if (secs > 0) append("  •  ${secs / 60} min")
+                append("\n\nFARE: ₱${String.format(Locale.US, "%.2f", fare)}")
+                if (!str("tripGroupId").isNullOrEmpty()) append("\nShared ride (rideshare)")
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Ride details")
+                .setMessage(text)
+                .setPositiveButton("Close", null)
+                .show()
+        }
+        if (passengerId.isNullOrEmpty()) {
+            show("")
+        } else {
+            database.child("users").child(passengerId).get().addOnCompleteListener { t ->
+                val u = t.result
+                val phone = u?.child("phoneNumber")?.getValue(String::class.java)
+                    ?: u?.child("phone")?.getValue(String::class.java) ?: ""
+                if (!isFinishing && !isDestroyed) show(phone)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Fare rates (applies to new bookings only)
+    // ------------------------------------------------------------------
+
+    private fun setupFareEditor() {
+        val fields = mapOf(
+            "soloBase" to R.id.edtSoloBase, "soloPerKm" to R.id.edtSoloPerKm, "soloPerMin" to R.id.edtSoloPerMin,
+            "sharedBase" to R.id.edtSharedBase, "sharedPerKm" to R.id.edtSharedPerKm, "sharedPerMin" to R.id.edtSharedPerMin
+        )
+        fun fill(r: FareRates) {
+            val m = r.toMap()
+            fields.forEach { (k, id) ->
+                val v = (m[k] as Double)
+                findViewById<EditText>(id).setText(if (v % 1.0 == 0.0) v.toLong().toString() else v.toString())
+            }
+        }
+        fill(FareConfig.rates)
+
+        database.child("config").child("fare").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) fill(FareRates.fromMap(snapshot.value as? Map<*, *>))
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+
+        fun read(): FareRates? {
+            fun v(id: Int) = findViewById<EditText>(id).text.toString().trim().toDoubleOrNull()
+            val vals = fields.mapValues { v(it.value) }
+            if (vals.values.any { it == null }) return null
+            return FareRates(
+                vals["soloBase"]!!, vals["soloPerKm"]!!, vals["soloPerMin"]!!,
+                vals["sharedBase"]!!, vals["sharedPerKm"]!!, vals["sharedPerMin"]!!
+            )
+        }
+
+        findViewById<Button>(R.id.btnSaveFares).setOnClickListener {
+            val rates = read()
+            if (rates == null) {
+                Toast.makeText(this, "Fill in every rate with a number.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val error = FareRates.validate(rates)
+            if (error != null) {
+                Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Save new fare rates?")
+                .setMessage("New bookings will use these rates right away. Fares already quoted or locked will not change.")
+                .setPositiveButton("Save") { _, _ ->
+                    val data = HashMap<String, Any>(rates.toMap())
+                    data["updatedAt"] = System.currentTimeMillis()
+                    data["updatedBy"] = auth.currentUser?.uid ?: ""
+                    database.child("config").child("fare").setValue(data)
+                        .addOnSuccessListener {
+                            FareConfig.update(rates)
+                            findViewById<TextView>(R.id.txtFareStatus).text =
+                                "Saved. New bookings now use these rates."
+                            Toast.makeText(this, "Fare rates saved.", Toast.LENGTH_SHORT).show()
+                        }
+                        .addOnFailureListener { Toast.makeText(this, "Failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        findViewById<Button>(R.id.btnResetFares).setOnClickListener {
+            fill(FareRates.DEFAULT)
+            Toast.makeText(this, "Standard rates filled in. Tap Save to apply.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Review checklist (a check or an X per item; every X needs a comment)
+    // ------------------------------------------------------------------
+
+    private data class ReviewItem(
+        val key: String,
+        val label: String,
+        val dataUrl: String?,
+        val preOk: Boolean = false
+    )
+
+    private fun addReviewPanel(
+        parent: LinearLayout,
+        items: List<ReviewItem>,
+        reasons: List<String>,
+        onSubmit: (ReviewLogic.Decision, Map<String, ReviewLogic.ItemReview?>) -> Unit
+    ) {
+        val dp = resources.displayMetrics.density
+        val reviews = linkedMapOf<String, ReviewLogic.ItemReview?>()
+        items.forEach { reviews[it.key] = if (it.preOk) ReviewLogic.ItemReview(true) else null }
+
+        val submit = Button(this).apply {
+            textSize = 12f
+            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (46 * dp).toInt())
+            params.setMargins(0, (14 * dp).toInt(), 0, 0)
+            layoutParams = params
+        }
+
+        fun refreshSubmit() {
+            when (ReviewLogic.decide(reviews)) {
+                ReviewLogic.Decision.INCOMPLETE -> {
+                    submit.text = "Mark every item ✓ or ✗"
+                    submit.setBackgroundColor(Color.parseColor("#E5E7EB"))
+                    submit.setTextColor(Color.parseColor("#4B5563"))
+                }
+                ReviewLogic.Decision.APPROVED -> {
+                    submit.text = "APPROVE"
+                    submit.setBackgroundColor(Color.parseColor("#10B981"))
+                    submit.setTextColor(Color.WHITE)
+                }
+                ReviewLogic.Decision.REJECTED -> {
+                    val n = reviews.values.count { it?.ok == false }
+                    submit.text = "REJECT ($n issue${if (n == 1) "" else "s"})"
+                    submit.setBackgroundColor(Color.parseColor("#EF4444"))
+                    submit.setTextColor(Color.WHITE)
+                }
+            }
+        }
+
+        items.forEach { item ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (10 * dp).toInt(), 0, (6 * dp).toInt())
+            }
+            val head = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            head.addView(TextView(this).apply {
+                text = item.label
+                textSize = 14f
+                setTextColor(Color.parseColor("#111827"))
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            if (!item.dataUrl.isNullOrEmpty()) {
+                head.addView(Button(this).apply {
+                    text = "View"
+                    textSize = 11f
+                    setBackgroundColor(Color.parseColor("#EEF2FF"))
+                    setTextColor(Color.parseColor("#4338CA"))
+                    setOnClickListener { showImagePreviewDialog(item.label, item.dataUrl) }
+                })
+            } else {
+                head.addView(TextView(this).apply {
+                    text = "No file"
+                    textSize = 11f
+                    setTextColor(Color.parseColor("#EF4444"))
+                })
+            }
+            row.addView(head)
+
+            val status = TextView(this).apply { textSize = 12f; setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt()) }
+            row.addView(status)
+
+            val good = Button(this).apply {
+                text = "✓ Good"
+                textSize = 12f
+                layoutParams = LinearLayout.LayoutParams(0, (40 * dp).toInt(), 1f).apply { marginEnd = (4 * dp).toInt() }
+            }
+            val bad = Button(this).apply {
+                text = "✗ Problem"
+                textSize = 12f
+                layoutParams = LinearLayout.LayoutParams(0, (40 * dp).toInt(), 1f).apply { marginStart = (4 * dp).toInt() }
+            }
+
+            fun paint() {
+                val r = reviews[item.key]
+                when {
+                    r == null -> { status.text = "Not reviewed yet"; status.setTextColor(Color.parseColor("#6B7280")) }
+                    r.ok -> { status.text = "✓ Looks good"; status.setTextColor(Color.parseColor("#059669")) }
+                    else -> { status.text = "✗ ${r.comment}"; status.setTextColor(Color.parseColor("#DC2626")) }
+                }
+                good.setBackgroundColor(Color.parseColor(if (r?.ok == true) "#10B981" else "#D1FAE5"))
+                good.setTextColor(if (r?.ok == true) Color.WHITE else Color.parseColor("#065F46"))
+                bad.setBackgroundColor(Color.parseColor(if (r != null && !r.ok) "#EF4444" else "#FEE2E2"))
+                bad.setTextColor(if (r != null && !r.ok) Color.WHITE else Color.parseColor("#991B1B"))
+            }
+
+            good.setOnClickListener {
+                reviews[item.key] = ReviewLogic.ItemReview(true)
+                paint(); refreshSubmit()
+            }
+            bad.setOnClickListener {
+                askReason(item.label, reasons) { comment ->
+                    reviews[item.key] = ReviewLogic.ItemReview(false, comment)
+                    paint(); refreshSubmit()
+                }
+            }
+            row.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(good); addView(bad)
+            })
+            paint()
+            parent.addView(row)
+        }
+
+        submit.setOnClickListener {
+            val decision = ReviewLogic.decide(reviews)
+            if (decision == ReviewLogic.Decision.INCOMPLETE) {
+                Toast.makeText(this, "Mark every item ✓ or ✗ (an ✗ needs a reason).", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            AlertDialog.Builder(this)
+                .setTitle(if (decision == ReviewLogic.Decision.APPROVED) "Approve?" else "Send rejection?")
+                .setMessage(
+                    if (decision == ReviewLogic.Decision.APPROVED) "Everything is marked good."
+                    else "The user will see:\n" + ReviewLogic.summary(items.associate { it.key to it.label }, reviews)
+                )
+                .setPositiveButton("Confirm") { _, _ -> onSubmit(decision, reviews) }
+                .setNegativeButton("Back", null)
+                .show()
+        }
+        refreshSubmit()
+        parent.addView(submit)
+    }
+
+    /** Preset reasons first; "Other..." lets the admin type their own. */
+    private fun askReason(label: String, reasons: List<String>, onPicked: (String) -> Unit) {
+        val options = (reasons + "Other (type a reason)").toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("What is wrong with the $label?")
+            .setItems(options) { _, which ->
+                if (which < reasons.size) {
+                    onPicked(reasons[which])
+                } else {
+                    val input = EditText(this).apply {
+                        hint = "Explain the problem"
+                        setPadding(48, 32, 48, 32)
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle(label)
+                        .setView(input)
+                        .setPositiveButton("Save") { _, _ ->
+                            val text = input.text.toString().trim()
+                            if (text.isEmpty()) {
+                                Toast.makeText(this, "A reason is required for an ✗.", Toast.LENGTH_SHORT).show()
+                            } else onPicked(text)
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun finalizeDiscountReview(
+        requestId: String,
+        userId: String,
+        decision: ReviewLogic.Decision,
+        reviews: Map<String, ReviewLogic.ItemReview?>
+    ) {
+        val approve = decision == ReviewLogic.Decision.APPROVED
+        val statusRef = database.child("discount_requests").child(requestId).child("status")
+        statusRef.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(mutableData: MutableData): Transaction.Result {
+                val v = mutableData.getValue(String::class.java)
+                // Only a request still waiting for review can be decided (no flipping later).
+                if (v != "PENDING" && v != "PENDING_REVIEW") return Transaction.abort()
+                mutableData.value = if (approve) "APPROVED" else "REJECTED"
+                return Transaction.success(mutableData)
+            }
+
+            override fun onComplete(error: DatabaseError?, committed: Boolean, currentData: DataSnapshot?) {
+                if (!committed) {
+                    if (error != null) Toast.makeText(this@AdminHomeActivity, "Failed: ${error.message}", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                val updates = hashMapOf<String, Any>(
+                    "discount_requests/$requestId/review" to ReviewLogic.toMap(reviews),
+                    "discount_requests/$requestId/reviewedAt" to System.currentTimeMillis()
+                )
+                if (approve) updates["users/$userId/hasDiscount"] = true
+                database.updateChildren(updates)
+
+                if (approve) {
+                    NotificationStore.push(
+                        database, userId, NotificationStore.TYPE_ID_REVIEW,
+                        "Registration Complete",
+                        "Your ID was approved. Enjoy your 20% discount on solo rides."
+                    )
+                    Toast.makeText(this@AdminHomeActivity, "Discount approved.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val why = ReviewLogic.summary(mapOf("front" to "Front ID", "back" to "Back ID"), reviews)
+                    NotificationStore.push(
+                        database, userId, NotificationStore.TYPE_ID_REVIEW,
+                        "ID not approved", "$why. Please re-upload the marked photo(s) in Promos."
+                    )
+                    Toast.makeText(this@AdminHomeActivity, "Application rejected.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+    }
+
+    private fun finalizeDriverReview(
+        uid: String,
+        decision: ReviewLogic.Decision,
+        reviews: Map<String, ReviewLogic.ItemReview?>
+    ) {
+        val now = System.currentTimeMillis()
+        val updates = hashMapOf<String, Any>(
+            "docReview" to ReviewLogic.toMap(reviews),
+            "docReviewedAt" to now
+        )
+        val approve = decision == ReviewLogic.Decision.APPROVED
+        if (approve) {
+            updates["isApproved"] = true
+            updates["isActive"] = true
+            updates["docReviewStatus"] = "APPROVED"
+        } else {
+            // Back to "needs documents": the driver re-uploads only what was marked ✗.
+            updates["documentsSubmitted"] = false
+            updates["docReviewStatus"] = "REJECTED"
+        }
+        database.child("users").child(uid).updateChildren(updates)
+            .addOnSuccessListener {
+                if (approve) {
+                    NotificationStore.push(
+                        database, uid, NotificationStore.TYPE_DRIVER_REVIEW,
+                        "You're approved", "Your documents were approved. You can go online and accept rides."
+                    )
+                    Toast.makeText(this, "Driver approved successfully!", Toast.LENGTH_SHORT).show()
+                } else {
+                    val why = ReviewLogic.summary(
+                        mapOf("license" to "Driver's License", "registration" to "OR/CR", "nbi" to "NBI Clearance", "photo" to "1x1 Photo"), reviews
+                    )
+                    NotificationStore.push(
+                        database, uid, NotificationStore.TYPE_DRIVER_REVIEW,
+                        "Documents need changes", "$why. Please re-upload the marked documents."
+                    )
+                    Toast.makeText(this, "Rejection sent to the driver.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .addOnFailureListener { Toast.makeText(this, "Failed: ${it.message}", Toast.LENGTH_SHORT).show() }
     }
 
     private fun approveDriver(uid: String) {
@@ -760,7 +1143,7 @@ class AdminHomeActivity : AppCompatActivity() {
         usersListener?.let { database.child("users").removeEventListener(it) }
         bookingsListener?.let { database.child("bookings").removeEventListener(it) }
         discountRequestsListener?.let {
-            database.child("discount_requests").orderByChild("status").equalTo("PENDING").removeEventListener(it)
+            database.child("discount_requests").removeEventListener(it)
         }
         walletRequestsListener?.let {
             dbRef.child("wallet_requests").orderByChild("status").equalTo("PENDING").removeEventListener(it)

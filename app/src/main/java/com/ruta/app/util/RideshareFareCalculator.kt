@@ -4,18 +4,18 @@ import kotlin.math.max
 import kotlin.math.round
 object RideshareFareCalculator {
 
-    const val BASE_FARE = 65.0
+    val BASE_FARE: Double get() = FareConfig.rates.soloBase
 
     // Rideshare pricing (per passenger):
     //   ₱35 base
     //   + the legs ridden ALONE at the regular rate (₱15/km + ₱2/min)
     //   + the legs ridden TOGETHER at the shared rate (₱7.50/km + ₱1/min)
     // so the discount applies only to the part of the trip that is actually shared.
-    const val SHARED_BASE_FARE = 35.0
-    const val SHARED_RATE_PER_KM = 7.5
-    const val SHARED_RATE_PER_MIN = 1.0
-    const val RATE_PER_KM = 15.0
-    const val RATE_PER_MIN = 2.0
+    val SHARED_BASE_FARE: Double get() = FareConfig.rates.sharedBase
+    val SHARED_RATE_PER_KM: Double get() = FareConfig.rates.sharedPerKm
+    val SHARED_RATE_PER_MIN: Double get() = FareConfig.rates.sharedPerMin
+    val RATE_PER_KM: Double get() = FareConfig.rates.soloPerKm
+    val RATE_PER_MIN: Double get() = FareConfig.rates.soloPerMin
     private const val INCONVENIENCE_CREDIT_RATE = 0.30
 
     data class PassengerFare(

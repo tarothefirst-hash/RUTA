@@ -141,6 +141,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private val deviationHandler = Handler(Looper.getMainLooper())
     private var alertTrackRef: DatabaseReference? = null
     private var alertTrackListener: ValueEventListener? = null
+    private var driverSosSent = false
     private var lastPersistedIds = "\u0000" // forces the first write to overwrite any stale value
 
     private val targetsList = mutableListOf<TrackableTarget>()
@@ -639,12 +640,26 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /** The rider's own photo (initials if none): the driver sees it on the trip card while it is their stop. */
+    private fun showPassengerAvatar(passengerId: String, name: String) {
+        val img = _binding?.imgPassengerAvatar ?: return
+        val px = (44 * resources.displayMetrics.density).toInt()
+        com.ruta.app.util.StoragePhotos.showAvatar(img, null, name, px)
+        if (passengerId.isEmpty()) return
+        database.child("users").child(passengerId).child("profilePhoto").get().addOnSuccessListener { s ->
+            val still = _binding?.imgPassengerAvatar ?: return@addOnSuccessListener
+            if (still !== img) return@addOnSuccessListener
+            com.ruta.app.util.StoragePhotos.showAvatar(img, s.getValue(String::class.java), name, px)
+        }
+    }
+
     private fun bindPassengerInfoToView(booking: Booking, appendTitle: String = "") {
         val b = _binding ?: return
         if (!isAdded) return
 
         val serviceTitle = getFormattedServiceTitle(booking)
         val nameText = booking.passengerName.ifEmpty { "Passenger" }
+        showPassengerAvatar(booking.passengerId, nameText)
         b.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText\n$serviceTitle"
 
         b.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
@@ -905,7 +920,36 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             Toast.makeText(context, if (nav.muted) "Voice guidance muted" else "Voice guidance on", Toast.LENGTH_SHORT).show()
         }
         binding.btnBackToMyScreen.setOnClickListener { backToMyScreen() }
+        binding.btnDriverSos.setOnClickListener { confirmDriverSos() }
         binding.btnAlertDismiss.setOnClickListener { binding.cardAlertBanner.visibility = View.GONE }
+    }
+
+    /** Driver emergency: asks first, then alerts the DRIVER's own trusted contacts (never the riders). */
+    private fun confirmDriverSos() {
+        val bookingId = activeBookingId ?: bookingIdsOnTrip().firstOrNull()
+        if (bookingId == null) {
+            Toast.makeText(context, "No active trip to report.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("🚨 Emergency")
+            .setMessage("Notify your trusted contacts with your live location and vehicle details?")
+            .setPositiveButton("Notify") { _, _ ->
+                driverSosSent = true
+                // An emergency means no automatic reroute while it is active.
+                resetDeviationFlow()
+                EmergencyContactManager.sendEmergencyAlertForBooking(database, bookingId, isDriver = true) { n ->
+                    if (_binding == null) return@sendEmergencyAlertForBooking
+                    Toast.makeText(
+                        context,
+                        if (n > 0) "Alert sent to $n trusted contact${if (n == 1) "" else "s"}."
+                        else "No trusted contacts yet. Add one from your Profile.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun updateMuteIcon() {
@@ -1004,7 +1048,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun evaluateDeviation(fromTimer: Boolean) {
-        if (!wasDeviated || _binding == null) return
+        if (!wasDeviated || _binding == null || driverSosSent) return
         when (DeviationApproval.resolve(deviationResponses.values)) {
             DeviationApproval.Outcome.APPROVED -> applyApprovedReroute()
             DeviationApproval.Outcome.BLOCKED ->
@@ -1449,19 +1493,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             b.txtCurrentTargetIndicator.text = "Pin: ${target?.name ?: "Me"}"
         }
 
-        val selectorParams = b.layoutTargetSelector.layoutParams as RelativeLayout.LayoutParams
-        selectorParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-        selectorParams.removeRule(RelativeLayout.ABOVE)
-
-        if (isTripActive && b.btnChatWithPassenger.visibility == View.VISIBLE) {
-            selectorParams.addRule(RelativeLayout.ABOVE, R.id.btnChatWithPassenger)
-        } else if (state != DriverRideState.IDLE) {
-            selectorParams.addRule(RelativeLayout.ABOVE, R.id.cardIncomingRequest)
-        } else {
-            selectorParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-            selectorParams.bottomMargin = (16 * resources.displayMetrics.density).toInt()
-        }
-        b.layoutTargetSelector.layoutParams = selectorParams
 
         when (state) {
             DriverRideState.IDLE -> {
@@ -1497,6 +1528,25 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 b.btnChatWithPassenger.visibility = View.VISIBLE
             }
         }
+
+        // Placed AFTER the state switch so it sees the chat button's new visibility
+        // (it used to read the previous state, which made "Chat with passenger" overlap
+        // the prev/next pin selector).
+        val selectorParams = b.layoutTargetSelector.layoutParams as RelativeLayout.LayoutParams
+        selectorParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+        selectorParams.removeRule(RelativeLayout.ABOVE)
+
+        if (isTripActive && b.btnChatWithPassenger.visibility == View.VISIBLE) {
+            selectorParams.addRule(RelativeLayout.ABOVE, R.id.btnChatWithPassenger)
+        } else if (state != DriverRideState.IDLE) {
+            selectorParams.addRule(RelativeLayout.ABOVE, R.id.cardIncomingRequest)
+        } else {
+            selectorParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+            selectorParams.bottomMargin = (16 * resources.displayMetrics.density).toInt()
+        }
+        b.layoutTargetSelector.layoutParams = selectorParams
+
+        b.btnDriverSos.visibility = if (isTripActive) View.VISIBLE else View.GONE
     }
 
     private fun acceptCurrentRide() {
@@ -2059,6 +2109,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             else
                 snap.child("dropoffAddress").getValue(String::class.java) ?: "N/A"
 
+            showPassengerAvatar(passengerId, name)
             if (passengerId.isNotEmpty()) {
                 database.child("users").child(passengerId).get().addOnSuccessListener { userSnap ->
                     if (_binding == null || !isAdded) return@addOnSuccessListener
@@ -2281,6 +2332,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         wasDeviated = false
         resetDeviationFlow()
         arrivalHandledThisStop = false
+        driverSosSent = false
 
         pickupMarker?.remove()
         pickupMarker = null
