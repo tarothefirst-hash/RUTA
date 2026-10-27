@@ -1,5 +1,6 @@
 package com.ruta.app.ui
 
+import com.ruta.app.util.NotificationWatchService
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -22,6 +23,7 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.Query
 import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
+import com.ruta.app.util.DeviationApproval
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.RouteDeviationDialogHelper
 import com.ruta.app.util.hideWhileKeyboardOpen
@@ -50,6 +52,7 @@ class PassengerHomeActivity : AppCompatActivity() {
     private var activeTripGroupId: String? = null
     private var lastShownPickupOrdinal: Int? = null
     private var hasFiredNotification = false
+    private var deviationAnswered = false
 
     private var pairRequestListener: ValueEventListener? = null
     private var alertListener: ValueEventListener? = null
@@ -60,6 +63,7 @@ class PassengerHomeActivity : AppCompatActivity() {
         setContentView(R.layout.activity_passenger_home)
 
         requestNotificationPermission()
+        NotificationWatchService.start(this)
         initViews()
         hideWhileKeyboardOpen(findViewById(android.R.id.content), findViewById(R.id.bottomNav))
         setupViewPager()
@@ -135,17 +139,14 @@ class PassengerHomeActivity : AppCompatActivity() {
         navSettings.setOnClickListener { viewPager.setCurrentItem(3, true) }
         btnProfile.setOnClickListener { viewPager.setCurrentItem(4, true) }
 
+        // One panel only: "I'm safe" approves the driver's reroute straight away.
         btnDismissWarning.setOnClickListener {
             val bookingId = activeBookingId ?: return@setOnClickListener
-            RouteDeviationDialogHelper.showDeviationAlert(
-                context = this,
-                database = database,
-                bookingId = bookingId,
-                onRerouteValidated = {
-                    cardRouteDeviationWarning.visibility = View.GONE
-                    hasFiredNotification = false
-                }
-            )
+            RouteDeviationManager.clearTripDeviationState(bookingId)
+            RouteDeviationDialogHelper.writeDeviationResponse(bookingId, DeviationApproval.OK)
+            deviationAnswered = true
+            cardRouteDeviationWarning.visibility = View.GONE
+            Toast.makeText(this, "Thanks. Your driver can now reroute.", Toast.LENGTH_SHORT).show()
         }
 
         btnSosEmergency.setOnClickListener {
@@ -159,6 +160,10 @@ class PassengerHomeActivity : AppCompatActivity() {
                 .setTitle("Emergency Alert")
                 .setMessage("Want to notify your Contacts?")
                 .setPositiveButton("Yes") { _, _ ->
+                    // An emergency always denies the reroute.
+                    RouteDeviationDialogHelper.writeDeviationResponse(bookingId, DeviationApproval.EMERGENCY)
+                    deviationAnswered = true
+                    cardRouteDeviationWarning.visibility = View.GONE
                     EmergencyContactManager.sendEmergencyAlertForBooking(database, bookingId, isDriver = false) { notified ->
                         val message = if (notified > 0) {
                             "Alert sent to $notified trusted contact${if (notified == 1) "" else "s"}."
@@ -280,26 +285,16 @@ class PassengerHomeActivity : AppCompatActivity() {
                 }
 
                 if (routeStatus == "DEVIATED") {
-                    cardRouteDeviationWarning.visibility = View.VISIBLE
+                    // Show the single warning panel until the rider answers it once.
+                    cardRouteDeviationWarning.visibility = if (deviationAnswered) View.GONE else View.VISIBLE
                     if (!hasFiredNotification) {
                         hasFiredNotification = true
                         RouteDeviationManager.sendDeviationNotification(this@PassengerHomeActivity, bookingId)
-
-                        // No forced tab switch: the red warning card + this dialog are enough,
-                        // the rider keeps whatever screen they were on.
-                        RouteDeviationDialogHelper.showDeviationAlert(
-                            context = this@PassengerHomeActivity,
-                            database = database,
-                            bookingId = bookingId,
-                            onRerouteValidated = {
-                                cardRouteDeviationWarning.visibility = View.GONE
-                                hasFiredNotification = false
-                            }
-                        )
                     }
                 } else {
                     cardRouteDeviationWarning.visibility = View.GONE
                     hasFiredNotification = false
+                    deviationAnswered = false
                 }
             }
 

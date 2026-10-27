@@ -1,5 +1,6 @@
 package com.ruta.app.ui
 
+import com.ruta.app.util.NotificationWatchService
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -367,6 +368,7 @@ class ProfileFragment : Fragment() {
     }
 
     private fun performLogout() {
+        NotificationWatchService.stop(requireContext().applicationContext)
         FirebaseAuth.getInstance().signOut()
         val sharedPref = requireContext().getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
         sharedPref.edit().clear().apply()

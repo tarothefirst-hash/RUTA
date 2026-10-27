@@ -1,5 +1,6 @@
 package com.ruta.app.ui.driver
 
+import com.ruta.app.util.NotificationWatchService
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -491,6 +492,7 @@ class DriverProfileFragment : Fragment() {
 
     private fun performLogout() {
         val ctx = context ?: return
+        NotificationWatchService.stop(requireContext().applicationContext)
         auth.signOut()
         val sharedPref = ctx.getSharedPreferences("USER_SESSION", Context.MODE_PRIVATE)
         sharedPref.edit().clear().apply()

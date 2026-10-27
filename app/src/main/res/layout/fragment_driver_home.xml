@@ -500,6 +500,18 @@
         android:orientation="vertical">
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnDriverSos"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:contentDescription="Emergency SOS"
+            android:visibility="gone"
+            app:backgroundTint="#C62828"
+            app:fabCustomSize="48dp"
+            app:srcCompat="@android:drawable/ic_dialog_alert"
+            app:tint="#FFFFFF" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnMuteVoice"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

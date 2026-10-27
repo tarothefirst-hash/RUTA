@@ -23,7 +23,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.FirebaseDatabase
 import com.ruta.app.R
 import com.ruta.app.util.ImageUtils
@@ -41,6 +44,8 @@ class PromosFragment : Fragment() {
     private lateinit var btnUploadBack: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var btnSubmitDiscount: Button
+    private lateinit var layoutApproved: View
+    private lateinit var scrollForm: View
 
     private var frontUri: Uri? = null
     private var backUri: Uri? = null
@@ -132,6 +137,8 @@ class PromosFragment : Fragment() {
         btnUploadBack = view.findViewById(R.id.btnUploadBack)
         progressBar = view.findViewById(R.id.progressBar)
         btnSubmitDiscount = view.findViewById(R.id.btnSubmitDiscount)
+        layoutApproved = view.findViewById(R.id.layoutDiscountApproved)
+        scrollForm = view.findViewById(R.id.scrollDiscountForm)
 
         txtLimitNotice = view.findViewById(R.id.txtLimitNotice) ?: TextView(requireContext())
         txtLimitNotice.text = "Note: Upload valid ID photos up to 5MB max."
@@ -221,50 +228,102 @@ class PromosFragment : Fragment() {
         progressBar.visibility = View.VISIBLE
         btnSubmitDiscount.isEnabled = false
 
-        val request = hashMapOf<String, Any>(
-            "uid" to uid,
-            "discountType" to discountType,
-            "frontBase64" to frontBase64!!,
-            "backBase64" to backBase64!!,
-            "status" to "PENDING_REVIEW",
-            "timestamp" to System.currentTimeMillis()
-        )
+        database.child("users").child(uid).get().addOnCompleteListener { task ->
+            if (!isAdded) return@addOnCompleteListener
+            val snap = task.result
+            val name = snap?.child("name")?.getValue(String::class.java)
+                ?: "${snap?.child("firstName")?.getValue(String::class.java) ?: ""} ${snap?.child("lastName")?.getValue(String::class.java) ?: ""}".trim()
 
-        database.child("discount_requests").child(uid).setValue(request)
-            .addOnSuccessListener {
-                progressBar.visibility = View.GONE
-                updateStatusUi("PENDING_REVIEW")
-                Toast.makeText(requireContext(), "Application submitted for review!", Toast.LENGTH_LONG).show()
-            }
-            .addOnFailureListener { error ->
-                progressBar.visibility = View.GONE
-                btnSubmitDiscount.isEnabled = true
-                Toast.makeText(requireContext(), "Submission Failed: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
+            // Status PENDING is what the admin's ID Confirmation queue listens for.
+            val request = hashMapOf<String, Any>(
+                "uid" to uid,
+                "userId" to uid,
+                "userName" to name.ifBlank { "Passenger" },
+                "discountType" to discountType,
+                "frontBase64" to frontBase64!!,
+                "backBase64" to backBase64!!,
+                "status" to "PENDING",
+                "timestamp" to System.currentTimeMillis()
+            )
+
+            database.child("discount_requests").child(uid).setValue(request)
+                .addOnSuccessListener {
+                    if (!isAdded) return@addOnSuccessListener
+                    progressBar.visibility = View.GONE
+                    updateStatusUi("PENDING", null)
+                    Toast.makeText(requireContext(), "Application submitted for review!", Toast.LENGTH_LONG).show()
+                }
+                .addOnFailureListener { error ->
+                    if (!isAdded) return@addOnFailureListener
+                    progressBar.visibility = View.GONE
+                    btnSubmitDiscount.isEnabled = true
+                    Toast.makeText(requireContext(), "Submission Failed: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
+        }
     }
 
+    private var statusListener: ValueEventListener? = null
+
+    // Live: when the admin approves or rejects, this screen changes by itself.
     private fun loadExistingDiscountStatus() {
         val uid = currentUid ?: return
-        database.child("discount_requests").child(uid).get().addOnSuccessListener { snapshot ->
-            if (snapshot.exists()) {
+        val l = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (!isAdded || view == null) return
+                applyDiscountSnapshot(snapshot)
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        statusListener = l
+        database.child("discount_requests").child(uid).addValueEventListener(l)
+    }
+
+    override fun onDestroyView() {
+        val uid = currentUid
+        statusListener?.let { l -> if (uid != null) database.child("discount_requests").child(uid).removeEventListener(l) }
+        statusListener = null
+        super.onDestroyView()
+    }
+
+    private fun applyDiscountSnapshot(snapshot: DataSnapshot) {
+        if (!snapshot.exists()) return
                 val status = snapshot.child("status").getValue(String::class.java) ?: "PENDING_REVIEW"
                 val loadedFrontBase64 = snapshot.child("frontBase64").getValue(String::class.java)
                 val loadedBackBase64 = snapshot.child("backBase64").getValue(String::class.java)
 
-                if (!loadedFrontBase64.isNullOrEmpty()) {
+                // Items the admin marked with an X must be re-uploaded; the good ones are kept.
+                val review = snapshot.child("review")
+                val frontBad = status == "REJECTED" && review.child("front").child("ok").getValue(Boolean::class.java) == false
+                val backBad = status == "REJECTED" && review.child("back").child("ok").getValue(Boolean::class.java) == false
+
+                if (!frontBad && !loadedFrontBase64.isNullOrEmpty()) {
                     frontBase64 = loadedFrontBase64
                     loadBase64IntoImageView(loadedFrontBase64, imgFrontPreview)
                     btnUploadFront.text = "Replace / Remove Front ID"
                 }
-                if (!loadedBackBase64.isNullOrEmpty()) {
+                if (!backBad && !loadedBackBase64.isNullOrEmpty()) {
                     backBase64 = loadedBackBase64
                     loadBase64IntoImageView(loadedBackBase64, imgBackPreview)
                     btnUploadBack.text = "Replace / Remove Back ID"
                 }
 
-                updateStatusUi(status)
-            }
-        }
+                if (frontBad) {
+                    frontBase64 = null
+                    imgFrontPreview.setImageResource(R.drawable.ic_business)
+                    btnUploadFront.text = getString(R.string.h_upload_id_front_button)
+                }
+                if (backBad) {
+                    backBase64 = null
+                    imgBackPreview.setImageResource(R.drawable.ic_business)
+                    btnUploadBack.text = getString(R.string.h_upload_id_back_button)
+                }
+                val reasons = buildString {
+                    if (frontBad) append("Front ID: ${review.child("front").child("comment").getValue(String::class.java) ?: "Not accepted"}")
+                    if (frontBad && backBad) append("\n")
+                    if (backBad) append("Back ID: ${review.child("back").child("comment").getValue(String::class.java) ?: "Not accepted"}")
+                }
+
+                updateStatusUi(status, reasons.ifBlank { null })
     }
 
     private fun loadBase64IntoImageView(base64Str: String, imageView: ImageView) {
@@ -279,8 +338,11 @@ class PromosFragment : Fragment() {
         }
     }
 
-    private fun updateStatusUi(status: String) {
+    private fun updateStatusUi(status: String, rejectionReasons: String?) {
         txtVerificationStatus.visibility = View.VISIBLE
+        // Approved: the whole screen is replaced by the "Registration Complete" panel.
+        layoutApproved.visibility = if (status == "APPROVED") View.VISIBLE else View.GONE
+        scrollForm.visibility = if (status == "APPROVED") View.GONE else View.VISIBLE
         when (status) {
             "APPROVED" -> {
                 txtVerificationStatus.text = "✓ Verification Approved! Your discount is active."
@@ -290,13 +352,15 @@ class PromosFragment : Fragment() {
                 btnSubmitDiscount.isEnabled = false
             }
             "REJECTED" -> {
-                txtVerificationStatus.text = "✕ Verification Rejected. Please re-upload valid IDs."
+                txtVerificationStatus.text = "✕ Verification Rejected. Please re-upload the marked ID photo(s)." +
+                    (rejectionReasons?.let { "\n\n$it" } ?: "")
                 txtVerificationStatus.setBackgroundColor(Color.parseColor("#FFEBEE"))
                 txtVerificationStatus.setTextColor(Color.parseColor("#C62828"))
                 btnSubmitDiscount.text = "Re-submit Application"
                 btnSubmitDiscount.isEnabled = true
             }
             else -> {
+                // PENDING (and the legacy PENDING_REVIEW)
                 txtVerificationStatus.text = "⏳ Pending Review. We are verifying your uploaded IDs."
                 txtVerificationStatus.setBackgroundColor(Color.parseColor("#FFF8E1"))
                 txtVerificationStatus.setTextColor(Color.parseColor("#F57F17"))

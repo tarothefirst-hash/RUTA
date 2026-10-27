@@ -18,6 +18,7 @@ import com.google.firebase.database.ValueEventListener
 import com.google.firebase.storage.FirebaseStorage
 import com.ruta.app.databinding.FragmentDriverWalletBinding
 import java.util.Locale
+import com.ruta.app.util.CashInRules
 import com.ruta.app.util.ImageUtils
 
 class DriverWalletFragment : Fragment() {
@@ -75,14 +76,42 @@ class DriverWalletFragment : Fragment() {
             binding.btnAmount500 to 500.0
         )
 
+        // Custom amount: typing replaces any quick-pick and is validated live (20 to 10,000).
+        binding.edtCustomAmount.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                when (val r = CashInRules.parse(s?.toString())) {
+                    is CashInRules.Result.Valid -> {
+                        selectedAmount = r.amount
+                        binding.layoutCustomAmount.error = null
+                        binding.txtSelectedAmount.text = "Selected amount: ₱${formatPeso(r.amount)}"
+                        amountButtons.forEach { it.first.alpha = 0.4f }
+                    }
+                    is CashInRules.Result.Invalid -> {
+                        selectedAmount = null
+                        binding.layoutCustomAmount.error = r.message
+                    }
+                    CashInRules.Result.Empty -> {
+                        binding.layoutCustomAmount.error = null
+                        if (amountButtons.none { it.first.alpha == 1.0f }) selectedAmount = null
+                    }
+                }
+            }
+        })
+
         amountButtons.forEach { (button, amount) ->
             button.setOnClickListener {
+                binding.edtCustomAmount.setText("")
                 selectedAmount = amount
-                binding.txtSelectedAmount.text = "Selected amount: ₱${amount.toInt()}"
+                binding.txtSelectedAmount.text = "Selected amount: ₱${formatPeso(amount)}"
                 highlightSelected(button, amountButtons.map { it.first })
             }
         }
     }
+
+    private fun formatPeso(amount: Double): String =
+        if (amount % 1.0 == 0.0) String.format(Locale.US, "%,d", amount.toLong()) else String.format(Locale.US, "%,.2f", amount)
 
     private fun highlightSelected(selected: Button, all: List<Button>) {
         all.forEach { btn -> btn.alpha = if (btn == selected) 1.0f else 0.4f }
@@ -119,7 +148,7 @@ class DriverWalletFragment : Fragment() {
 
                         if (status == "PENDING") {
                             hasPending = true
-                            binding.txtLastTopUpStatus.text = "Status: Pending Admin Confirmation (₱${amount.toInt()})"
+                            binding.txtLastTopUpStatus.text = "Status: Pending Admin Confirmation (₱${formatPeso(amount)})"
                             binding.btnSubmitTopUp.isEnabled = false
                             binding.btnSubmitTopUp.text = "Pending Confirmation..."
                             binding.btnSelectReceipt.isEnabled = false
@@ -141,7 +170,7 @@ class DriverWalletFragment : Fragment() {
     private fun submitTopUp() {
         val amount = selectedAmount
         if (amount == null) {
-            Toast.makeText(context, "Pick an amount first.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Pick an amount or type a valid one (₱20 to ₱10,000).", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -215,7 +244,7 @@ class DriverWalletFragment : Fragment() {
                     selectedReceiptUri = null
                     binding.imgReceiptPreview.visibility = View.GONE
                     binding.txtLastTopUpStatus.text =
-                        "Last request: ₱${amount.toInt()} — awaiting admin confirmation"
+                        "Last request: ₱${formatPeso(amount)} — awaiting admin confirmation"
 
                     Toast.makeText(
                         context,

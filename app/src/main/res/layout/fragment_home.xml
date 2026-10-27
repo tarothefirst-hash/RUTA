@@ -61,6 +61,20 @@
                 android:src="@drawable/ic_notification"
                 app:tint="@color/white" />
 
+            <TextView
+                android:id="@+id/txtNotifBadge"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_alignTop="@id/btnNotification"
+                android:layout_alignEnd="@id/btnNotification"
+                android:background="@drawable/bg_badge_red"
+                android:gravity="center"
+                android:text="0"
+                android:textColor="@color/white"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <!-- Search bar -->
             <LinearLayout
                 android:id="@+id/layoutSearchBar"
@@ -170,6 +184,16 @@
             android:layout_marginHorizontal="24dp"
             android:layout_marginTop="12dp"
             android:nestedScrollingEnabled="false" />
+
+        <TextView
+            android:id="@+id/txtNoRecentRides"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginTop="8dp"
+            android:text="No rides yet. Your recent trips will show up here."
+            android:textColor="@color/ruta_text_muted"
+            android:textSize="13sp" />
 
         <!-- PERSISTENT ACTIVE TRIP BANNER (POSITIONS AT BOTTOM ABOVE NAV BAR) -->
     <com.google.android.material.card.MaterialCardView

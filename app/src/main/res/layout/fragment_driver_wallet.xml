@@ -176,6 +176,24 @@
                 android:text="₱500" />
         </LinearLayout>
 
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layoutCustomAmount"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:hint="Or type your own amount (₱20 to ₱10,000)"
+            app:prefixText="₱">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/edtCustomAmount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionDone"
+                android:inputType="numberDecimal"
+                android:maxLength="9" />
+        </com.google.android.material.textfield.TextInputLayout>
+
         <TextView
             android:id="@+id/txtSelectedAmount"
             android:layout_width="wrap_content"

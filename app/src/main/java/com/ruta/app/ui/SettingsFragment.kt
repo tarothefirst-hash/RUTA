@@ -1,5 +1,6 @@
 package com.ruta.app.ui
 
+import com.ruta.app.util.NotificationWatchService
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -36,6 +37,7 @@ class SettingsFragment : Fragment() {
 
     private fun performLogout() {
         // 1. Sign out from Firebase Auth
+        NotificationWatchService.stop(requireContext().applicationContext)
         FirebaseAuth.getInstance().signOut()
 
         // 2. Clear local session cached in SharedPreferences
