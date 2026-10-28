@@ -45,6 +45,14 @@
       }
     },
 
+    "commissions": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN'",
+      ".indexOn": ["timestamp", "driverId"],
+      "$entryId": {
+        ".write": "auth != null && !data.exists() && newData.child('driverId').val() == auth.uid"
+      }
+    },
+
     "wallet_requests": {
       ".read": "auth != null",
       ".indexOn": ["status", "driverId"],

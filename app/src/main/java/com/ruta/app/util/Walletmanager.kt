@@ -32,7 +32,8 @@ object WalletManager {
         driverId: String,
         fare: Double,
         hasDiscount: Boolean,
-        onComplete: (newBalance: Double) -> Unit = {}
+        onComplete: (newBalance: Double) -> Unit = {},
+        bookingId: String? = null
     ) {
         val commission = commissionFor(fare, hasDiscount)
         val walletRef = database.child("users").child(driverId).child("walletBalance")
@@ -51,11 +52,31 @@ object WalletManager {
             override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
                 if (committed && snapshot != null) {
                     val finalBalance = snapshot.value.toDoubleValue()
+                    recordCommission(database, driverId, bookingId, fare, commission, hasDiscount)
                     onComplete(finalBalance)
                 } else {
                     onComplete(0.0)
                 }
             }
         })
+    }
+
+    /** One ledger line per deduction, so the admin can see what RUTA earned. Create-only. */
+    private fun recordCommission(
+        database: DatabaseReference, driverId: String, bookingId: String?,
+        fare: Double, commission: Double, hasDiscount: Boolean
+    ) {
+        if (commission <= 0.0) return
+        val ref = database.child("commissions").push()
+        ref.setValue(
+            mapOf(
+                "driverId" to driverId,
+                "bookingId" to (bookingId ?: ""),
+                "fare" to fare,
+                "commission" to commission,
+                "hasDiscount" to hasDiscount,
+                "timestamp" to com.google.firebase.database.ServerValue.TIMESTAMP
+            )
+        )
     }
 }
