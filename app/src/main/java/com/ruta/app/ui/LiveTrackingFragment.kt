@@ -266,21 +266,38 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    private var trustedContactsListener: ValueEventListener? = null
+
+    /** Live list: a contact added (or removed) while this screen is open shows up straight away. */
     private fun loadTrustedContactsList() {
         val uid = myUid ?: return
-        database.child("users").child(uid).child("trustedContacts").get()
-            .addOnSuccessListener { snapshot ->
-                val contactUids = snapshot.children.mapNotNull { it.key }
+        if (trustedContactsListener != null) return
+        val initialUid = arguments?.getString("EXTRA_CONTACT_UID")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (!isAdded) return
+                val contactUids = snapshot.children.mapNotNull { it.key }.toSet()
+
+                // Contacts that were removed disappear from the Next/Prev rotation.
+                val current = targetsList.getOrNull(currentTargetIndex)
+                targetsList.removeAll { !it.isSelf && it.uid !in contactUids && it.uid != initialUid }
+                currentTargetIndex = targetsList.indexOfFirst { it.uid == current?.uid }.let { if (it < 0) 0 else it }
+
                 contactUids.forEach { contactUid ->
                     if (targetsList.none { it.uid == contactUid }) {
                         database.child("users").child(contactUid).child("name").get()
                             .addOnSuccessListener { nameSnap ->
+                                if (!isAdded || targetsList.any { it.uid == contactUid }) return@addOnSuccessListener
                                 val name = nameSnap.getValue(String::class.java)?.ifEmpty { null } ?: "Trusted Contact"
                                 targetsList.add(TrackableTarget(contactUid, name))
                             }
                     }
                 }
             }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        trustedContactsListener = listener
+        database.child("users").child(uid).child("trustedContacts").addValueEventListener(listener)
     }
 
     private fun switchTarget(index: Int) {
@@ -541,6 +558,11 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
 
         myLocationPublisherCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         myLocationPublisherCallback = null
+
+        trustedContactsListener?.let { l ->
+            myUid?.let { database.child("users").child(it).child("trustedContacts").removeEventListener(l) }
+        }
+        trustedContactsListener = null
 
         bookingListener?.let { bookingRef?.removeEventListener(it) }
         bookingListener = null
