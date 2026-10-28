@@ -524,6 +524,13 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
         contactMarker = null
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Permission may have been granted after this screen was built (for example in Settings).
+        if (myLocationPublisherCallback == null) startPublishingMyLiveLocation()
+        if (::mMap.isInitialized) enableMyLocationOnMap()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         detachListeners()

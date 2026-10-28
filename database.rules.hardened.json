@@ -45,6 +45,14 @@
       }
     },
 
+    "commissions": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN'",
+      ".indexOn": ["timestamp", "driverId"],
+      "$entryId": {
+        ".write": "auth != null && !data.exists() && newData.child('driverId').val() == auth.uid"
+      }
+    },
+
     "wallet_requests": {
       ".read": "auth != null",
       ".indexOn": ["status", "driverId"],
@@ -85,7 +93,21 @@
       ".read": "auth != null",
       ".indexOn": ["status"],
       "$requestId": {
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || (!data.exists() && newData.child('userId').val() == auth.uid))"
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || ((!data.exists() || data.child('status').val() == 'REJECTED') && newData.child('userId').val() == auth.uid))"
+      }
+    },
+
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'ADMIN')",
+        ".write": "auth != null"
+      }
+    },
+
+    "config": {
+      ".read": "auth != null",
+      "fare": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'ADMIN'"
       }
     },
 

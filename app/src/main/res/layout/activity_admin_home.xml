@@ -964,6 +964,22 @@
 
             </FrameLayout>
         </androidx.core.widget.NestedScrollView>
+    
+        <!-- Menu within thumb reach (the toolbar button is far up the screen) -->
+        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/fabMenu"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="16dp"
+            android:layout_marginBottom="24dp"
+            android:contentDescription="@string/a_admin_open_menu"
+            android:text="Menu"
+            android:textColor="@color/white"
+            app:backgroundTint="@color/ruta_black"
+            app:icon="@drawable/ic_menu"
+            app:iconTint="@color/white" />
+
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <com.google.android.material.navigation.NavigationView

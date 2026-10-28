@@ -90,15 +90,20 @@ class PassengerHomeActivity : AppCompatActivity() {
         }
     }
 
+    /** Location first (live tracking and booking need it), then notifications, in one request. */
     private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                    this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101
-                )
-            }
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.ACCESS_FINE_LOCATION
+            needed += android.Manifest.permission.ACCESS_COARSE_LOCATION
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.POST_NOTIFICATIONS
+        }
+        if (needed.isNotEmpty()) ActivityCompat.requestPermissions(this, needed.toTypedArray(), 101)
     }
 
     private fun initViews() {

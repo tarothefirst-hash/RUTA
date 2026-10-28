@@ -25,6 +25,15 @@ class MainApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Offline cache + queued writes: the app keeps showing the last known trip when the
+        // signal drops, and anything written while offline (status updates, SOS, location) is
+        // sent automatically when the internet returns. Must run before any other database use.
+        try {
+            FirebaseDatabase.getInstance().setPersistenceEnabled(true)
+            FirebaseDatabase.getInstance().setPersistenceCacheSizeBytes(30L * 1024 * 1024)
+        } catch (_: Exception) {
+            // already initialised earlier in this process; the setting is already in effect
+        }
         // Force light mode globally across the entire app
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
 

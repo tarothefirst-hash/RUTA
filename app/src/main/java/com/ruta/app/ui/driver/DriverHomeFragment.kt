@@ -2182,7 +2182,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         database.child("bookings").child(bookingId).child("status").setValue("COMPLETED")
             .addOnSuccessListener {
                 if (booking != null && driverId != null) {
-                    WalletManager.deductCommission(database, driverId, booking.fare, booking.hasDiscount)
+                    WalletManager.deductCommission(database, driverId, booking.fare, booking.hasDiscount, bookingId = bookingId)
                     NoShowManager.settleFeeOnCompletion(database, driverId, bookingId)
                 }
                 Toast.makeText(context, "Ride Completed!", Toast.LENGTH_SHORT).show()
@@ -2281,7 +2281,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
                                 lines.forEach { f ->
                                     // 1. Deduct commission per passenger (hardcoded false for shared discount)
-                                    WalletManager.deductCommission(database, driverId, f.total, false)
+                                    WalletManager.deductCommission(database, driverId, f.total, false, bookingId = f.bookingId)
 
                                     // 2. Persist exact fare breakdown to Firebase
                                     database.child("bookings").child(f.bookingId).updateChildren(

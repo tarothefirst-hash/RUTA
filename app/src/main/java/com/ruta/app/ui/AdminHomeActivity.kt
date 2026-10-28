@@ -46,6 +46,9 @@ class AdminHomeActivity : AppCompatActivity() {
     private var bookingsListener: ValueEventListener? = null
     private var discountRequestsListener: ValueEventListener? = null
     private var walletRequestsListener: ValueEventListener? = null
+    private var commissionsListener: ValueEventListener? = null
+    private val driverNames = HashMap<String, String>()
+    private var earnings: com.ruta.app.util.EarningsLogic.Summary? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +58,7 @@ class AdminHomeActivity : AppCompatActivity() {
         setupHeader()
         setupNavigationDrawer()
         startDataListeners()
+        startEarningsListener()
         binding.btnAddDriver.setOnClickListener { showCreateDriverDialog() }
         binding.btnViewAllApprovals.setOnClickListener { showSection(R.id.nav_driver_approvals) }
         binding.btnAdminLogout.setOnClickListener { performLogout() }
@@ -161,6 +165,9 @@ class AdminHomeActivity : AppCompatActivity() {
     }
 
     private fun setupNavigationDrawer() {
+        binding.fabMenu.setOnClickListener {
+            binding.drawerLayout.openDrawer(GravityCompat.START)
+        }
         binding.btnMenu.setOnClickListener {
             binding.drawerLayout.openDrawer(GravityCompat.START)
         }
@@ -536,6 +543,54 @@ class AdminHomeActivity : AppCompatActivity() {
         })
     }
 
+    /** What RUTA kept from drivers: every ride's commission is logged in `commissions/`. */
+    private fun startEarningsListener() {
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val entries = snapshot.children.mapNotNull { c ->
+                    val driver = c.child("driverId").getValue(String::class.java) ?: return@mapNotNull null
+                    val amount = c.child("commission").getValue(Double::class.java) ?: return@mapNotNull null
+                    val ts = c.child("timestamp").getValue(Long::class.java) ?: 0L
+                    com.ruta.app.util.EarningsLogic.Entry(driver, amount, ts)
+                }
+                val summary = com.ruta.app.util.EarningsLogic.summarize(entries, System.currentTimeMillis())
+                earnings = summary
+                binding.txtTotalPlatformFees.text = String.format(Locale.US, "₱%,.2f", summary.allTime)
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        commissionsListener = listener
+        database.child("commissions").addValueEventListener(listener)
+        binding.txtTotalPlatformFees.setOnClickListener { showEarningsDialog() }
+        binding.txtTotalPlatformFees.parent?.let { (it as? View)?.setOnClickListener { showEarningsDialog() } }
+    }
+
+    private fun showEarningsDialog() {
+        val s = earnings
+        if (s == null || s.count == 0) {
+            AlertDialog.Builder(this)
+                .setTitle("Earnings from deductions")
+                .setMessage("Nothing recorded yet. Each completed ride now logs the 10% (4% for discounted rides) taken from the driver's wallet. Rides completed before this update are not included.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        fun peso(v: Double) = String.format(Locale.US, "₱%,.2f", v)
+        val sb = StringBuilder()
+        sb.append("Today:       ${peso(s.today)}\n")
+        sb.append("This week:   ${peso(s.week)}\n")
+        sb.append("This month:  ${peso(s.month)}\n")
+        sb.append("All time:    ${peso(s.allTime)}  (${s.count} rides)\n")
+        sb.append("\nTop drivers (all time)\n")
+        s.byDriver.take(5).forEach { (uid, v) ->
+            sb.append("• ${driverNames[uid] ?: "Driver"}: ${peso(v)}\n")
+        }
+        sb.append("\nRides completed before this update are not included.")
+        AlertDialog.Builder(this)
+            .setTitle("Earnings from deductions")
+            .setMessage(sb.toString())
+            .setPositiveButton("OK", null).show()
+    }
+
     private fun startDataListeners() {
         val usersListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -554,6 +609,10 @@ class AdminHomeActivity : AppCompatActivity() {
                         totalRiders++
                         userSnap.getValue(User::class.java)?.let { allRiders.add(it) }
                     } else if (role == "DRIVER") {
+                        val fn = userSnap.child("firstName").getValue(String::class.java) ?: ""
+                        val ln = userSnap.child("lastName").getValue(String::class.java) ?: ""
+                        val nm = "$fn $ln".trim().ifEmpty { userSnap.child("fullName").getValue(String::class.java) ?: userSnap.child("name").getValue(String::class.java) ?: "" }
+                        userSnap.key?.let { driverNames[it] = nm.ifEmpty { "Driver" } }
                         if (isApproved) {
                             val isOnline = userSnap.child("isOnline").getValue(Boolean::class.java) ?: false
                             if (isOnline) activeDrivers++
@@ -1145,6 +1204,7 @@ class AdminHomeActivity : AppCompatActivity() {
         discountRequestsListener?.let {
             database.child("discount_requests").removeEventListener(it)
         }
+        commissionsListener?.let { database.child("commissions").removeEventListener(it) }
         walletRequestsListener?.let {
             dbRef.child("wallet_requests").orderByChild("status").equalTo("PENDING").removeEventListener(it)
         }

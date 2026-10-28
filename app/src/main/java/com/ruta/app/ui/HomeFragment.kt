@@ -81,8 +81,10 @@ class HomeFragment : Fragment() {
                 // Active ride exists -> Direct to tracking view instead of ride setup
                 navigateToActiveBooking(currentActiveBookingId!!)
             } else {
-                // No active ride -> Open location selection for a new ride
-                startActivity(Intent(requireContext(), LocationSelectionActivity::class.java))
+                // No active ride -> make sure location is allowed, then open ride setup
+                ensureLocationThen {
+                    startActivity(Intent(requireContext(), LocationSelectionActivity::class.java))
+                }
             }
         }
     }
@@ -217,6 +219,44 @@ class HomeFragment : Fragment() {
         }
 
         activeTripQueryRef?.addValueEventListener(activeTripListener!!)
+    }
+
+    private var afterLocationGranted: (() -> Unit)? = null
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result[android.Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        val next = afterLocationGranted
+        afterLocationGranted = null
+        if (granted) next?.invoke() else showLocationNeededDialog()
+    }
+
+    /** Runs [action] once location is allowed; asks first, and explains how to fix it if refused. */
+    private fun ensureLocationThen(action: () -> Unit) {
+        val ctx = context ?: return
+        if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACCESS_FINE_LOCATION)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            action(); return
+        }
+        afterLocationGranted = action
+        locationPermissionLauncher.launch(
+            arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        )
+    }
+
+    private fun showLocationNeededDialog() {
+        val ctx = context ?: return
+        androidx.appcompat.app.AlertDialog.Builder(ctx)
+            .setTitle("Location is needed")
+            .setMessage("RUTA needs your location to set your pickup point and to share live tracking with your driver and trusted contacts. Please allow it in Settings.")
+            .setPositiveButton("Open Settings") { _, _ ->
+                startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", ctx.packageName, null)))
+            }
+            .setNegativeButton("Not now", null)
+            .show()
     }
 
     private fun navigateToActiveBooking(bookingId: String) {
