@@ -619,6 +619,18 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == locationPermissionRequestCode) {
+            if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
+                fetchUserCurrentLocation()
+            } else {
+                Toast.makeText(this, "Location is off, so the map starts at the default area. Allow it in Settings for accurate pickup.", Toast.LENGTH_LONG).show()
+                fallbackToDefaultLocation()
+            }
+        }
+    }
+
     private fun fetchUserCurrentLocation() {
         val permission = Manifest.permission.ACCESS_FINE_LOCATION
         if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) return
@@ -703,6 +715,18 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 etPickupLocation.setText(pickupAddress)
                 etDropoffLocation.setText(dropoffAddress)
+
+                // Coming back to a booking: the pins are gone with the old map, so draw them again.
+                pickupMarker?.remove()
+                pickupMarker = mMap.addMarker(
+                    MarkerOptions().position(pickupLatLng!!).title("Pick-up")
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))
+                )
+                dropoffMarker?.remove()
+                dropoffMarker = mMap.addMarker(
+                    MarkerOptions().position(dropoffLatLng!!).title("Destination")
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                )
 
                 calculateAndDrawRoute()
                 listenForRideStatusUpdates(bookingId)
