@@ -146,6 +146,63 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private var syncOffsetMs = 0L
     private var lastSyncStatus = ""
 
+    // Solo ride: how long we search before asking whether to keep waiting.
+    private val soloWaitMs = 5 * 60 * 1000L
+    private val soloHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var soloTicker: Runnable? = null
+    private var soloDeadline = 0L
+    private var soloDialog: AlertDialog? = null
+
+    private fun startSoloTimer(createdAt: Long) {
+        if (soloTicker != null || soloDialog?.isShowing == true) return
+        if (soloDeadline == 0L) {
+            val start = if (createdAt > 0L) createdAt else System.currentTimeMillis()
+            soloDeadline = start + soloWaitMs
+        }
+        val ticker = object : Runnable {
+            override fun run() {
+                val left = soloDeadline - System.currentTimeMillis()
+                if (left <= 0L) {
+                    soloTicker = null
+                    showSoloTimeoutDialog()
+                    return
+                }
+                val secs = (left / 1000).toInt()
+                btnConfirmStage.text = String.format(Locale.US, "Searching for driver... %d:%02d", secs / 60, secs % 60)
+                soloHandler.postDelayed(this, 1000)
+            }
+        }
+        soloTicker = ticker
+        ticker.run()
+    }
+
+    private fun stopSoloTimer() {
+        soloTicker?.let { soloHandler.removeCallbacks(it) }
+        soloTicker = null
+        soloDeadline = 0L
+        soloDialog?.dismiss()
+        soloDialog = null
+    }
+
+    private fun showSoloTimeoutDialog() {
+        if (isFinishing || isDestroyed || soloDialog?.isShowing == true) return
+        btnConfirmStage.text = "No driver yet"
+        soloDialog = AlertDialog.Builder(this)
+            .setTitle("No driver found yet")
+            .setMessage("Nobody has accepted your ride in 5 minutes. Wait a bit longer, or cancel and try again later?")
+            .setCancelable(false)
+            .setPositiveButton("Wait longer") { _, _ ->
+                soloDialog = null
+                soloDeadline = System.currentTimeMillis() + soloWaitMs
+                startSoloTimer(0L)
+            }
+            .setNegativeButton("Cancel booking") { _, _ ->
+                soloDialog = null
+                cancelActiveRide()
+            }
+            .show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_location_selection)
@@ -529,7 +586,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun submitRegularBooking(fare: Double) {
         writeBooking(fare = fare, serviceType = "REGULAR", isShared = false, maxPax = 1, initialStatus = "REQUESTED") {
             updateSearchingUi(true)
-            btnConfirmStage.text = "Searching for driver..."
+            startSoloTimer(System.currentTimeMillis())
         }
     }
 
@@ -793,6 +850,8 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     activeBookedFare = fareFromDb
                 }
 
+                if (status != "REQUESTED" && status != "SEARCHING" && status != "MATCHED" || isShared) stopSoloTimer()
+
                 when (status) {
                     "MATCHING" -> {
                         cardDriverInfo.visibility = View.GONE
@@ -810,7 +869,12 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         } else if (isShared) {
                             btnConfirmStage.text = "Searching for driver (Solo)..."
                         } else {
-                            btnConfirmStage.text = "Searching for driver..."
+                            startSoloTimer(
+                                maxOf(
+                                    snapshot.child("createdAt").getValue(Long::class.java) ?: 0L,
+                                    snapshot.child("switchedToSoloAt").getValue(Long::class.java) ?: 0L
+                                )
+                            )
                         }
                     }
                     "ACCEPTED", "ARRIVED", "IN_PROGRESS" -> {
@@ -1234,6 +1298,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopSoloTimer()
         rideshareFlow?.stop()
         rideshareFlow = null
         rideshareUi?.dismissAll()
