@@ -509,6 +509,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                                 .startCap(RoundCap()).endCap(RoundCap()).geodesic(true)
                         )
                         routePolyline = currentPolyline
+                        currentPolyline?.isVisible = !hideDestinationRoute
                     }
 
                     txtFareSolo.text = String.format(Locale.getDefault(), "₱%.2f", soloCalculatedFare)
@@ -906,6 +907,9 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         }
 
                         fetchDriverAndVehicleDetails(driverId, snapshot)
+                        // Solo: before pickup only the green driver line shows (focus on the pickup);
+                        // once the trip starts it goes away and the route to the destination appears.
+                        if (!isShared) applyRouteFocus(hideDestinationRoute = status != "IN_PROGRESS")
                         if (isShared && !tripGroupId.isNullOrEmpty()) {
                             drawGroupRouteForPassenger(tripGroupId, driverLat, driverLng)
                         }
@@ -932,6 +936,18 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         rideStatusRef = rideRef
         rideStatusListener = listener
         rideRef.addValueEventListener(listener)
+    }
+
+    private var hideDestinationRoute = false
+
+    private fun applyRouteFocus(hideDestinationRoute: Boolean) {
+        this.hideDestinationRoute = hideDestinationRoute
+        currentPolyline?.isVisible = !hideDestinationRoute
+        dropoffMarker?.isVisible = !hideDestinationRoute
+        if (!hideDestinationRoute) {
+            driverRoutePolyline?.remove()
+            driverRoutePolyline = null
+        }
     }
 
     private fun updateDriverMarkerAndRoute(driverLat: Double, driverLng: Double, status: String) {
@@ -964,8 +980,10 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 withContext(Dispatchers.Main) {
                     driverRoutePolyline?.remove()
+                    driverRoutePolyline = null
 
-                    if (routePoints.isNotEmpty()) {
+                    // The green driver line is only for the way to the pickup.
+                    if (routePoints.isNotEmpty() && status != "IN_PROGRESS") {
                         driverRoutePolyline = mMap.addPolyline(
                             PolylineOptions()
                                 .addAll(routePoints)
@@ -1014,7 +1032,23 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         return BitmapDescriptorFactory.fromBitmap(bitmapWithGlow)
     }
 
+    private var shownDriverPhotoFor: String? = null
+
+    /** The driver's 1x1 photo (initials if none), so the passenger can recognise who is coming. */
+    private fun showDriverPhoto(driverId: String, name: String?) {
+        if (driverId.isEmpty() || shownDriverPhotoFor == driverId) return
+        shownDriverPhotoFor = driverId
+        val img = findViewById<ImageView>(R.id.imgDriverPhotoCard)
+        val px = (64 * resources.displayMetrics.density).toInt()
+        com.ruta.app.util.StoragePhotos.showAvatar(img, null, name ?: "Driver", px)
+        database.child("users").child(driverId).child("profilePhoto").get().addOnSuccessListener { s ->
+            if (isDestroyed) return@addOnSuccessListener
+            com.ruta.app.util.StoragePhotos.showAvatar(img, s.getValue(String::class.java), name ?: "Driver", px)
+        }
+    }
+
     private fun fetchDriverAndVehicleDetails(driverId: String, bookingSnapshot: DataSnapshot? = null) {
+        showDriverPhoto(driverId, bookingSnapshot?.child("driverName")?.getValue(String::class.java))
         val bookingDriverName = bookingSnapshot?.child("driverName")?.getValue(String::class.java)
         val bookingVehicleModel = bookingSnapshot?.child("vehicleModel")?.getValue(String::class.java)
         val bookingPlateNumber = bookingSnapshot?.child("plateNumber")?.getValue(String::class.java)

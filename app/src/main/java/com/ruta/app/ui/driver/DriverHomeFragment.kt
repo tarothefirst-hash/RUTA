@@ -1319,7 +1319,11 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /** Bumped whenever the map is cleared or a new route is asked for, so a slow older answer is ignored. */
+    @Volatile private var routeGeneration = 0
+
     private fun drawRoute(origin: LatLng, destination: LatLng) {
+        val gen = ++routeGeneration
         executor.execute {
             val apiKey = MapsApi.key(requireContext())
             val urlString = DirectionsHelper.getDirectionsUrl(origin, destination, apiKey)
@@ -1327,7 +1331,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             val pathPoints = DirectionsHelper.parseDirections(jsonResponse)
 
             activity?.runOnUiThread {
-                if (pathPoints.isNotEmpty() && _binding != null) {
+                if (pathPoints.isNotEmpty() && _binding != null && gen == routeGeneration) {
                     activePolyline?.remove()
                     rawRoutePoints = pathPoints
 
@@ -2357,6 +2361,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun clearRouteAndMarkers() {
+        routeGeneration++
         activePolyline?.remove()
         activePolyline = null
         rawRoutePoints = emptyList()
