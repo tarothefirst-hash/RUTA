@@ -400,6 +400,13 @@
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
+                    <ImageView
+                        android:id="@+id/imgDriverPhotoCard"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:layout_marginTop="8dp"
+                        android:contentDescription="@null" />
+
                     <TextView
                         android:id="@+id/txtDriverName"
                         android:layout_width="wrap_content"

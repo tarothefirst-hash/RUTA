@@ -591,9 +591,35 @@ class AdminHomeActivity : AppCompatActivity() {
             .setPositiveButton("OK", null).show()
     }
 
+    // The users and bookings trees change constantly (live locations, driver positions), and
+    // every change used to rebuild the whole dashboard. Now at most one rebuild per second.
+    private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val lastRender = HashMap<String, Long>()
+    private val pendingRender = HashMap<String, Runnable>()
+    private var replaying = false
+
+    private fun shouldRender(key: String, snapshot: DataSnapshot, replay: (DataSnapshot) -> Unit): Boolean {
+        val now = android.os.SystemClock.uptimeMillis()
+        pendingRender.remove(key)?.let { uiHandler.removeCallbacks(it) }
+        if (replaying || now - (lastRender[key] ?: 0L) >= 1000L) {
+            lastRender[key] = now
+            return true
+        }
+        val r = Runnable {
+            pendingRender.remove(key)
+            lastRender[key] = android.os.SystemClock.uptimeMillis()
+            replaying = true
+            try { replay(snapshot) } finally { replaying = false }
+        }
+        pendingRender[key] = r
+        uiHandler.postDelayed(r, 1000L - (now - (lastRender[key] ?: 0L)))
+        return false
+    }
+
     private fun startDataListeners() {
         val usersListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                if (!shouldRender("users", snapshot) { this.onDataChange(it) }) return
                 var totalRiders = 0
                 var activeDrivers = 0
                 var pendingApprovals = 0
@@ -640,6 +666,7 @@ class AdminHomeActivity : AppCompatActivity() {
 
         val bookingsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                if (!shouldRender("bookings", snapshot) { this.onDataChange(it) }) return
                 var tripsToday = 0
                 val bookings = mutableListOf<Pair<Long, DataSnapshot>>()
                 val todayStart = Calendar.getInstance().apply {
@@ -1199,6 +1226,7 @@ class AdminHomeActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        uiHandler.removeCallbacksAndMessages(null)
         usersListener?.let { database.child("users").removeEventListener(it) }
         bookingsListener?.let { database.child("bookings").removeEventListener(it) }
         discountRequestsListener?.let {

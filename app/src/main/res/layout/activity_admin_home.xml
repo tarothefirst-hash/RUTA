@@ -128,7 +128,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="24dp"
-                        android:columnCount="2">
+                        android:columnCount="@integer/admin_stat_columns">
 
                         <!-- Total Riders -->
                         <com.google.android.material.card.MaterialCardView
