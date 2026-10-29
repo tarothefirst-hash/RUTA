@@ -511,6 +511,12 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
                 val status = snapshot.child("status").getValue(String::class.java) ?: "ACCEPTED"
                 val routeStatus = snapshot.child("routeStatus").getValue(String::class.java) ?: "NORMAL"
 
+                // The ride is over: stop following the driver.
+                if (status == "COMPLETED" || status == "CANCELLED") {
+                    endDriverTracking(status)
+                    return
+                }
+
                 if (booking.pickupLat != 0.0 && booking.pickupLng != 0.0) {
                     pickupLatLng = LatLng(booking.pickupLat, booking.pickupLng)
                 }
@@ -542,9 +548,6 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
                         lastRerouteAt = reroutedAt
                         recalculateAndRedrawRoute(driverPos, destinationPos)
                     }
-                    activeRoutePolyline?.color = Color.parseColor(
-                        if (routeStatus == "DEVIATED") "#E53935" else "#6D5EFC"
-                    )
                 }
             }
 
@@ -554,38 +557,33 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
         bookingRef?.addValueEventListener(bookingListener!!)
     }
 
+    /** Live tracking shows pins only (no route lines): just frame the driver and where they are heading. */
     private fun recalculateAndRedrawRoute(origin: LatLng, destination: LatLng) {
-        val url = DirectionsHelper.getDirectionsUrl(origin, destination, placesApiKey)
+        if (!::mMap.isInitialized) return
+        currentRoutePoints = listOf(origin, destination) // marks "framed once"
+        try {
+            val bounds = LatLngBounds.Builder().include(origin).include(destination).build()
+            mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 150))
+        } catch (_: Exception) {}
+    }
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val jsonData = DirectionsHelper.downloadUrl(url)
-            val routePoints = DirectionsHelper.parseDirections(jsonData)
-
-            withContext(Dispatchers.Main) {
-                if (!::mMap.isInitialized) return@withContext
-
-                activeRoutePolyline?.remove()
-
-                if (routePoints.isNotEmpty()) {
-                    currentRoutePoints = routePoints
-                    activeRoutePolyline = mMap.addPolyline(
-                        PolylineOptions()
-                            .addAll(routePoints)
-                            .width(14f)
-                            .color(Color.parseColor("#6D5EFC"))
-                            .startCap(RoundCap())
-                            .endCap(RoundCap())
-                            .geodesic(true)
-                    )
-
-                    val bounds = LatLngBounds.Builder()
-                        .include(origin)
-                        .include(destination)
-                        .build()
-                    mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 150))
-                }
-            }
-        }
+    /** Called when the followed ride has COMPLETED or been CANCELLED. */
+    private fun endDriverTracking(status: String) {
+        bookingListener?.let { bookingRef?.removeEventListener(it) }
+        bookingListener = null
+        bookingRef = null
+        targetBookingId = null
+        shownDriverPhotoFor = null
+        currentRoutePoints = emptyList()
+        driverMarker?.remove()
+        driverMarker = null
+        if (!isAdded) return
+        txtDriverName.text = if (status == "COMPLETED") "Trip completed" else "Trip cancelled"
+        txtVehicleInfo.text = "Driver tracking has ended."
+        txtPlateNumber.text = ""
+        txtTripRouteInfo.text = ""
+        view?.findViewById<TextView>(R.id.txtDiscountBadge)?.visibility = View.GONE
+        txtTrackedContactStatus.text = "Ride ended"
     }
 
     private fun detachContactListener() {

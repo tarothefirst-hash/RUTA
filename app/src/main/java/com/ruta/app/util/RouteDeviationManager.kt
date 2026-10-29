@@ -186,7 +186,8 @@ object RouteDeviationManager {
                 NotificationStore.TYPE_SAFETY,
                 "Route deviation warning",
                 "Your driver moved off the planned route. Open Live Tracking to approve or decline the reroute.",
-                key = "dev_${bookingId}_${System.currentTimeMillis() / 60000}"
+                key = "dev_${bookingId}_${System.currentTimeMillis() / 60000}",
+                extras = mapOf("bookingId" to bookingId)
             )
         }
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
