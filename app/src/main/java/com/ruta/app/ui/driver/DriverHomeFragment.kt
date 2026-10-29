@@ -63,6 +63,7 @@ import com.google.firebase.database.ServerValue
 import com.ruta.app.ui.TrackableTarget
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.MapMarkerUtils
+import com.ruta.app.util.RouteTrim
 import com.ruta.app.util.MapsApi
 import com.ruta.app.util.NoShowManager
 import com.ruta.app.util.RideshareFareCalculator
@@ -111,6 +112,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     /** bookingId -> passenger name for the shared trip on screen, for map pin captions. */
     private val groupPassengerNames = mutableMapOf<String, String>()
     private var rawRoutePoints: List<LatLng> = emptyList()
+    /** Coloured shared-ride legs on the map; the one the driver is on gets trimmed as they drive. */
+    private var segmentLines: List<Polyline> = emptyList()
 
     private var currentLatLng: LatLng? = null
     private var activeBookingId: String? = null
@@ -1319,6 +1322,27 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
             activePolyline?.points = rawRoutePoints
         }
+        trimSegmentLines(driverPos)
+    }
+
+    /** Erase the part of the current coloured leg the driver has already passed. */
+    private fun trimSegmentLines(driverPos: LatLng) {
+        val first = segmentLines.firstOrNull() ?: return
+        val start = first.points.firstOrNull() ?: return
+        // Only the leg the driver is on (it starts where this line starts); later legs stay whole.
+        for (line in segmentLines) {
+            val pts = line.points
+            if (pts.size < 2 || pts.first() != start) continue
+            val idx = RouteTrim.passedIndex(
+                DoubleArray(pts.size) { pts[it].latitude },
+                DoubleArray(pts.size) { pts[it].longitude },
+                driverPos.latitude, driverPos.longitude,
+                searchLimit = pts.size
+            )
+            if (idx > 0) {
+                line.points = listOf(driverPos) + pts.subList(idx, pts.size)
+            }
+        }
     }
 
     /**
@@ -1903,6 +1927,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     mMap.clear()
                     driverMarker = null
                 }
+                segmentLines = emptyList()
 
                 // One colour per passenger, matching the passenger's own screen: the
                 // lower booking id is lavender, the other is blue (shared legs show both).
@@ -1916,7 +1941,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     rawRoutePoints = finalRoute.polyline
                     activePolyline?.remove()
 
-                    RideshareMapStyle.drawSegmentedRoute(
+                    segmentLines = RideshareMapStyle.drawSegmentedRoute(
                         map = mMap,
                         route = finalRoute,
                         passengerIds = riderIds.toSet(),
