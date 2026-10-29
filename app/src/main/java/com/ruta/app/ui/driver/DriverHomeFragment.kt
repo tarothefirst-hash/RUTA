@@ -2405,6 +2405,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (!isOnline || _binding == null || !isAdded) return
                 if (currentRideState == DriverRideState.ACCEPTED || currentRideState == DriverRideState.IN_PROGRESS) return
+                // While an Accept is being claimed the booking already looks "taken" locally
+                // (the claim is written optimistically). Without this guard the screen reset
+                // itself and the route was never drawn until the page was reopened.
+                if (_binding?.btnAcceptRide?.isEnabled == false) return
 
                 val driverLoc = currentLatLng ?: return
 
