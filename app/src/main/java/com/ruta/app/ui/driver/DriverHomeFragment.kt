@@ -660,7 +660,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val serviceTitle = getFormattedServiceTitle(booking)
         val nameText = booking.passengerName.ifEmpty { "Passenger" }
         showPassengerAvatar(booking.passengerId, nameText)
-        b.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText\n$serviceTitle"
+        val discounted = booking.hasDiscount && !booking.isShared
+        val discountTag = if (discounted) " • 20% DISCOUNT (ID)" else ""
+        b.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText\n$serviceTitle$discountTag"
 
         b.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
         b.txtDropoffLocation.text = "Dropoff: ${booking.dropoffAddress.ifEmpty { "N/A" }}"
@@ -679,6 +681,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             b.txtEstimatedFare.text = Html.fromHtml(htmlText, Html.FROM_HTML_MODE_COMPACT)
         } else {
             b.txtEstimatedFare.text = String.format(Locale.getDefault(), "Estimated Fare: ₱%.2f", finalFare)
+            if (discounted) b.txtEstimatedFare.append("  (20% ID discount applied)")
         }
 
         if (booking.noShowFee > 0.0) {
@@ -690,13 +693,14 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             b.txtEstimatedFare.append(feeNotice)
         }
 
-        val commission = WalletManager.commissionFor(finalFare, false)
+        val commission = WalletManager.commissionFor(finalFare, discounted)
         val netEarnings = finalFare - commission
 
         b.txtWalletBalance.text = String.format(
             Locale.getDefault(),
-            "Deduction: -₱%.2f (10%%) • Take-Home: ₱%.2f",
+            "Deduction: -₱%.2f (%d%%) • Take-Home: ₱%.2f",
             commission,
+            if (discounted) 4 else 10,
             netEarnings
         )
 

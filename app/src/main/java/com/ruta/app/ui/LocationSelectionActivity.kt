@@ -512,6 +512,14 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     }
 
                     txtFareSolo.text = String.format(Locale.getDefault(), "₱%.2f", soloCalculatedFare)
+                    val soloBadge = findViewById<TextView>(R.id.txtSoloDiscount)
+                    if (currentUserHasDiscount) {
+                        val full = calculateExactFare(routeDistanceMeters, routeDurationSeconds, currentSurgeMultiplier, false)
+                        soloBadge.text = String.format(Locale.getDefault(), "20%% ID discount applied (was ₱%.2f)", full)
+                        soloBadge.visibility = View.VISIBLE
+                    } else {
+                        soloBadge.visibility = View.GONE
+                    }
                     txtFareShared.text = "Price shown when matched"
 
                     if (currentStage == SelectionStage.ROUTE_READY) {
@@ -627,6 +635,12 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                     "serviceType" to serviceType, "isShared" to isShared, "maxPassengersAllowed" to maxPax, "status" to initialStatus,
                     "routeStatus" to "NORMAL", "createdAt" to System.currentTimeMillis()
                 )
+                // Solo rides keep the discount breakdown so the driver sees it too.
+                if (!isShared && currentUserHasDiscount) {
+                    val full = calculateExactFare(routeDistanceMeters, routeDurationSeconds, currentSurgeMultiplier, false)
+                    bookingData["fareBeforeDiscount"] = full
+                    bookingData["discountAmount"] = (full - fare).coerceAtLeast(0.0)
+                }
 
                 ref.setValue(bookingData).addOnSuccessListener {
                     currentStage = SelectionStage.BOOKING_SUBMITTED

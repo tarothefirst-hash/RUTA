@@ -492,6 +492,15 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
                 txtVehicleInfo.text = "Vehicle: ${booking.vehicleModel.ifEmpty { "N/A" }} (${booking.vehicleColor.ifEmpty { "Color N/A" }})"
                 txtPlateNumber.text = "Plate Number: ${booking.plateNumber.ifEmpty { "N/A" }}"
                 txtTripRouteInfo.text = "Route: ${booking.pickupAddress} ➔ ${booking.dropoffAddress}"
+                view?.findViewById<TextView>(R.id.txtDiscountBadge)?.let { badge ->
+                    val discounted = booking.hasDiscount && !booking.isShared
+                    badge.visibility = if (discounted) View.VISIBLE else View.GONE
+                    if (discounted) {
+                        badge.text = if (booking.discountAmount > 0.0)
+                            String.format(java.util.Locale.US, "20%% ID discount applied (-₱%.2f)", booking.discountAmount)
+                        else "20% ID discount applied"
+                    }
+                }
                 driverPhone = booking.driverPhone
 
                 val dLat = snapshot.child("driverLat").getValue(Double::class.java)
