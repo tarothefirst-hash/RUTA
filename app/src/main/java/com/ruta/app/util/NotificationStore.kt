@@ -16,6 +16,7 @@ object NotificationStore {
     const val TYPE_DRIVER_REVIEW = "DRIVER_REVIEW"
     const val TYPE_RIDE = "RIDE"
     const val TYPE_WALLET = "WALLET"
+    const val TYPE_SAFETY = "SAFETY"
 
     /**
      * Writes a notification. With a [key] the write is idempotent: if that notification

@@ -101,6 +101,9 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
     private var dropoffLatLng: LatLng? = null
 
     companion object {
+        /** Set by an alert banner: the next time Live Tracking is shown it follows this booking's driver. */
+        @Volatile var requestedBookingId: String? = null
+
         fun newInstance(contactUid: String?, bookingId: String?): LiveTrackingFragment {
             val fragment = LiveTrackingFragment()
             val args = Bundle().apply {
@@ -595,6 +598,16 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
 
     override fun onResume() {
         super.onResume()
+        requestedBookingId?.let { req ->
+            requestedBookingId = null
+            targetBookingId = req
+            if (::mMap.isInitialized) {
+                bookingListener?.let { bookingRef?.removeEventListener(it) }
+                bookingListener = null
+                shownDriverPhotoFor = null
+                attachBookingListener(req)
+            }
+        }
         // Permission may have been granted after this screen was built (for example in Settings).
         if (myLocationPublisherCallback == null) startPublishingMyLiveLocation()
         if (::mMap.isInitialized) enableMyLocationOnMap()

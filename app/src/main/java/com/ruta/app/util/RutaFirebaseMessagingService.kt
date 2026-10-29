@@ -82,6 +82,9 @@ class RutaFirebaseMessagingService : FirebaseMessagingService() {
             putExtra("NAVIGATE_TO", "LIVE_TRACKING")
             putExtra("BOOKING_ID", bookingId)
             putExtra("CONTACT_UID", contactUid)
+            putExtra("SHOW_ALERT_BANNER", !bookingId.isNullOrEmpty())
+            putExtra("ALERT_TITLE", title)
+            putExtra("ALERT_BODY", body)
         }
 
         val pendingIntent = PendingIntent.getActivity(

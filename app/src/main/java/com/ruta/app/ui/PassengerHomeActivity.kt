@@ -81,9 +81,25 @@ class PassengerHomeActivity : AppCompatActivity() {
         handleIncomingNotificationIntent(intent)
     }
 
+    private fun showAlertBanner(bookingId: String, headline: String, detail: String) {
+        if (bookingId.isEmpty()) return
+        AlertBanner.show(this, bookingId, headline, detail) {
+            LiveTrackingFragment.requestedBookingId = bookingId
+            viewPager.setCurrentItem(1, true)
+        }
+    }
+
     private fun handleIncomingNotificationIntent(intent: Intent?) {
         val navigateTo = intent?.getStringExtra("NAVIGATE_TO")
         val bookingId = intent?.getStringExtra("BOOKING_ID")
+
+        // Tapping a safety notification opens the banner with the driver's details.
+        if (intent?.getBooleanExtra("SHOW_ALERT_BANNER", false) == true && !bookingId.isNullOrEmpty()) {
+            intent.removeExtra("SHOW_ALERT_BANNER")
+            showAlertBanner(bookingId, intent.getStringExtra("ALERT_TITLE") ?: "⚠️ Safety alert",
+                intent.getStringExtra("ALERT_BODY") ?: "A trusted contact's ride needs attention.")
+            return
+        }
 
         if (navigateTo == "LIVE_TRACKING" || !bookingId.isNullOrEmpty()) {
             viewPager.setCurrentItem(1, true)
@@ -361,14 +377,20 @@ class PassengerHomeActivity : AppCompatActivity() {
         alertListener = EmergencyContactManager.listenForIncomingAlertsDetailed(database, myUid) { alert ->
             if (isFinishing || isDestroyed) return@listenForIncomingAlertsDetailed
 
-            // A warning only: a bar at the bottom, never a modal and never a screen switch.
-            // "View live map" is the rider's own choice.
-            val text = "⚠️ ${alert.senderName}'s ride showed a route deviation. " +
-                    "Driver: ${alert.driverName} • ${alert.vehicleInfo}"
-            Snackbar.make(findViewById(android.R.id.content), text, 15000)
-                .setTextMaxLines(4)
-                .setAction("View live map") { viewPager.setCurrentItem(1, true) }
-                .show()
+            // Stays on screen until dismissed (never a modal, never a forced screen switch).
+            val headline = if (alert.isDriverEmergency) "🚨 Driver emergency" else "⚠️ Route deviation alert"
+            val detail = if (alert.isDriverEmergency) "${alert.senderName} triggered an emergency alert."
+                else "${alert.senderName}'s ride went off the planned route."
+            showAlertBanner(alert.bookingId, headline, detail)
+
+            // Keep a copy in the in-app notification list too.
+            FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
+                com.ruta.app.util.NotificationStore.push(
+                    database, uid, com.ruta.app.util.NotificationStore.TYPE_SAFETY,
+                    headline, "$detail Driver: ${alert.driverName} • ${alert.vehicleInfo}",
+                    key = if (alert.key.isNotEmpty()) "al_${alert.key}" else null
+                )
+            }
         }
     }
 
