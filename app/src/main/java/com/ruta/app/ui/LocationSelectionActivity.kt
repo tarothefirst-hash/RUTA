@@ -770,14 +770,13 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         txtStageHeaderTitle.visibility = View.GONE
         txtActivePinAddress.visibility = View.GONE
 
-        database.child("bookings").child(bookingId).addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) return
+        database.child("bookings").child(bookingId).get().addOnSuccessListener { snapshot ->
+                if (!snapshot.exists()) return@addOnSuccessListener
 
-                val pLat = snapshot.child("pickupLat").getValue(Double::class.java) ?: return
-                val pLng = snapshot.child("pickupLng").getValue(Double::class.java) ?: return
-                val dLat = snapshot.child("dropoffLat").getValue(Double::class.java) ?: return
-                val dLng = snapshot.child("dropoffLng").getValue(Double::class.java) ?: return
+                val pLat = snapshot.child("pickupLat").getValue(Double::class.java) ?: return@addOnSuccessListener
+                val pLng = snapshot.child("pickupLng").getValue(Double::class.java) ?: return@addOnSuccessListener
+                val dLat = snapshot.child("dropoffLat").getValue(Double::class.java) ?: return@addOnSuccessListener
+                val dLng = snapshot.child("dropoffLng").getValue(Double::class.java) ?: return@addOnSuccessListener
 
                 pickupAddress = snapshot.child("pickupAddress").getValue(String::class.java) ?: "Pickup"
                 dropoffAddress = snapshot.child("dropoffAddress").getValue(String::class.java) ?: "Destination"
@@ -802,9 +801,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 calculateAndDrawRoute()
                 listenForRideStatusUpdates(bookingId)
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        })
+        }
     }
 
     private fun resumeActiveBookingFlow(bookingId: String) {

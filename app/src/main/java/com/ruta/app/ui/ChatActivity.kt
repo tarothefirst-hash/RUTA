@@ -104,8 +104,8 @@ class ChatActivity : AppCompatActivity() {
                     roomReady = true
                     if (!isDestroyed) listenForMessages()
                 }
-                .addOnFailureListener { showLoadError() }
-        }.addOnFailureListener { showLoadError() }
+                .addOnFailureListener { openSoloRoomFallback(toolbar, role) }
+        }.addOnFailureListener { openSoloRoomFallback(toolbar, null) }
 
         toolbar.setNavigationOnClickListener {
             finish()
@@ -122,15 +122,26 @@ class ChatActivity : AppCompatActivity() {
 
         btnSendChat.setOnClickListener {
             val text = etChatMessage.text.toString().trim()
-            if (text.isNotEmpty() && roomReady) {
-                sendMessage(text, etChatMessage)
-                etChatMessage.setText("")
+            if (text.isNotEmpty()) {
+                if (!roomReady) {
+                    Toast.makeText(this, "Connecting to the chat... try again in a moment.", Toast.LENGTH_SHORT).show()
+                } else {
+                    sendMessage(text, etChatMessage)
+                    etChatMessage.setText("")
+                }
             }
         }
     }
 
-    private fun showLoadError() {
-        Toast.makeText(this, "Failed to open chat. Please check your connection.", Toast.LENGTH_SHORT).show()
+    /** If the profile or group lookup fails, still open the ride's own chat instead of a dead screen. */
+    private fun openSoloRoomFallback(toolbar: MaterialToolbar, role: String?) {
+        if (roomReady || isDestroyed) return
+        chatRoomId = bookingId
+        if (myDisplayName.isEmpty()) myDisplayName = if (role == "DRIVER") "Driver" else "Passenger"
+        toolbar.title = if (role == "DRIVER") "Chat with Passenger" else "Chat with Driver"
+        roomReady = true
+        listenForMessages()
+        Toast.makeText(this, "Chat opened (limited connection).", Toast.LENGTH_SHORT).show()
     }
 
     private fun sendMessage(messageText: String, input: EditText) {
@@ -143,7 +154,7 @@ class ChatActivity : AppCompatActivity() {
         FirebaseDatabase.getInstance().reference
             .child("chats").child(chatRoomId).push().setValue(messageMap)
             .addOnFailureListener {
-                Toast.makeText(this, "Failed to send message. Please try again.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Failed to send: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show()
                 input.setText(messageText)
             }
     }
@@ -168,7 +179,7 @@ class ChatActivity : AppCompatActivity() {
             override fun onChildRemoved(snapshot: DataSnapshot) {}
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(this@ChatActivity, "Failed to load messages. Please check your connection.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ChatActivity, "Failed to load messages: ${error.message}", Toast.LENGTH_LONG).show()
             }
         }
         messagesListener = listener

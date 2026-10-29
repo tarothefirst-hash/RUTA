@@ -721,12 +721,14 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     private fun checkAndRestoreActiveDriverSession() {
         val driverId = auth.currentUser?.uid ?: return
 
+        // get() asks the server first. A one-time listener could answer from the on-disk cache,
+        // which after an app restart still held the booking from BEFORE it was accepted.
         database.child("bookings")
             .orderByChild("driverId")
             .equalTo(driverId)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (_binding == null || !isAdded) return
+            .get()
+            .addOnSuccessListener { snapshot ->
+                    if (_binding == null || !isAdded) return@addOnSuccessListener
 
                     var restoredBooking: Booking? = null
                     var restoredBookingId: String? = null
@@ -778,10 +780,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                     } else {
                         listenForPendingRideRequests()
                     }
-                }
-
-                override fun onCancelled(error: DatabaseError) {}
-            })
+            }
+            .addOnFailureListener {
+                if (_binding != null && isAdded) listenForPendingRideRequests()
+            }
     }
 
     private fun setupLocationCallback() {
