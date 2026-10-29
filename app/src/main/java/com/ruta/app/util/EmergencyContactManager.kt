@@ -191,6 +191,9 @@ object EmergencyContactManager {
                             "timestamp" to System.currentTimeMillis()
                         )
 
+                        // Asking for help turns location sharing back on, even if it was switched off.
+                        database.child("users").child(targetUid).child("isLiveSharingEnabled").setValue(true)
+
                         contactUids.forEach { contactUid ->
                             database.child("emergencyAlerts").child(contactUid).push().setValue(alertData)
                         }

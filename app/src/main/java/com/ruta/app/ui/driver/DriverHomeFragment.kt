@@ -1563,6 +1563,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         database.child("users").child(driverId).get().addOnSuccessListener { snapshot ->
             if (_binding == null || !isAdded) return@addOnSuccessListener
+            if (walletBlocksAccept(snapshot.child("walletBalance").value)) return@addOnSuccessListener
             val firstName = snapshot.child("firstName").getValue(String::class.java) ?: ""
             val lastName = snapshot.child("lastName").getValue(String::class.java) ?: ""
             val driverName = "$firstName $lastName".trim().ifEmpty {
@@ -1652,6 +1653,31 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         listenForPendingRideRequests()
     }
 
+    /**
+     * Drivers can accept rides while their wallet is below zero, but only down to -₱100.
+     * Returns true (and tells the driver to top up) when the limit is reached.
+     */
+    private fun walletBlocksAccept(rawBalance: Any?): Boolean {
+        val balance = com.ruta.app.util.WalletLimit.parse(rawBalance)
+        if (com.ruta.app.util.WalletLimit.canAccept(balance)) return false
+        _binding?.btnAcceptRide?.isEnabled = true
+        updateUIForState(DriverRideState.REQUEST_RECEIVED)
+        context?.let {
+            androidx.appcompat.app.AlertDialog.Builder(it)
+                .setTitle("Top up to keep accepting rides")
+                .setMessage(
+                    String.format(
+                        java.util.Locale.US,
+                        "Your wallet is at ₱%.2f. Drivers can go down to -₱%.0f before topping up. Open the Wallet tab and cash in, then you can accept bookings again.",
+                        balance, com.ruta.app.util.WalletLimit.MAX_DEBT
+                    )
+                )
+                .setPositiveButton("OK", null)
+                .show()
+        }
+        return true
+    }
+
     /** A real failure (network, permission), not a lost race: keep the request so the driver can retry. */
     private fun onAcceptFailed(message: String) {
         if (_binding == null) return
@@ -1671,6 +1697,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
         database.child("users").child(driverId).get().addOnSuccessListener { userSnapshot ->
             if (_binding == null || !isAdded) return@addOnSuccessListener
+            if (walletBlocksAccept(userSnapshot.child("walletBalance").value)) return@addOnSuccessListener
             val firstName = userSnapshot.child("firstName").getValue(String::class.java) ?: ""
             val lastName = userSnapshot.child("lastName").getValue(String::class.java) ?: ""
             val driverName = "$firstName $lastName".trim().ifEmpty {

@@ -196,6 +196,7 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
         }
 
         loadTrustedContactsList()
+        setupShareSwitch(view)
         startPublishingMyLiveLocation()
     }
 
@@ -227,8 +228,50 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    private var sharingEnabled = true
+    private var sharingListener: ValueEventListener? = null
+    private var switchShare: android.widget.CompoundButton? = null
+    private var updatingSwitchFromDb = false
+
+    /** The switch and the database flag stay in sync (an SOS elsewhere can turn sharing back on). */
+    private fun setupShareSwitch(root: View) {
+        val uid = myUid ?: return
+        val sw = root.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchShareMyLocation) ?: return
+        switchShare = sw
+        sw.setOnCheckedChangeListener { _, checked ->
+            if (updatingSwitchFromDb) return@setOnCheckedChangeListener
+            database.child("users").child(uid).child("isLiveSharingEnabled").setValue(checked)
+        }
+        if (sharingListener != null) return
+        val l = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (!isAdded) return
+                sharingEnabled = snapshot.getValue(Boolean::class.java) ?: true
+                updatingSwitchFromDb = true
+                switchShare?.isChecked = sharingEnabled
+                updatingSwitchFromDb = false
+                if (sharingEnabled) {
+                    if (myLocationPublisherCallback == null) startPublishingMyLiveLocation()
+                } else {
+                    stopPublishingMyLiveLocation()
+                    // Remove the last known spot so nobody keeps seeing an old position.
+                    database.child("users").child(uid).child("liveLocation").removeValue()
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        sharingListener = l
+        database.child("users").child(uid).child("isLiveSharingEnabled").addValueEventListener(l)
+    }
+
+    private fun stopPublishingMyLiveLocation() {
+        myLocationPublisherCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+        myLocationPublisherCallback = null
+    }
+
     private fun startPublishingMyLiveLocation() {
         val uid = myUid ?: return
+        if (!sharingEnabled) return
         val permission = Manifest.permission.ACCESS_FINE_LOCATION
         if (ContextCompat.checkSelfPermission(requireContext(), permission) != PackageManager.PERMISSION_GRANTED) return
 
@@ -563,6 +606,11 @@ class LiveTrackingFragment : Fragment(), OnMapReadyCallback {
             myUid?.let { database.child("users").child(it).child("trustedContacts").removeEventListener(l) }
         }
         trustedContactsListener = null
+
+        sharingListener?.let { l ->
+            myUid?.let { database.child("users").child(it).child("isLiveSharingEnabled").removeEventListener(l) }
+        }
+        sharingListener = null
 
         bookingListener?.let { bookingRef?.removeEventListener(it) }
         bookingListener = null
