@@ -260,6 +260,17 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/txtDiscountBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="20% discount applied"
+                android:textColor="#16A34A"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/txtTripRouteInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
