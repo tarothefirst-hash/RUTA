@@ -246,7 +246,9 @@ object EmergencyContactManager {
         val dropoffAddress: String,
         val lat: Double,
         val lng: Double,
-        val isDriverEmergency: Boolean
+        val isDriverEmergency: Boolean,
+        /** The alert's id in the database (used to save one in-app notification per alert). */
+        val key: String = ""
     )
 
     fun listenForIncomingAlertsDetailed(
@@ -269,7 +271,8 @@ object EmergencyContactManager {
                         dropoffAddress = child.child("dropoffAddress").getValue(String::class.java) ?: "N/A",
                         lat = child.child("lat").getValue(Double::class.java) ?: 0.0,
                         lng = child.child("lng").getValue(Double::class.java) ?: 0.0,
-                        isDriverEmergency = child.child("isDriverEmergency").getValue(Boolean::class.java) ?: false
+                        isDriverEmergency = child.child("isDriverEmergency").getValue(Boolean::class.java) ?: false,
+                        key = key
                     )
                     onAlert(alert)
                     ref.child(key).removeValue()

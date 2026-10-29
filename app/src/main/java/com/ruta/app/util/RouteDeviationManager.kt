@@ -179,6 +179,16 @@ object RouteDeviationManager {
     }
 
     fun sendDeviationNotification(context: Context, bookingId: String) {
+        // Also keep it in the in-app notification list (the phone notification disappears quickly).
+        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
+            NotificationStore.push(
+                com.google.firebase.database.FirebaseDatabase.getInstance().reference, uid,
+                NotificationStore.TYPE_SAFETY,
+                "Route deviation warning",
+                "Your driver moved off the planned route. Open Live Tracking to approve or decline the reroute.",
+                key = "dev_${bookingId}_${System.currentTimeMillis() / 60000}"
+            )
+        }
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
