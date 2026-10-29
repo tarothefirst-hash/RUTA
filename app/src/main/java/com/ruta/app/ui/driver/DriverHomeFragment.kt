@@ -1321,11 +1321,15 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    /** Bumped whenever the map is cleared or a new route is asked for, so a slow older answer is ignored. */
+    /**
+     * Bumped only when the map is cleared (ride accepted, picked up, cancelled). A route answer
+     * that was asked for before the clear is dropped, so a slow old preview can no longer draw
+     * over the new ride. Several requests within the same stage all apply, newest answer wins.
+     */
     @Volatile private var routeGeneration = 0
 
     private fun drawRoute(origin: LatLng, destination: LatLng) {
-        val gen = ++routeGeneration
+        val gen = routeGeneration
         executor.execute {
             val apiKey = MapsApi.key(requireContext())
             val urlString = DirectionsHelper.getDirectionsUrl(origin, destination, apiKey)
@@ -1965,6 +1969,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val driverLoc = currentLatLng ?: return
         val pickupLatLng = LatLng(booking.pickupLat, booking.pickupLng)
 
+        pickupMarker?.remove()
         pickupMarker = mMap.addMarker(
             MarkerOptions()
                 .position(pickupLatLng)
@@ -1989,6 +1994,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val driverLoc = currentLatLng ?: return
         val dropoffLatLng = LatLng(booking.dropoffLat, booking.dropoffLng)
 
+        dropoffMarker?.remove()
         dropoffMarker = mMap.addMarker(
             MarkerOptions()
                 .position(dropoffLatLng)
