@@ -21,6 +21,11 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:padding="16dp">
@@ -63,6 +68,19 @@
                 android:layout_height="wrap_content"
                 android:text="Center"
                 android:textColor="@color/ruta_primary" />
+        </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchShareMyLocation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="10dp"
+                android:checked="true"
+                android:text="Share my live location with my trusted contacts"
+                android:textColor="#1A1D1E"
+                android:textSize="13sp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
