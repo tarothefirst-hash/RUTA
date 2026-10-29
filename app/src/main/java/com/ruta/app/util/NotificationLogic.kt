@@ -9,7 +9,9 @@ object NotificationLogic {
         val title: String,
         val body: String,
         val timestamp: Long,
-        val read: Boolean
+        val read: Boolean,
+        /** Safety alerts remember which ride they were about, so the details can be shown later. */
+        val bookingId: String = ""
     )
 
     fun unreadCount(items: Collection<Item>): Int = items.count { !it.read }

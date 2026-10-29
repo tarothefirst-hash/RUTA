@@ -24,6 +24,49 @@ class NotificationsActivity : AppCompatActivity() {
     private var current: List<NotificationLogic.Item> = emptyList()
     private val adapter = Adapter { item ->
         uid?.let { NotificationStore.markRead(database, it, item.id) }
+        if (item.type == NotificationStore.TYPE_SAFETY) showSafetyDetails(item)
+    }
+
+    /** A route-deviation / emergency notification opens large, with the whole story and the driver. */
+    private fun showSafetyDetails(item: NotificationLogic.Item) {
+        val dp = resources.displayMetrics.density
+        val pad = (20 * dp).toInt()
+        val col = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, 0)
+        }
+        col.addView(TextView(this).apply {
+            text = item.body
+            textSize = 15f
+            setTextColor(android.graphics.Color.parseColor("#111827"))
+        })
+        col.addView(TextView(this).apply {
+            text = java.text.SimpleDateFormat("EEE, d MMM yyyy • h:mm a", java.util.Locale.getDefault())
+                .format(java.util.Date(item.timestamp))
+            textSize = 12f
+            setTextColor(android.graphics.Color.parseColor("#6B7280"))
+            setPadding(0, (6 * dp).toInt(), 0, (14 * dp).toInt())
+        })
+        if (item.bookingId.isNotEmpty()) col.addView(AlertBanner.driverInfoRow(this, item.bookingId))
+
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(item.title)
+            .setView(col)
+            .setNegativeButton("Close", null)
+        if (item.bookingId.isNotEmpty()) {
+            builder.setPositiveButton("Track driver") { _, _ ->
+                LiveTrackingFragment.requestedBookingId = item.bookingId
+                startActivity(
+                    android.content.Intent(this, PassengerHomeActivity::class.java).apply {
+                        flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        putExtra("NAVIGATE_TO", "LIVE_TRACKING")
+                        putExtra("BOOKING_ID", item.bookingId)
+                    }
+                )
+                finish()
+            }
+        }
+        builder.show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -388,7 +388,8 @@ class PassengerHomeActivity : AppCompatActivity() {
                 com.ruta.app.util.NotificationStore.push(
                     database, uid, com.ruta.app.util.NotificationStore.TYPE_SAFETY,
                     headline, "$detail Driver: ${alert.driverName} • ${alert.vehicleInfo}",
-                    key = if (alert.key.isNotEmpty()) "al_${alert.key}" else null
+                    key = if (alert.key.isNotEmpty()) "al_${alert.key}" else null,
+                    extras = mapOf("bookingId" to alert.bookingId)
                 )
             }
         }

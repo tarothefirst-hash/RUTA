@@ -23,13 +23,14 @@ object NotificationStore {
      * already exists (even if the user has read it) nothing is overwritten.
      */
     fun push(
-        db: DatabaseReference, uid: String, type: String, title: String, body: String, key: String? = null
+        db: DatabaseReference, uid: String, type: String, title: String, body: String, key: String? = null,
+        extras: Map<String, Any> = emptyMap()
     ) {
         val parent = db.child("notifications").child(uid)
         val data = mapOf<String, Any>(
             "type" to type, "title" to title, "body" to body,
             "timestamp" to ServerValue.TIMESTAMP, "read" to false
-        )
+        ) + extras
         if (key == null) {
             parent.push().setValue(data)
             return
@@ -52,7 +53,8 @@ object NotificationStore {
             title = snap.child("title").getValue(String::class.java) ?: "RUTA",
             body = snap.child("body").getValue(String::class.java) ?: "",
             timestamp = snap.child("timestamp").getValue(Long::class.java) ?: 0L,
-            read = snap.child("read").getValue(Boolean::class.java) ?: false
+            read = snap.child("read").getValue(Boolean::class.java) ?: false,
+            bookingId = snap.child("bookingId").getValue(String::class.java) ?: ""
         )
     }
 

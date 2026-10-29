@@ -131,6 +131,58 @@ object AlertBanner {
         }.addOnFailureListener { info.text = "Driver details unavailable" }
     }
 
+    /** Photo + driver name, vehicle, plate and route for a ride (filled in as the data arrives). */
+    fun driverInfoRow(activity: Activity, bookingId: String): View {
+        val dp = activity.resources.displayMetrics.density
+        fun px(v: Int) = (v * dp).toInt()
+        val row = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
+        val photo = ImageView(activity).apply { layoutParams = LinearLayout.LayoutParams(px(72), px(72)) }
+        val info = TextView(activity).apply {
+            text = "Loading driver details..."
+            setTextColor(Color.parseColor("#111827"))
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = px(14) }
+        }
+        row.addView(photo)
+        row.addView(info)
+        StoragePhotos.showAvatar(photo, null, "Driver", px(72))
+
+        val db = FirebaseDatabase.getInstance().reference
+        db.child("bookings").child(bookingId).get().addOnSuccessListener { b ->
+            if (activity.isFinishing || activity.isDestroyed) return@addOnSuccessListener
+            val driverId = b.child("driverId").getValue(String::class.java).orEmpty()
+            val name = b.child("driverName").getValue(String::class.java)?.ifBlank { null } ?: "Assigned driver"
+            val vehicle = listOf(
+                b.child("vehicleColor").getValue(String::class.java).orEmpty(),
+                b.child("vehicleModel").getValue(String::class.java).orEmpty()
+            ).filter { it.isNotBlank() }.joinToString(" ")
+            val plate = b.child("plateNumber").getValue(String::class.java).orEmpty()
+            val phone = b.child("driverPhone").getValue(String::class.java).orEmpty()
+            val passenger = b.child("passengerName").getValue(String::class.java).orEmpty()
+            val pickup = b.child("pickupAddress").getValue(String::class.java).orEmpty()
+            val dropoff = b.child("dropoffAddress").getValue(String::class.java).orEmpty()
+            val status = b.child("status").getValue(String::class.java).orEmpty()
+            info.text = buildString {
+                append("Driver: ").append(name)
+                if (vehicle.isNotBlank()) append("\nVehicle: ").append(vehicle)
+                if (plate.isNotBlank()) append("\nPlate: ").append(plate)
+                if (phone.isNotBlank()) append("\nContact: ").append(phone)
+                if (passenger.isNotBlank()) append("\nPassenger: ").append(passenger)
+                if (pickup.isNotBlank()) append("\nPickup: ").append(pickup)
+                if (dropoff.isNotBlank()) append("\nDrop-off: ").append(dropoff)
+                if (status.isNotBlank()) append("\nRide status: ").append(status.replace('_', ' ').lowercase())
+            }
+            StoragePhotos.showAvatar(photo, null, name, px(72))
+            if (driverId.isNotEmpty()) {
+                db.child("users").child(driverId).child("profilePhoto").get().addOnSuccessListener { p ->
+                    if (activity.isFinishing || activity.isDestroyed) return@addOnSuccessListener
+                    StoragePhotos.showAvatar(photo, p.getValue(String::class.java), name, px(72))
+                }
+            }
+        }.addOnFailureListener { info.text = "Driver details unavailable" }
+        return row
+    }
+
     fun dismiss(activity: Activity) {
         val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
         root.findViewWithTag<View>(TAG)?.let { root.removeView(it) }
