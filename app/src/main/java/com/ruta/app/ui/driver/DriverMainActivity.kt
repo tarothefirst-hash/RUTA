@@ -47,6 +47,16 @@ class DriverMainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        com.ruta.app.util.FaceGate.check(this)
+    }
+
+    /** Used by the add-a-trusted-contact prompt. */
+    fun openProfileTab() {
+        findViewById<BottomNavigationView>(R.id.driverBottomNav).selectedItemId = R.id.navigation_driver_profile
+    }
+
     private fun loadFragment(fragment: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.driverFragmentContainer, fragment)

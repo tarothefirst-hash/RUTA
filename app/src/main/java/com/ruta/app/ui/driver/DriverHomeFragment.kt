@@ -64,6 +64,9 @@ import com.ruta.app.ui.TrackableTarget
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.MapMarkerUtils
 import com.ruta.app.util.RouteTrim
+import com.ruta.app.util.SafetyLogic
+import com.ruta.app.util.TrustedContactPrompt
+import com.ruta.app.util.EmergencyStop
 import com.ruta.app.util.MapsApi
 import com.ruta.app.util.NoShowManager
 import com.ruta.app.util.RideshareFareCalculator
@@ -244,6 +247,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
         mMap.uiSettings.isZoomControlsEnabled = true
+        // Google's live traffic colours (jams and known road closures show on the roads).
+        mMap.isTrafficEnabled = true
         mMap.setOnCameraMoveStartedListener { reason ->
             // The driver dragged the map: stop auto-follow until they tap recenter.
             if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) followMode = false
@@ -575,7 +580,16 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                                 Toast.makeText(context, "Your account has been deactivated by an admin.", Toast.LENGTH_LONG).show()
                             }
                         } else {
-                            goOnline()
+                            TrustedContactPrompt.ensure(
+                                requireContext(), database, uid, isDriver = true, oncePerSession = true,
+                                onAddNow = {
+                                    switchView.setOnCheckedChangeListener(null)
+                                    switchView.isChecked = false
+                                    setupOnlineSwitch()
+                                    (activity as? DriverMainActivity)?.openProfileTab()
+                                },
+                                onContinue = { if (_binding != null && isAdded) goOnline() }
+                            )
                         }
                     }
                     .addOnFailureListener {
@@ -654,7 +668,18 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             if (still !== img) return@addOnSuccessListener
             com.ruta.app.util.StoragePhotos.showAvatar(img, s.getValue(String::class.java), name, px)
         }
+
+        // Lets the driver see at a glance that this rider passed the live face check.
+        database.child("users").child(passengerId).child("faceVerified").get().addOnSuccessListener { v ->
+            if (v.getValue(Boolean::class.java) != true) return@addOnSuccessListener
+            verifiedPassengerIds.add(passengerId)
+            val tv = _binding?.txtPassengerName ?: return@addOnSuccessListener
+            if (!tv.text.contains(FACE_BADGE)) tv.text = "${tv.text}\n$FACE_BADGE"
+        }
     }
+
+    private val verifiedPassengerIds = mutableSetOf<String>()
+    private val FACE_BADGE = "✓ Face verified"
 
     private fun bindPassengerInfoToView(booking: Booking, appendTitle: String = "") {
         val b = _binding ?: return
@@ -666,6 +691,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val discounted = booking.hasDiscount && !booking.isShared
         val discountTag = if (discounted) " • 20% DISCOUNT (ID)" else ""
         b.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText\n$serviceTitle$discountTag"
+        if (booking.passengerId in verifiedPassengerIds) b.txtPassengerName.text = "${b.txtPassengerName.text}\n$FACE_BADGE"
 
         b.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
         b.txtDropoffLocation.text = "Dropoff: ${booking.dropoffAddress.ifEmpty { "N/A" }}"
@@ -930,6 +956,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
         binding.btnBackToMyScreen.setOnClickListener { backToMyScreen() }
         binding.btnDriverSos.setOnClickListener { confirmDriverSos() }
+        binding.btnDriverEmergencyStop.setOnClickListener { confirmDriverEmergencyStop() }
         binding.btnAlertDismiss.setOnClickListener { binding.cardAlertBanner.visibility = View.GONE }
     }
 
@@ -955,6 +982,32 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         else "No trusted contacts yet. Add one from your Profile.",
                         Toast.LENGTH_LONG
                     ).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Emergency stop: confirm first, then end every booking on this trip and start the safety check. */
+    private fun confirmDriverEmergencyStop() {
+        val ids = bookingIdsOnTrip().ifEmpty { listOfNotNull(activeBookingId) }
+        val me = FirebaseAuth.getInstance().currentUser?.uid
+        if (ids.isEmpty() || me == null) {
+            Toast.makeText(context, "No active trip to stop.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Emergency stop")
+            .setMessage("End this trip right now at your current location? Your trusted contacts will be alerted with your live location, and you and your passenger(s) will be asked to confirm you are safe.")
+            .setPositiveButton("Stop trip") { _, _ ->
+                driverSosSent = true
+                resetDeviationFlow()
+                EmergencyStop.perform(
+                    database, ids, SafetyLogic.ROLE_DRIVER, me,
+                    currentLatLng?.latitude ?: 0.0, currentLatLng?.longitude ?: 0.0
+                ) { ok ->
+                    if (_binding == null) return@perform
+                    if (!ok) Toast.makeText(context, "Couldn't stop the trip. Check your connection and try again.", Toast.LENGTH_LONG).show()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -1585,6 +1638,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         b.layoutTargetSelector.layoutParams = selectorParams
 
         b.btnDriverSos.visibility = if (isTripActive) View.VISIBLE else View.GONE
+        b.btnDriverEmergencyStop.visibility = if (isTripActive) View.VISIBLE else View.GONE
     }
 
     private fun acceptCurrentRide() {
@@ -2628,6 +2682,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                             val reason = snapshot.child("cancelReason").getValue(String::class.java)
                             val msg = if (reason == NoShowManager.REASON_NO_SHOW) {
                                 "No-show recorded. You'll be credited in your wallet."
+                            } else if (SafetyLogic.isEmergencyStop(reason)) {
+                                "Trip ended: emergency stop."
                             } else {
                                 "Passenger cancelled the ride request."
                             }

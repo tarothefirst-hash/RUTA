@@ -60,11 +60,9 @@ class DriverRidesFragment : Fragment() {
                 // Sort latest bookings to the top
                 ridesList.sortByDescending { it.createdAt }
                 rvDriverRides.adapter = BookingHistoryAdapter(ridesList) { booking ->
-                    Toast.makeText(
-                        requireContext(),
-                        "Selected ride: ${booking.bookingId}",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    val id = booking.bookingId ?: return@BookingHistoryAdapter
+                    // Drivers can read the trip record; the email copy goes to the passenger only.
+                    com.ruta.app.util.ReceiptDialog.show(requireContext(), id, canEmail = false)
                 }
             }
 

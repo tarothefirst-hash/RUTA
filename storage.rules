@@ -27,6 +27,11 @@ service firebase.storage {
       allow read: if isOwner(uid) || isAdmin();
       allow write: if isOwner(uid) && smallImage();
     }
+    // Face-verification selfie: owner and admin only.
+    match /faces/{uid}/{file} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) && smallImage();
+    }
     match /driver_docs/{uid}/{file} {
       allow read: if isOwner(uid) || isAdmin();
       allow write: if isOwner(uid) && smallImage();

@@ -520,6 +520,20 @@
             app:srcCompat="@android:drawable/ic_dialog_alert"
             app:tint="#FFFFFF" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDriverEmergencyStop"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginBottom="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="Emergency stop"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:backgroundTint="#C62828"
+            app:cornerRadius="20dp" />
+
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnMuteVoice"
             android:layout_width="wrap_content"

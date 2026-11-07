@@ -40,7 +40,13 @@ object NotificationLogic {
     fun bookingEventKey(bookingId: String, status: String): String = "bk_${bookingId}_$status"
 
     /** Title/body for a booking status change, or null when it deserves no notification. */
-    fun bookingEventText(status: String): Pair<String, String>? = when (status) {
+    fun bookingEventText(status: String, cancelReason: String? = null): Pair<String, String>? = when {
+        status == "CANCELLED" && SafetyLogic.isEmergencyStop(cancelReason) ->
+            "Trip ended: emergency stop" to "Your trip was stopped for safety. Please confirm that you are safe."
+        else -> bookingStatusText(status)
+    }
+
+    private fun bookingStatusText(status: String): Pair<String, String>? = when (status) {
         "ACCEPTED" -> "Driver on the way" to "A driver accepted your ride and is heading to your pickup."
         "ARRIVED" -> "Your driver has arrived" to "Meet your driver at the pickup point."
         "IN_PROGRESS" -> "Trip started" to "Enjoy your ride. You can follow it live in the app."
