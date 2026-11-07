@@ -14,7 +14,9 @@ object DirectionsHelper {
         val strOrigin = "origin=${origin.latitude},${origin.longitude}"
         val strDest = "destination=${destination.latitude},${destination.longitude}"
         val mode = "mode=driving"
-        val params = "$strOrigin&$strDest&$mode&key=$apiKey"
+        // departure_time=now makes Google pick the route using live traffic, which also steers it
+        // away from roads it knows are closed or badly jammed.
+        val params = "$strOrigin&$strDest&$mode&departure_time=now&key=$apiKey"
         return "https://maps.googleapis.com/maps/api/directions/json?$params"
     }
 

@@ -161,6 +161,6 @@ object RideshareRouteOptimizer {
         val destStr = "destination=${destination.latitude},${destination.longitude}"
         val waypointStr = if (waypoints.isEmpty()) "" else
             "&waypoints=" + waypoints.joinToString("|") { "${it.latitude},${it.longitude}" }
-        return "https://maps.googleapis.com/maps/api/directions/json?$originStr&$destStr$waypointStr&mode=driving&key=$apiKey"
+        return "https://maps.googleapis.com/maps/api/directions/json?$originStr&$destStr$waypointStr&mode=driving&departure_time=now&key=$apiKey"
     }
 }

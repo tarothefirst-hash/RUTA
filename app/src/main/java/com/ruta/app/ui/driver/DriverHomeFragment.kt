@@ -247,6 +247,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
         mMap.uiSettings.isZoomControlsEnabled = true
+        // Google's live traffic colours (jams and known road closures show on the roads).
+        mMap.isTrafficEnabled = true
         mMap.setOnCameraMoveStartedListener { reason ->
             // The driver dragged the map: stop auto-follow until they tap recenter.
             if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) followMode = false
