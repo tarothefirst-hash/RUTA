@@ -199,6 +199,11 @@ class PassengerHomeActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        com.ruta.app.util.FaceGate.check(this)
+    }
+
     /** Used by the add-a-trusted-contact prompt. */
     fun openProfileTab() { viewPager.setCurrentItem(4, true) }
 

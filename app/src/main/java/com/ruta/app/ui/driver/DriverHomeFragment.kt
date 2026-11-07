@@ -668,7 +668,18 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
             if (still !== img) return@addOnSuccessListener
             com.ruta.app.util.StoragePhotos.showAvatar(img, s.getValue(String::class.java), name, px)
         }
+
+        // Lets the driver see at a glance that this rider passed the live face check.
+        database.child("users").child(passengerId).child("faceVerified").get().addOnSuccessListener { v ->
+            if (v.getValue(Boolean::class.java) != true) return@addOnSuccessListener
+            verifiedPassengerIds.add(passengerId)
+            val tv = _binding?.txtPassengerName ?: return@addOnSuccessListener
+            if (!tv.text.contains(FACE_BADGE)) tv.text = "${tv.text}\n$FACE_BADGE"
+        }
     }
+
+    private val verifiedPassengerIds = mutableSetOf<String>()
+    private val FACE_BADGE = "✓ Face verified"
 
     private fun bindPassengerInfoToView(booking: Booking, appendTitle: String = "") {
         val b = _binding ?: return
@@ -680,6 +691,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         val discounted = booking.hasDiscount && !booking.isShared
         val discountTag = if (discounted) " • 20% DISCOUNT (ID)" else ""
         b.txtPassengerName.text = if (appendTitle.isNotEmpty()) "$nameText ($appendTitle)" else "$nameText\n$serviceTitle$discountTag"
+        if (booking.passengerId in verifiedPassengerIds) b.txtPassengerName.text = "${b.txtPassengerName.text}\n$FACE_BADGE"
 
         b.txtPickupLocation.text = "Pickup: ${booking.pickupAddress.ifEmpty { "N/A" }}"
         b.txtDropoffLocation.text = "Dropoff: ${booking.dropoffAddress.ifEmpty { "N/A" }}"

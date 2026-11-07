@@ -358,21 +358,19 @@ class SignupActivity : AppCompatActivity() {
             }
     }
 
-    private fun goToDriverDocumentUpload() {
-        val intent = Intent(this, DriverDocumentUploadActivity::class.java).apply {
+    /** Registration ends with the live face check, then continues to [next]. */
+    private fun goToFaceCheckThen(next: Class<*>) {
+        val intent = Intent(this, FaceVerificationActivity::class.java).apply {
+            putExtra(FaceVerificationActivity.EXTRA_NEXT, next.name)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         startActivity(intent)
         finish()
     }
 
-    private fun goToHome() {
-        val intent = Intent(this, PassengerHomeActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        startActivity(intent)
-        finish()
-    }
+    private fun goToDriverDocumentUpload() = goToFaceCheckThen(DriverDocumentUploadActivity::class.java)
+
+    private fun goToHome() = goToFaceCheckThen(PassengerHomeActivity::class.java)
 
     private fun setLoading(loading: Boolean) {
         binding.btnSignup.isEnabled = !loading

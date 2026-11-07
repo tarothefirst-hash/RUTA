@@ -277,6 +277,11 @@ class AdminHomeActivity : AppCompatActivity() {
 
                     val innerLayout = view.findViewById<TextView>(R.id.txtHistoryPickup).parent as LinearLayout
 
+                    // Live face selfie from registration, to compare with the ID photo.
+                    database.child("users").child(userId).child("faceSelfie").get().addOnSuccessListener { f ->
+                        addDocumentReviewButton(innerLayout, "View face selfie (compare with ID)", f.getValue(String::class.java))
+                    }
+
                     addReviewPanel(
                         innerLayout,
                         listOf(
@@ -729,6 +734,9 @@ class AdminHomeActivity : AppCompatActivity() {
             if (submitted) {
                 txtStatus.text = "Documents Submitted — Ready for Review"
                 txtStatus.setTextColor(Color.parseColor("#10B981"))
+
+                // Live face selfie from registration, to compare with the documents.
+                addDocumentReviewButton(innerLayout, "View face selfie (compare with license)", driverSnap.child("faceSelfie").getValue(String::class.java))
 
                 addReviewPanel(
                     innerLayout,
