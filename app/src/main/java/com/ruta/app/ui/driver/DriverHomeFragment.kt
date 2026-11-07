@@ -65,6 +65,7 @@ import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.MapMarkerUtils
 import com.ruta.app.util.RouteTrim
 import com.ruta.app.util.SafetyLogic
+import com.ruta.app.util.DropoffGeofence
 import com.ruta.app.util.TrustedContactPrompt
 import com.ruta.app.util.EmergencyStop
 import com.ruta.app.util.MapsApi
@@ -85,7 +86,6 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
         private const val PICKUP_RADIUS_METERS = 100.0
-        private const val DROPOFF_RADIUS_METERS = 60.0
     }
 
     private enum class DriverRideState {
@@ -2144,8 +2144,9 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                 return
             }
 
-            val dist = distanceMeters(driverLoc, stop.location)
-            if (dist > DROPOFF_RADIUS_METERS) {
+            val geo = DropoffGeofence.check(driverLoc.latitude, driverLoc.longitude, stop.location.latitude, stop.location.longitude)
+            val dist = geo.distanceMeters
+            if (!geo.allowed) {
                 Toast.makeText(context, "You're ${dist.toInt()}m from this drop-off — move closer to confirm.", Toast.LENGTH_LONG).show()
                 return
             }
@@ -2285,9 +2286,10 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
 
         val destination = LatLng(booking.dropoffLat, booking.dropoffLng)
-        val distance = distanceMeters(driverLoc, destination)
+        val geo = DropoffGeofence.check(driverLoc.latitude, driverLoc.longitude, destination.latitude, destination.longitude)
+        val distance = geo.distanceMeters
 
-        if (distance > DROPOFF_RADIUS_METERS) {
+        if (!geo.allowed) {
             Toast.makeText(context, "You're ${distance.toInt()}m from the drop-off — move closer to complete the ride.", Toast.LENGTH_LONG).show()
             return
         }
