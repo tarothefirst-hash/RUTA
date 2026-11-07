@@ -65,6 +65,7 @@ import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.MapMarkerUtils
 import com.ruta.app.util.RouteTrim
 import com.ruta.app.util.SafetyLogic
+import com.ruta.app.util.TrustedContactPrompt
 import com.ruta.app.util.EmergencyStop
 import com.ruta.app.util.MapsApi
 import com.ruta.app.util.NoShowManager
@@ -577,7 +578,16 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                                 Toast.makeText(context, "Your account has been deactivated by an admin.", Toast.LENGTH_LONG).show()
                             }
                         } else {
-                            goOnline()
+                            TrustedContactPrompt.ensure(
+                                requireContext(), database, uid, isDriver = true, oncePerSession = true,
+                                onAddNow = {
+                                    switchView.setOnCheckedChangeListener(null)
+                                    switchView.isChecked = false
+                                    setupOnlineSwitch()
+                                    (activity as? DriverMainActivity)?.openProfileTab()
+                                },
+                                onContinue = { if (_binding != null && isAdded) goOnline() }
+                            )
                         }
                     }
                     .addOnFailureListener {

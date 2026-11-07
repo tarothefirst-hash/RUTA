@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.ruta.app.model.BookingModel
 import com.ruta.app.util.NotificationLogic
 import com.ruta.app.util.ReceiptDialog
+import com.ruta.app.util.TrustedContactPrompt
 import com.ruta.app.util.NotificationStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -84,7 +85,13 @@ class HomeFragment : Fragment() {
             } else {
                 // No active ride -> make sure location is allowed, then open ride setup
                 ensureLocationThen {
-                    startActivity(Intent(requireContext(), LocationSelectionActivity::class.java))
+                    val uid = FirebaseAuth.getInstance().currentUser?.uid
+                    val openBooking = { startActivity(Intent(requireContext(), LocationSelectionActivity::class.java)) }
+                    if (uid == null) openBooking() else TrustedContactPrompt.ensure(
+                        requireContext(), database, uid, isDriver = false, oncePerSession = false,
+                        onAddNow = { (activity as? PassengerHomeActivity)?.openProfileTab() },
+                        onContinue = { if (isAdded) openBooking() }
+                    )
                 }
             }
         }

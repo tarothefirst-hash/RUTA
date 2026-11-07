@@ -199,6 +199,9 @@ class PassengerHomeActivity : AppCompatActivity() {
         }
     }
 
+    /** Used by the add-a-trusted-contact prompt. */
+    fun openProfileTab() { viewPager.setCurrentItem(4, true) }
+
     private fun updateActiveTab(selectedTab: ImageView) {
         val navTabs = listOf(navHome, navLiveTrack, navPromos, navSettings, btnProfile)
         for (tab in navTabs) {

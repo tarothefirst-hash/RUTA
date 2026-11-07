@@ -31,6 +31,10 @@ object SafetyLogic {
             "The trip was stopped by $who. Please confirm that you are safe."
     }
 
+    /** Ask about a trusted contact only when there is none and we have not just asked. */
+    fun shouldAskTrustedContact(contactCount: Int, alreadyAsked: Boolean): Boolean =
+        contactCount <= 0 && !alreadyAsked
+
     fun isEmergencyStop(cancelReason: String?): Boolean = cancelReason == REASON_EMERGENCY_STOP
 
     /** The role a user plays on a booking, or null when they are not part of it. */
