@@ -581,7 +581,13 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                             }
                         } else {
                             TrustedContactPrompt.ensure(
-                                requireContext(), database, uid, isDriver = true, oncePerSession = true,
+                                requireContext(), database, uid, isDriver = true, oncePerSession = false,
+                                required = true,
+                                onBlocked = {
+                                    switchView.setOnCheckedChangeListener(null)
+                                    switchView.isChecked = false
+                                    setupOnlineSwitch()
+                                },
                                 onAddNow = {
                                     switchView.setOnCheckedChangeListener(null)
                                     switchView.isChecked = false

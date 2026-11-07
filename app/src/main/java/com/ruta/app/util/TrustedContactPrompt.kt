@@ -6,7 +6,8 @@ import com.google.firebase.database.DatabaseReference
 
 /**
  * Before booking (passenger) or going online (driver): if the user has no trusted contact yet,
- * ask whether they want to add one first. Never blocks: "Not now" carries on as before.
+ * ask whether they want to add one first. Optional by default ("Not now" carries on). With
+ * required = true (drivers) there is no way past the prompt: only "Add now" or cancel, which stays offline.
  */
 object TrustedContactPrompt {
 
@@ -19,14 +20,29 @@ object TrustedContactPrompt {
         isDriver: Boolean,
         oncePerSession: Boolean,
         onAddNow: () -> Unit,
-        onContinue: () -> Unit
+        onContinue: () -> Unit,
+        required: Boolean = false,
+        onBlocked: () -> Unit = {}
     ) {
         val key = (if (isDriver) "driver:" else "passenger:") + uid
         db.child("users").child(uid).child("trustedContacts").get()
             .addOnSuccessListener { snap ->
-                val ask = SafetyLogic.shouldAskTrustedContact(snap.childrenCount.toInt(), oncePerSession && key in askedThisSession)
+                val ask = SafetyLogic.shouldAskTrustedContact(snap.childrenCount.toInt(), !required && oncePerSession && key in askedThisSession)
                 if (!ask) return@addOnSuccessListener onContinue()
                 askedThisSession.add(key)
+                if (required) {
+                    AlertDialog.Builder(context)
+                        .setTitle("Emergency contact required")
+                        .setMessage(
+                            "Drivers must add at least one emergency contact before going online. " +
+                                "We alert them (with your live location) if something goes wrong on a trip."
+                        )
+                        .setCancelable(false)
+                        .setPositiveButton("Add contact") { _, _ -> onAddNow() }
+                        .setNegativeButton("Cancel") { _, _ -> onBlocked() }
+                        .show()
+                    return@addOnSuccessListener
+                }
                 val who = if (isDriver) "going online" else "booking a ride"
                 AlertDialog.Builder(context)
                     .setTitle("Add a trusted contact first?")
