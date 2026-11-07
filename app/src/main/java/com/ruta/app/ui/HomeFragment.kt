@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ruta.app.model.BookingModel
 import com.ruta.app.util.NotificationLogic
+import com.ruta.app.util.ReceiptDialog
 import com.ruta.app.util.NotificationStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -126,15 +127,8 @@ class HomeFragment : Fragment() {
 
         txtNoRecent?.visibility = if (rides.isEmpty()) View.VISIBLE else View.GONE
         recyclerRecent?.adapter = BookingHistoryAdapter(rides) { ride ->
-            val fare = if (ride.finalFare > 0.0) ride.finalFare else (ride.fare ?: 0.0)
-            AlertDialog.Builder(requireContext())
-                .setTitle(if (ride.status == "COMPLETED") "Completed trip" else "Cancelled trip")
-                .setMessage(
-                    "From: ${ride.pickupAddress ?: "N/A"}\nTo: ${ride.dropoffAddress ?: "N/A"}\n" +
-                        "Fare: ₱${String.format("%.2f", fare)}"
-                )
-                .setPositiveButton("Close", null)
-                .show()
+            val id = ride.bookingId ?: return@BookingHistoryAdapter
+            ReceiptDialog.show(requireContext(), id)
         }
     }
 

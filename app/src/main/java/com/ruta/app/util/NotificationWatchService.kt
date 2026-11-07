@@ -118,6 +118,7 @@ class NotificationWatchService : Service() {
                     val status = b.child("status").getValue(String::class.java) ?: continue
                     val before = lastStatus.put(id, status)
                     if (firstBookingSnapshot || before == status) continue
+                    if (status == "COMPLETED") ReceiptMailer.sendOnce(database, id)
                     val text = NotificationLogic.bookingEventText(status, b.child("cancelReason").getValue(String::class.java)) ?: continue
                     NotificationStore.push(
                         database, me, NotificationStore.TYPE_RIDE, text.first, text.second,

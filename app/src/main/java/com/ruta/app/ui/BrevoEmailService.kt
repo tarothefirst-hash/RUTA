@@ -15,20 +15,7 @@ object BrevoEmailService {
     private const val SENDER_NAME = "RUTA"
 
     fun sendOtpEmail(recipientEmail: String, otpCode: String, onResult: (Boolean, String?) -> Unit) {
-        val client = OkHttpClient()
-
-        val jsonBody = JSONObject().apply {
-            put("sender", JSONObject().apply {
-                put("name", SENDER_NAME)
-                put("email", SENDER_EMAIL)
-            })
-            put("to", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("email", recipientEmail)
-                })
-            })
-            put("subject", "Your RUTA Verification Code")
-            put("htmlContent", """
+        sendEmail(recipientEmail, "Your RUTA Verification Code", """
                 <!DOCTYPE html>
                 <html>
                 <body style="font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px;">
@@ -42,7 +29,25 @@ object BrevoEmailService {
                     </div>
                 </body>
                 </html>
-            """.trimIndent())
+            """.trimIndent(), onResult)
+    }
+
+    /** Any transactional email (receipts, notices) through the same Brevo sender. */
+    fun sendEmail(recipientEmail: String, subject: String, htmlContent: String, onResult: (Boolean, String?) -> Unit) {
+        val client = OkHttpClient()
+
+        val jsonBody = JSONObject().apply {
+            put("sender", JSONObject().apply {
+                put("name", SENDER_NAME)
+                put("email", SENDER_EMAIL)
+            })
+            put("to", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("email", recipientEmail)
+                })
+            })
+            put("subject", subject)
+            put("htmlContent", htmlContent)
         }
 
         val requestBody = jsonBody.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
