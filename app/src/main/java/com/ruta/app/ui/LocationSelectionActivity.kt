@@ -51,6 +51,8 @@ import com.google.firebase.database.ValueEventListener
 import com.ruta.app.R
 import com.ruta.app.model.LocationItem
 import com.ruta.app.util.FareCalculator
+import com.ruta.app.util.EmergencyStop
+import com.ruta.app.util.SafetyLogic
 import com.ruta.app.util.MapsApi
 import com.ruta.app.util.RideshareFareCalculator
 import com.ruta.app.util.RideshareFlowManager
@@ -86,6 +88,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var btnConfirmStage: MaterialButton
     private lateinit var btnCancelSearch: MaterialButton
     private lateinit var btnCancelTrip: MaterialButton
+    private lateinit var btnEmergencyStop: MaterialButton
 
     private lateinit var layoutRideOptions: LinearLayout
     private lateinit var cardOptionSolo: MaterialCardView
@@ -253,6 +256,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         btnConfirmStage = findViewById(R.id.btnConfirmStage)
         btnCancelSearch = findViewById(R.id.btnCancelSearch)
         btnCancelTrip = findViewById(R.id.btnCancelTrip)
+        btnEmergencyStop = findViewById(R.id.btnEmergencyStop)
 
         layoutRideOptions = findViewById(R.id.layoutRideOptions)
         cardOptionSolo = findViewById(R.id.cardOptionSolo)
@@ -274,6 +278,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
 
         btnCancelSearch.setOnClickListener { cancelActiveRide() }
         btnCancelTrip.setOnClickListener { cancelActiveRide() }
+        btnEmergencyStop.setOnClickListener { confirmEmergencyStop() }
 
         findViewById<View>(R.id.btnRecenterLocation)?.setOnClickListener {
             fetchUserCurrentLocation()
@@ -840,6 +845,30 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
+    /** Emergency stop: confirm first, then end the trip here and start the "Are you safe?" check. */
+    private fun confirmEmergencyStop() {
+        val bookingId = currentRequestId ?: return
+        val me = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        AlertDialog.Builder(this)
+            .setTitle("Emergency stop")
+            .setMessage("End this trip right now at your current location? Your trusted contacts will be alerted with your live location, and you and your driver will be asked to confirm you are safe.")
+            .setPositiveButton("Stop trip") { _, _ ->
+                btnEmergencyStop.isEnabled = false
+                EmergencyStop.perform(
+                    database, listOf(bookingId), SafetyLogic.ROLE_PASSENGER, me,
+                    pickupLatLng?.latitude ?: 0.0, pickupLatLng?.longitude ?: 0.0
+                ) { ok ->
+                    if (isDestroyed) return@perform
+                    if (!ok) {
+                        btnEmergencyStop.isEnabled = true
+                        Toast.makeText(this, "Couldn't stop the trip. Check your connection and try again.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun listenForRideStatusUpdates(bookingId: String) {
         detachRideTrackingListeners()
         val rideRef = database.child("bookings").child(bookingId)
@@ -898,6 +927,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         updateSearchingUi(false)
                         cardDriverInfo.visibility = View.VISIBLE
                         btnCancelTrip.visibility = View.GONE
+                        btnEmergencyStop.visibility = if (status == "IN_PROGRESS") View.VISIBLE else View.GONE
 
                         if (driverLat != null && driverLng != null && driverLat != 0.0 && driverLng != 0.0) {
                             updateDriverMarkerAndRoute(driverLat, driverLng, status)
@@ -917,6 +947,7 @@ class LocationSelectionActivity : AppCompatActivity(), OnMapReadyCallback {
                         driverRoutePolyline?.remove()
                         driverRoutePolyline = null
                         cardDriverInfo.visibility = View.GONE
+                        btnEmergencyStop.visibility = View.GONE
                         btnConfirmStage.visibility = View.VISIBLE
                         updateSearchingUi(false)
                         if (status == "COMPLETED") {

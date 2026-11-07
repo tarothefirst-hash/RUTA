@@ -64,6 +64,8 @@ import com.ruta.app.ui.TrackableTarget
 import com.ruta.app.util.EmergencyContactManager
 import com.ruta.app.util.MapMarkerUtils
 import com.ruta.app.util.RouteTrim
+import com.ruta.app.util.SafetyLogic
+import com.ruta.app.util.EmergencyStop
 import com.ruta.app.util.MapsApi
 import com.ruta.app.util.NoShowManager
 import com.ruta.app.util.RideshareFareCalculator
@@ -930,6 +932,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         }
         binding.btnBackToMyScreen.setOnClickListener { backToMyScreen() }
         binding.btnDriverSos.setOnClickListener { confirmDriverSos() }
+        binding.btnDriverEmergencyStop.setOnClickListener { confirmDriverEmergencyStop() }
         binding.btnAlertDismiss.setOnClickListener { binding.cardAlertBanner.visibility = View.GONE }
     }
 
@@ -955,6 +958,32 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                         else "No trusted contacts yet. Add one from your Profile.",
                         Toast.LENGTH_LONG
                     ).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Emergency stop: confirm first, then end every booking on this trip and start the safety check. */
+    private fun confirmDriverEmergencyStop() {
+        val ids = bookingIdsOnTrip().ifEmpty { listOfNotNull(activeBookingId) }
+        val me = FirebaseAuth.getInstance().currentUser?.uid
+        if (ids.isEmpty() || me == null) {
+            Toast.makeText(context, "No active trip to stop.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Emergency stop")
+            .setMessage("End this trip right now at your current location? Your trusted contacts will be alerted with your live location, and you and your passenger(s) will be asked to confirm you are safe.")
+            .setPositiveButton("Stop trip") { _, _ ->
+                driverSosSent = true
+                resetDeviationFlow()
+                EmergencyStop.perform(
+                    database, ids, SafetyLogic.ROLE_DRIVER, me,
+                    currentLatLng?.latitude ?: 0.0, currentLatLng?.longitude ?: 0.0
+                ) { ok ->
+                    if (_binding == null) return@perform
+                    if (!ok) Toast.makeText(context, "Couldn't stop the trip. Check your connection and try again.", Toast.LENGTH_LONG).show()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -1585,6 +1614,7 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
         b.layoutTargetSelector.layoutParams = selectorParams
 
         b.btnDriverSos.visibility = if (isTripActive) View.VISIBLE else View.GONE
+        b.btnDriverEmergencyStop.visibility = if (isTripActive) View.VISIBLE else View.GONE
     }
 
     private fun acceptCurrentRide() {
@@ -2628,6 +2658,8 @@ class DriverHomeFragment : Fragment(), OnMapReadyCallback {
                             val reason = snapshot.child("cancelReason").getValue(String::class.java)
                             val msg = if (reason == NoShowManager.REASON_NO_SHOW) {
                                 "No-show recorded. You'll be credited in your wallet."
+                            } else if (SafetyLogic.isEmergencyStop(reason)) {
+                                "Trip ended: emergency stop."
                             } else {
                                 "Passenger cancelled the ride request."
                             }

@@ -41,8 +41,8 @@ class MainApplication : Application() {
             override fun onActivityStarted(activity: Activity) { startedActivities++ }
             override fun onActivityStopped(activity: Activity) { if (startedActivities > 0) startedActivities-- }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-            override fun onActivityResumed(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) { com.ruta.app.util.SafetyCheckWatcher.onResumed(activity) }
+            override fun onActivityPaused(activity: Activity) { com.ruta.app.util.SafetyCheckWatcher.onPaused(activity) }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
         })
@@ -50,6 +50,7 @@ class MainApplication : Application() {
         // Fare rates the admin can edit. Listening starts once someone is signed in
         // (the database rules need auth) and stays attached for the life of the process.
         FirebaseAuth.getInstance().addAuthStateListener { auth ->
+            com.ruta.app.util.SafetyCheckWatcher.onAuthChanged()
             if (auth.currentUser != null) com.ruta.app.util.PushTokens.register()
             if (auth.currentUser != null && !fareListening) {
                 fareListening = true

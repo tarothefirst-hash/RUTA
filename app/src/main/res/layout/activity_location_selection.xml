@@ -437,6 +437,20 @@
                         android:textStyle="bold"
                         app:backgroundTint="@color/ruta_primary"
                         app:cornerRadius="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnEmergencyStop"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Emergency stop"
+                        android:textColor="#C62828"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:visibility="gone"
+                        app:cornerRadius="12dp"
+                        app:strokeColor="#C62828" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
